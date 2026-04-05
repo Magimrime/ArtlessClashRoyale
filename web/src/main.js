@@ -59,8 +59,7 @@ class Main {
         this.t0 = 0;
         this.scrollY = 0;
         this.eng = new GameEngine();
-        this.server = new GameEngine(); // Server Simulation
-        this.mp = new MultiplayerManager(this.server); // Pass Server
+        this.mp = new MultiplayerManager(this.eng); // Pass Engine
 
         this.scale = 1.0;
         this.xOffset = 0;
@@ -186,28 +185,18 @@ class Main {
         // Setup MP Callbacks
         this.mp.onJoined = (idx) => {
             console.log("Joined as Player", idx);
-            this.mp.isHost = (idx === 0); // Assuming player 0 is host
+            this.mp.isHost = (idx === 0);
         };
         this.mp.onStart = (seed) => {
-            if (seed) this.server.setSeed(seed);
+            if (seed) this.eng.setSeed(seed);
             this.startMultiplayerGame();
         };
-        this.mp.onState = (data) => {
-            this.eng.importState(data, !this.mp.isHost);
-        };
-        this.mp.onAction = (data) => {
-            // Host receives Spawn request - Handled internally by RemoteHandler now.
-            // But we keep this callback if we need other actions later.
-            // console.log("Unprocessed Action:", data);
-        };
         this.mp.onOpponentDisconnected = () => {
-            if (this.state === State.OVER) return; // Prevent alert if game is already over
+            if (this.state === State.OVER) return;
             alert("Opponent Disconnected!");
             this.state = State.TITLE;
             this.eng.setMultiplayer(false);
-            this.server.setMultiplayer(false);
             this.eng.reset();
-            this.server.reset();
             this.mp.close();
         };
 
@@ -243,19 +232,11 @@ class Main {
 
     startMultiplayerGame() {
         this.eng.setMultiplayer(true);
-        this.server.setMultiplayer(true);
-
-        // Sync Deck to Server (Deep Copy to Unreference)
-        // We map each card to a new object to break references.
-        this.server.myDeck = this.eng.myDeck.map(c => ({ ...c }));
-
-        this.server.reset();
         this.eng.reset();
 
         // Disable Debug in MP
         this.eng.debugView = false;
         this.eng.debugEnemyElixir = false;
-        this.server.debugView = false;
 
         this.state = State.CNT;
         this.t0 = Date.now();
@@ -297,16 +278,11 @@ class Main {
         } else if (this.state === State.TITLE) {
             if (this.contains(this.playBtn, x, y)) {
                 if (this.eng.myDeck.length === 8) {
-                    this.eng.setMultiplayer(false); // Single player
-                    this.server.setMultiplayer(false);
-
-                    // Sync Deck
-                    this.server.myDeck = this.eng.myDeck;
+                    this.eng.setMultiplayer(false);
 
                     this.state = State.CNT;
                     this.t0 = Date.now();
 
-                    this.server.reset();
                     this.eng.reset();
                 }
             } else if (this.contains(this.deckBtn, x, y)) {
@@ -435,19 +411,17 @@ class Main {
                 let rx = x;
                 let ry = y;
 
-                if (this.eng.isMultiplayer && !this.mp.isHost) {
-                    // Client: Send Spawn Request
+                if (this.eng.isMultiplayer) {
+                    // Send Spawn Request via MP
                     if (this.eng.sel) {
-                        // Send as Team 1 if Client (since Client is P2)
-                        // Actually, just send (!isHost ? 1 : 0)
                         let myTeam = this.mp.isHost ? 0 : 1;
-                        this.mp.sendSpawn(this.eng.sel.n, rx, ry, myTeam);
+                        this.mp.sendSpawnRequest(this.eng.sel.n, rx, ry, myTeam);
                         this.eng.sel = null;
                     }
                 } else {
-                    // Host or Singleplayer
+                    // Singleplayer
                     if (this.eng.sel) {
-                        this.server.spawn(rx, ry);
+                        this.eng.spawn(rx, ry);
                         this.eng.sel = null;
                     }
                 }
@@ -457,7 +431,6 @@ class Main {
                 this.mp.onOpponentDisconnected = null; // Prevent alert on self-close
                 this.mp.close();
                 this.eng.setMultiplayer(false);
-                this.server.setMultiplayer(false);
             }
             if (this.eng.win === 0 && !this.eng.isMultiplayer) {
                 let newC = this.eng.unlockRandomCard();
@@ -524,48 +497,44 @@ class Main {
             }
 
             if (this.state === State.PLAY) {
-                // Host Authoritative Loop
-                if (this.eng.isMultiplayer && !this.mp.isHost) {
-                    // Client: INTERPOLATION
-                    // We render 'x' ticks behind the server to allow for buffering.
-                    // Server Tick is `this.eng.aiTick` (updated via importState).
-                    // We want to interpolate between aiTick-Wait and aiTick.
-                    // Let's assume 100ms latency buffer target. 
-                    // Ticks are 16.6ms (60tps) or 50ms (20tps)? 
-                    // Server upd() runs at 60tps. Packets sent every 1 (now).
-                    // So we receive packets at 60Hz ideally.
-                    // let renderDelay = 6.0; // 6 ticks = 100ms
-                    // Actually, if we receive packet T, we want to render T-Delay.
-
-                    let renderTime = this.eng.aiTick - 6.0;
-                    this.eng.interpolateEntities(renderTime);
-
-                } else {
-                    // Host or Singleplayer: Run simulation on SERVER
-                    if (this.eng.isMultiplayer) {
-                        // console.log("Host Loop: running server update");
-                    }
-                    this.server.upd();
-
-                    // Host: broadcast derived state
-                    // Debug Flags
-                    if (this.server.aiTick % 60 === 0) {
-                        console.log(`Loop Check: MP=${this.server.isMultiplayer} Host=${this.mp.isHost} Tick=${this.server.aiTick}`);
-                    }
-
-                    // Host: broadcast derived state
-                    if (this.server.isMultiplayer && this.mp.isHost) { // Broadcast every tick (~16ms)
-                        // console.log("Broadcasting state...");
-                        if (typeof this.mp.broadcastState !== 'function') {
-                            console.error("MP Warning: broadcastState missing!", this.mp);
-                        } else {
-                            this.mp.broadcastState(this.server.exportState());
+                if (this.eng.isMultiplayer) {
+                    if (this.mp.isHost) {
+                        // Host Authoritative Lockstep Loop
+                        let pendingSpawns = this.mp.getQueuedRequests();
+                        for (let req of pendingSpawns) {
+                            if (req.team === 0) {
+                                // Host's local input
+                                this.eng.playCard(this.eng.p1, this.eng.getCard(req.cardName), req.x, req.y, 0);
+                            } else {
+                                // Client's remote input
+                                this.eng.spawnRemote(req.cardName, req.x, req.y, 1);
+                            }
+                        }
+                        
+                        this.eng.upd();
+                        this.mp.sendFramePulse(this.eng.aiTick, pendingSpawns);
+                    } else {
+                        // Client Loop: purely lockstep
+                        // We do not simulate ANY frame unless we have the pulse from the Host!
+                        while (this.mp.hasFramePulse(this.eng.aiTick + 1)) {
+                            let pulse = this.mp.getFramePulse(this.eng.aiTick + 1);
+                            for (let req of pulse.actions) {
+                                if (req.team === 0) {
+                                    // Host's input, Client maps to opponent (1)
+                                    this.eng.spawnRemote(req.cardName, req.x, req.y, 1);
+                                } else {
+                                    // Client's local input (echoed back), Client plays as self (0)
+                                    this.eng.playCard(this.eng.p1, this.eng.getCard(req.cardName), req.x, req.y, 0);
+                                }
+                            }
+                            this.eng.upd();
                         }
                     }
-
-                    // Host: Sync Display Engine to Server (Mirror)
-                    this.eng.importState(this.server.exportState(), false);
+                } else {
+                    // Singleplayer
+                    this.eng.upd();
                 }
+
                 if (this.eng.over) {
                     this.state = State.OVER;
                 }
@@ -1496,14 +1465,3 @@ class Main {
         ctx.restore();
     }
 }
-
-new Main();
-/ / 
- 
- f o r c e 
- 
- g i t 
- 
- c h a n g e 
- 
- 
