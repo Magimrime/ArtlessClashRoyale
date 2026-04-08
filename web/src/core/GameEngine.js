@@ -708,6 +708,90 @@ export default class GameEngine {
         this.saveProgress();
     }
 
+    getState() {
+        return {
+            tick: this.aiTick,
+            p1: { elx: this.p1.elx },
+            p2: { elx: this.p2.elx },
+            towers: {
+                t1K: this.t1K.hp, t1L: this.t1L.hp, t1R: this.t1R.hp,
+                t2K: this.t2K.hp, t2L: this.t2L.hp, t2R: this.t2R.hp
+            },
+            ents: this.ents.filter(e => !(e instanceof Tower)).map(e => {
+                let s = {
+                    id: e.id,
+                    type: e.constructor.name,
+                    tm: e.tm,
+                    x: e.x,
+                    y: e.y,
+                    hp: e.hp,
+                    n: e.c ? e.c.n : null
+                };
+                if (e.shield !== undefined) s.shield = e.shield;
+                return s;
+            })
+        };
+    }
+
+    syncState(state) {
+        if (!state) return;
+        this.aiTick = state.tick;
+
+        // Flip Elixir (Client's P1 is Host's P2)
+        this.p2.elx = state.p1.elx;
+        this.p1.elx = state.p2.elx;
+
+        // Flip Towers (Client's T1 is Host's T2)
+        if (this.t2K) this.t2K.hp = state.towers.t1K;
+        if (this.t2L) this.t2L.hp = state.towers.t1L;
+        if (this.t2R) this.t2R.hp = state.towers.t1R;
+
+        if (this.t1K) this.t1K.hp = state.towers.t2K;
+        if (this.t1L) this.t1L.hp = state.towers.t2L;
+        if (this.t1R) this.t1R.hp = state.towers.t2R;
+
+        // Sync Entities
+        let localTowers = this.ents.filter(e => e instanceof Tower);
+        let localById = new Map();
+        for (let e of this.ents) {
+            if (!(e instanceof Tower) && e.id) localById.set(e.id, e);
+        }
+
+        let syncedEnts = [...localTowers];
+
+        for (let s of state.ents) {
+            let cx = this.W - s.x;
+            let cy = 800 - s.y;
+            let ctm = 1 - s.tm;
+
+            if (localById.has(s.id)) {
+                let e = localById.get(s.id);
+                e.x = cx;
+                e.y = cy;
+                e.hp = s.hp;
+                e.tm = ctm;
+                if (s.shield !== undefined) e.shield = s.shield;
+                syncedEnts.push(e);
+                localById.delete(s.id);
+            } else {
+                let c = this.getCard(s.n);
+                if (!c) continue;
+                let e = null;
+                if (s.type === 'Troop') e = new Troop(ctm, cx, cy, c);
+                else if (s.type === 'Building') e = new Building(ctm, cx, cy, c);
+                
+                if (e) {
+                    e.id = s.id;
+                    e.hp = s.hp;
+                    if (s.shield !== undefined) e.shield = s.shield;
+                    syncedEnts.push(e);
+                }
+            }
+        }
+
+        this.ents = syncedEnts;
+    }
+
     upd() {
         // Assign IDs to any new entities
         for (let e of this.ents) {
@@ -755,7 +839,11 @@ export default class GameEngine {
 
         let rate = this.isDoubleElixir ? 0.02 : 0.01;
         this.p1.elx = Math.min(10, this.p1.elx + rate);
-        this.p2.elx = Math.min(10, this.p2.elx + rate * 0.85); // 15% slower than player
+        if (this.isMultiplayer) {
+            this.p2.elx = Math.min(10, this.p2.elx + rate); // Identical rate for multiplayer lockstep
+        } else {
+            this.p2.elx = Math.min(10, this.p2.elx + rate * 0.85); // 15% slower than player for AI
+        }
 
         this.aiTick++;
 

@@ -512,7 +512,7 @@ class Main {
                         }
                         
                         this.eng.upd();
-                        this.mp.sendFramePulse(this.eng.aiTick, pendingSpawns);
+                        this.mp.sendFramePulse(this.eng.aiTick, pendingSpawns, this.eng.getState());
                     } else {
                         // Client Loop: purely lockstep
                         // We do not simulate ANY frame unless we have the pulse from the Host!
@@ -528,6 +528,9 @@ class Main {
                                 }
                             }
                             this.eng.upd();
+                            if (pulse.state) {
+                                this.eng.syncState(pulse.state);
+                            }
                         }
                     }
                 } else {

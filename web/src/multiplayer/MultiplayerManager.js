@@ -138,12 +138,13 @@ export default class MultiplayerManager {
     }
 
     // Host sends frame pulse
-    sendFramePulse(tick, actions) {
+    sendFramePulse(tick, actions, state) {
         // Send a frame pulse representing the actions executed on this tick
         this.sendAction({
             type: 'frame_pulse',
             tick: tick,
-            actions: actions
+            actions: actions,
+            state: state
         });
     }
 
