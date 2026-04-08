@@ -344,7 +344,7 @@ export default class GameEngine {
         this.isDoubleElixir = false;
         this.tiebreaker = false;
         this.doubleElixirAnim = 0;
-        this.nextEntityId = 0;
+        this.nextEntityId = 1;
 
         this.p1.pile = [...this.myDeck];
         // Shuffle p1 pile
@@ -711,6 +711,7 @@ export default class GameEngine {
     getState() {
         return {
             tick: this.aiTick,
+            nextEntityId: this.nextEntityId,
             p1: { elx: this.p1.elx },
             p2: { elx: this.p2.elx },
             towers: {
@@ -728,6 +729,7 @@ export default class GameEngine {
                     n: e.c ? e.c.n : null
                 };
                 if (e.shield !== undefined) s.shield = e.shield;
+                if (e.isClone) s.isClone = true;
                 return s;
             })
         };
@@ -736,6 +738,7 @@ export default class GameEngine {
     syncState(state) {
         if (!state) return;
         this.aiTick = state.tick;
+        this.nextEntityId = state.nextEntityId;
 
         // Flip Elixir (Client's P1 is Host's P2)
         this.p2.elx = state.p1.elx;
@@ -771,6 +774,7 @@ export default class GameEngine {
                 e.hp = s.hp;
                 e.tm = ctm;
                 if (s.shield !== undefined) e.shield = s.shield;
+                if (s.isClone) e.isClone = true;
                 syncedEnts.push(e);
                 localById.delete(s.id);
             } else {
@@ -784,6 +788,7 @@ export default class GameEngine {
                     e.id = s.id;
                     e.hp = s.hp;
                     if (s.shield !== undefined) e.shield = s.shield;
+                    if (s.isClone) e.isClone = true;
                     syncedEnts.push(e);
                 }
             }
