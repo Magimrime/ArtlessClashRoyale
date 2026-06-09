@@ -2,10 +2,42 @@
 
 This is a JavaScript port of Clash Royale, playable in the browser.
 
-## How to Play
+## How to Play (local)
 
-1. Open `index.html` in a web browser.
-2. Build your deck and start a battle!
+The client lives in `web/` and is served by `server.js`, which also provides
+the save and multiplayer (room) APIs.
+
+1. Run `node server.js`.
+2. Open <http://localhost:8000/> in a web browser.
+3. Build your deck and start a battle!
+
+> Note: the game uses ES modules and `/api/*` endpoints, so it must be served
+> over HTTP (opening the file directly will not work). Multiplayer requires
+> `server.js` to be running and reachable by both players.
+
+## Multiplayer
+
+Multiplayer is host-authoritative lockstep over a tiny "rooms" API
+(`/api/create`, `/api/join`, `/api/action`, `/api/health`) provided by
+`server.js`. One player hosts a room and shares the 5-digit code; the other
+joins with it.
+
+- **Local / same-origin:** run `node server.js` and both players hit the same
+  origin — it works with no extra config.
+- **Static deploy (Netlify, GitHub Pages, …):** the static host has **no
+  backend**, so multiplayer needs `server.js` running somewhere public
+  (Render, Fly.io, Railway, a VPS, …). Point the client at it by editing
+  `DEFAULT_MP_API_BASE` in [`web/src/config.js`](web/src/config.js):
+
+  ```js
+  const DEFAULT_MP_API_BASE = "https://your-clash-server.onrender.com";
+  ```
+
+  Or override per-session without editing files by adding `?server=<origin>` to
+  the page URL. `server.js` already sends permissive CORS headers, so a
+  cross-origin backend works. When no backend is reachable, the Multiplayer
+  menu says so; single-player still works fully (progress is saved to
+  `localStorage`).
 
 ## Deployment to Netlify
 

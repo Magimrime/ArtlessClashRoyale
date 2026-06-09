@@ -55,6 +55,13 @@ const server = http.createServer((req, res) => {
 
     // --- API ROUTES ---
 
+    // Health check (used by the client to detect a reachable backend)
+    if (req.url === '/api/health' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+        return;
+    }
+
     // Create Room
     if (req.url === '/api/create' && req.method === 'POST') {
         const code = generateCode();
@@ -208,10 +215,18 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // Static File Serving
-    let filePath = '.' + req.url;
-    if (filePath === './') {
-        filePath = './index.html';
+    // Static File Serving (serve the canonical client in ./web so local dev
+    // matches the deployed build). Strip any query string (e.g. main.js?v=3).
+    let urlPath = req.url.split('?')[0];
+    if (urlPath === '/') urlPath = '/index.html';
+    const webRoot = path.join(__dirname, 'web');
+    const filePath = path.join(webRoot, urlPath);
+
+    // Prevent path traversal outside the web root.
+    if (!filePath.startsWith(webRoot)) {
+        res.writeHead(403);
+        res.end('403 Forbidden');
+        return;
     }
 
     const extname = String(path.extname(filePath)).toLowerCase();

@@ -121,6 +121,9 @@ export default class GameEngine {
                 if (c.n === "Fireball") c.d = Math.floor(c.d * 1.60);
                 else c.d = Math.floor(c.d * 1.30);
             }
+
+            // Role tags drive the enemy AI's counter logic.
+            c.tags = this.getCardTags(c);
         });
 
         this.tokens = [
@@ -138,10 +141,56 @@ export default class GameEngine {
             // Global reductions
             c.hp = Math.floor(c.hp / 2);
             c.s = c.s / 2;
+
+            c.tags = this.getCardTags(c);
         });
 
         this.enemyAI = null;
         this.isMultiplayer = false;
+    }
+
+    // Assigns role tags used by EnemyAI to pick counters and build pushes.
+    getCardTags(c) {
+        const n = c.n;
+        const tags = [];
+        const has = (arr) => arr.includes(n);
+
+        // Win conditions: cards whose job is to deal tower damage.
+        if (has(["Giant", "Golem", "Royal Giant", "Electro Giant", "Hog Rider",
+            "Royal Hogs", "Lava Hound", "Elixir Golem", "Wall Breakers",
+            "Goblin Barrel", "Graveyard"]))
+            tags.push("WinCon");
+
+        // Tanks: high-HP units meant to soak damage up front.
+        if (has(["Giant", "Golem", "Royal Giant", "Electro Giant", "Mega Knight",
+            "P.E.K.K.A", "Lava Hound", "Elixir Golem", "Ice Golem", "Knight",
+            "Royal Recruits"]))
+            tags.push("Tank");
+
+        // Swarms: groups of cheap units, weak to area damage.
+        if (has(["Skeletons", "Skeleton Army", "Goblins", "Spear Goblins",
+            "Minions", "Minion Horde", "Bats", "Barbarians"]))
+            tags.push("Swarm");
+
+        // Area damage: splash attackers, strong against swarms.
+        if (has(["Wizard", "Witch", "Baby Dragon", "Bowler", "Mega Knight",
+            "Dark Prince", "Mother Witch"]))
+            tags.push("AOE");
+
+        // High single-target DPS: melts tanks and win conditions.
+        if (has(["Mini PEKKA", "P.E.K.K.A", "Musketeer", "Inferno Dragon",
+            "Sparky", "Prince", "Elite Barbarians", "Mega Minion", "Wizard"]))
+            tags.push("DamageDealer");
+
+        // Direct-damage / effect spells the AI can throw at a threat.
+        if (has(["Fireball", "Zap", "Arrows", "Poison", "Freeze", "Vines",
+            "The Log", "Barbarian Barrel", "Royale Delivery"]))
+            tags.push("Spell");
+
+        // Defensive buildings.
+        if (c.t === 3) tags.push("Building");
+
+        return tags;
     }
 
     setMultiplayer(enabled) {
@@ -467,7 +516,7 @@ export default class GameEngine {
         if (c.n === "Arrows" || c.n === "Poison" || c.n === "Graveyard" || c.n === "Freeze") return { type: 'circle', val: 80 };
         if (c.n === "Vines") return { type: 'circle', val: 80 };
         if (c.n === "Zap") return { type: 'circle', val: 50 };
-        if (c.n === "Fireball" || c.n === "Royal Delivery" || c.n === "Rocket" || c.n === "Giant Snowball") return { type: 'circle', val: 60 };
+        if (c.n === "Fireball" || c.n === "Royale Delivery" || c.n === "Rocket" || c.n === "Giant Snowball") return { type: 'circle', val: 60 };
         if (c.n === "The Log") return { type: 'rect', w: 70, h: 20 }; // Visual approximation
         if (c.n === "Barbarian Barrel") return { type: 'rect', w: 44, h: 20 };
         if (c.n === "Goblin Barrel") return { type: 'circle', val: 40 }; // Impact radius approx

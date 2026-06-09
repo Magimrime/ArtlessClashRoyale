@@ -126,8 +126,6 @@ export default class Troop extends Entity {
         }
 
         if (this.curseTime > 0) this.curseTime--;
-
-        if (this.curseTime > 0) this.curseTime--;
         if (this.sl > 0) this.sl--;
 
         let speedMult = (this.sl > 0) ? 0.65 : 1.0;

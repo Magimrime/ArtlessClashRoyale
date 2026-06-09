@@ -1,3 +1,5 @@
+import { MP_API_BASE } from '../config.js';
+
 export default class MultiplayerManager {
     constructor(gameEngine) {
         this.eng = gameEngine;
@@ -20,14 +22,26 @@ export default class MultiplayerManager {
         this.seed = null;
         this.gameStarted = false;
 
+        // null = unknown/not yet checked, true/false = result of the last probe.
+        this.backendAvailable = null;
+
         // Lockstep Queues
         this.pendingRequests = []; // For Host to collect incoming requests
         this.framePulses = {}; // For Client to collect incoming frames { tick: { actions: [] } }
         this.highestReceivedTick = -1;
     }
 
+    // Probe whether a multiplayer backend is actually reachable. Updates
+    // this.backendAvailable (true/false) when the request settles.
+    checkHealth() {
+        this.backendAvailable = null;
+        fetch(`${MP_API_BASE}/api/health`, { method: 'GET' })
+            .then(res => { this.backendAvailable = res.ok; })
+            .catch(() => { this.backendAvailable = false; });
+    }
+
     createGame(callback) {
-        fetch('/api/create', { method: 'POST' })
+        fetch(`${MP_API_BASE}/api/create`, { method: 'POST' })
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
@@ -51,7 +65,7 @@ export default class MultiplayerManager {
     }
 
     setupSSE(callback) {
-        this.eventSource = new EventSource(`/api/join?code=${this.code}`);
+        this.eventSource = new EventSource(`${MP_API_BASE}/api/join?code=${this.code}`);
         
         this.eventSource.onopen = () => {
             console.log("SSE Connection opened");
@@ -120,7 +134,7 @@ export default class MultiplayerManager {
 
     sendAction(data) {
         data.code = this.code;
-        fetch('/api/action', {
+        fetch(`${MP_API_BASE}/api/action`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)

@@ -85,7 +85,7 @@ export default class EnemyAI {
     }
 
     update() {
-        if (this.g.gameOver) return;
+        if (this.g.over) return;
         this.aiTick++;
 
         // Initial Delay

@@ -99,7 +99,6 @@ class Main {
     }
 
     init() {
-        console.log("%c GAME VERSION: DESYNC FIX 2.0 ", "background: #222; color: #bada55; font-size: 20px");
         this.playBtn = { x: W / 2 - 60, y: H / 2 + 40 - 150, w: 120, h: 50 };
         this.deckBtn = { x: W / 2 - 60, y: H / 2 + 100 - 150, w: 120, h: 50 };
         this.mpBtn = { x: W / 2 - 60, y: H / 2 + 160 - 150, w: 120, h: 50 };
@@ -289,6 +288,7 @@ class Main {
                 this.state = State.DECK;
             } else if (this.contains(this.mpBtn, x, y)) {
                 this.enteredCode = "";
+                this.mp.checkHealth(); // Probe whether a game server is reachable
                 this.state = State.MP_MENU;
             } else if (!this.eng.cheatPressed && x > W - 53 && y < 26) {
                 this.eng.cheatPressed = true;
@@ -451,12 +451,6 @@ class Main {
     loop(time) {
         requestAnimationFrame((t) => this.loop(t));
 
-        // Debug Loop Vitality
-        if (!this.lastDebugTime || Date.now() - this.lastDebugTime > 1000) {
-            this.lastDebugTime = Date.now();
-            console.log(`[Heartbeat] State: ${this.state}, MP: ${this.eng.isMultiplayer}, Host: ${this.mp.isHost}, Acc: ${this.accumulator.toFixed(2)}`);
-        }
-
         // Calculate delta time
         let dt = time - this.lastTime;
         this.lastTime = time;
@@ -579,12 +573,6 @@ class Main {
             ctx.textAlign = "left";
             ctx.fillText(`${this.visitorCount}`, 10, 20);
 
-            // DEBUG STATE ON SCREEN
-            ctx.fillStyle = "red";
-            ctx.fillText(`State: ${this.state}`, 10, 40);
-            ctx.fillText(`MP: ${this.eng.isMultiplayer} Host: ${this.mp.isHost}`, 10, 60);
-            ctx.fillText(`Last Pkt: ${this.eng.aiTick} Buf: ${this.eng.stateBuffer.length}`, 10, 80);
-
             ctx.textAlign = "center";
 
             this.drawCenteredString("Clash Clone", W / 2, H / 2 - 50 - 150, "bold 40px Arial", "#006400");
@@ -629,6 +617,12 @@ class Main {
             ctx.font = "bold 14px Arial";
             ctx.textAlign = "center";
             ctx.fillText("NOTE: DEBUG FEATURES DISABLED IN MULTIPLAYER", W / 2, H - 20);
+            if (this.mp.backendAvailable === false) {
+                ctx.fillStyle = "#ffcc00";
+                ctx.font = "12px Arial";
+                ctx.fillText("No game server reachable for this site.", W / 2, H - 50);
+                ctx.fillText("See README to host one (set MP_API_BASE).", W / 2, H - 36);
+            }
             return;
         }
 
@@ -781,14 +775,7 @@ class Main {
             return;
         }
 
-        // GAMEPLAY RENDER
-        ctx.fillStyle = "#3296ff";
-        ctx.fillRect(0, RIV_Y - 15, W, 30);
-        ctx.fillStyle = "#8b4513";
-        ctx.fillRect(W / 4 - 25, RIV_Y - 18, 50, 36);
-        ctx.fillRect(W * 3 / 4 - 25, RIV_Y - 18, 50, 36);
-
-        // GAMEPLAY RENDER
+        // GAMEPLAY RENDER - River and bridges
         ctx.fillStyle = "#3296ff";
         ctx.fillRect(0, RIV_Y - 15, W, 30);
         ctx.fillStyle = "#8b4513";
@@ -815,14 +802,8 @@ class Main {
                 }
             } // Close Invalid Area Logic
 
-            // --- RENDER ENTITIES ---
-            if (this.eng.ents) {
-                // Sort by Y for simple depth buffering
-                const sorted = [...this.eng.ents].sort((a, b) => a.y - b.y);
-                for (let e of sorted) {
-                    this.drawEntityBody(e);
-                }
-            }
+            // Entity bodies are drawn below in layered passes
+            // (shadows/effects -> ground units -> projectiles -> flying units).
 
             // HOVER PREVIEW (Ghost Unit & Range)
             if ((this.state === State.PLAY || this.state === State.CNT) && this.eng.sel && this.mouse.y < H - 120) {
@@ -1301,7 +1282,6 @@ class Main {
         // HP Bar
         // HP Bar / Shield Bar
         if (e.shield > 0) {
-            if (name === "Dark Prince" && Math.random() < 0.01) console.log("DP Shield Render:", e.shield, e.maxShield); // Debug
             // Purple Shield Bar
             let shPct = Math.max(0, e.shield / e.maxShield);
             let barW = 30;
@@ -1413,14 +1393,8 @@ class Main {
         ctx.translate(x, y);
 
         if (p.isLog || p.isRolling) {
-            // Rotate towards target
-            let angle = Math.atan2(p.ty - p.y, p.tx - p.tx); // wait, sync passes tx, ty?
-            // Proj object has tx, ty. In importState we set them.
-            // But if p is from sync, tx/ty are numbers.
-            // Actually, we passed tx, ty in importState.
-            if (p.tx !== undefined) {
-                angle = Math.atan2(p.ty - y, p.tx - x);
-            }
+            // Rotate towards travel direction (target point relative to current pos)
+            let angle = Math.atan2(p.ty - y, p.tx - x);
             ctx.rotate(angle);
 
             // Draw Log

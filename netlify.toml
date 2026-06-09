@@ -1,2 +1,10 @@
 [build]
   publish = "web"
+
+# The client is plain ES modules with no build-time hashing, so a long-lived
+# cache would serve stale code after a deploy. Ask browsers to revalidate the
+# JS (cheap 304s) so updates propagate immediately.
+[[headers]]
+  for = "/src/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
