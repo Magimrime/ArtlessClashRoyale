@@ -1442,3 +1442,5 @@ class Main {
         ctx.restore();
     }
 }
+
+new Main();
