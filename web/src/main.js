@@ -407,8 +407,8 @@ class Main {
                 }
             } else {
                 let rx = x, ry = y;
-                // Troops/buildings snap to the tile grid; spells are placed freely.
-                if (this.eng.sel && this.eng.sel.t !== 2) {
+                // Everything (troops, buildings and spells) snaps to the tile grid.
+                if (this.eng.sel) {
                     let s = this.snapToGrid(x, y);
                     rx = s.x; ry = s.y;
                 }
@@ -832,19 +832,18 @@ class Main {
 
         // Render Game during COUNTDOWN (CNT) or PLAY
         if (this.state === State.PLAY || this.state === State.CNT) {
+            // The tile grid is always visible during play.
+            this.drawGrid();
+
             if (this.eng.sel && (this.eng.sel.t !== 2 || ["The Log", "Barbarian Barrel"].includes(this.eng.sel.n))) {
-                // Draw invalid area (red tint)
-                ctx.fillStyle = "rgba(255, 0, 0, 0.32)";
-
-                // Top Half (Always invalid) - Area behind towers/King
-                ctx.fillRect(0, 0, W, 200);
-
-                // Enemy side is invalid until that lane's princess tower falls
+                // Invalid-placement tint
+                ctx.fillStyle = "rgba(255, 0, 0, 0.28)";
+                ctx.fillRect(0, 0, W, 200); // behind enemy towers/king
                 if (this.eng.t2L && this.eng.t2L.hp > 0) ctx.fillRect(0, 200, W / 2, RIV_Y - 200);
                 if (this.eng.t2R && this.eng.t2R.hp > 0) ctx.fillRect(W / 2, 200, W / 2, RIV_Y - 200);
 
-                // Tile grid + hovered-cell highlight for troops/buildings
-                if (this.eng.sel.t !== 2) this.drawPlacementGrid(this.eng.sel);
+                // Hovered-cell highlight for troops/buildings
+                if (this.eng.sel.t !== 2) this.drawHoverCell(this.eng.sel);
             } // Close Invalid Area Logic
 
             // Entity bodies are drawn below in layered passes
@@ -855,6 +854,8 @@ class Main {
                 let c = this.eng.sel;
                 let spellShape = this.eng.getSpellRadius(c);
                 let canAfford = this.eng.p1.elx >= c.c;
+                // Spells snap to the same tile grid as troops.
+                let gm = this.snapToGrid(this.mouse.x, this.mouse.y);
 
                 ctx.globalAlpha = 0.6;
                 if (spellShape) {
@@ -870,29 +871,29 @@ class Main {
                     if (["The Log", "Barbarian Barrel"].includes(c.n)) {
                         // Draw Arrow for rolling spells
                         let dist = (c.n === "The Log") ? 280 : 101;
-                        let ey = this.mouse.y - dist;
+                        let ey = gm.y - dist;
                         ctx.beginPath();
-                        ctx.moveTo(this.mouse.x, this.mouse.y);
-                        ctx.lineTo(this.mouse.x, ey);
+                        ctx.moveTo(gm.x, gm.y);
+                        ctx.lineTo(gm.x, ey);
 
                         // Arrowhead
-                        ctx.lineTo(this.mouse.x - 10, ey + 15);
-                        ctx.moveTo(this.mouse.x, ey);
-                        ctx.lineTo(this.mouse.x + 10, ey + 15);
+                        ctx.lineTo(gm.x - 10, ey + 15);
+                        ctx.moveTo(gm.x, ey);
+                        ctx.lineTo(gm.x + 10, ey + 15);
                         ctx.stroke();
 
                         // Also fill rect for body width
                         let w = (c.n === "The Log") ? 70 : 44;
                         ctx.fillStyle = canAfford ? "rgba(255, 255, 255, 0.2)" : "rgba(100, 100, 100, 0.2)";
-                        ctx.fillRect(this.mouse.x - w / 2, ey, w, dist);
+                        ctx.fillRect(gm.x - w / 2, ey, w, dist);
                     } else if (spellShape.type === 'circle') {
                         ctx.beginPath();
-                        ctx.arc(this.mouse.x, this.mouse.y, spellShape.val, 0, Math.PI * 2);
+                        ctx.arc(gm.x, gm.y, spellShape.val, 0, Math.PI * 2);
                         ctx.fill();
                         ctx.stroke();
                     } else if (spellShape.type === 'rect') {
                         ctx.beginPath();
-                        ctx.rect(this.mouse.x - spellShape.w / 2, this.mouse.y - spellShape.h / 2, spellShape.w, spellShape.h);
+                        ctx.rect(gm.x - spellShape.w / 2, gm.y - spellShape.h / 2, spellShape.w, spellShape.h);
                         ctx.fill();
                         ctx.stroke();
                     }
@@ -904,46 +905,46 @@ class Main {
                     // Center marker
                     ctx.fillStyle = "white";
                     ctx.beginPath();
-                    ctx.arc(this.mouse.x, this.mouse.y, 4, 0, Math.PI * 2);
+                    ctx.arc(gm.x, gm.y, 4, 0, Math.PI * 2);
                     ctx.fill();
-                    ctx.strokeStyle = "black";
+                    ctx.strokeStyle = "rgba(0,0,0,0.5)";
                     ctx.stroke();
                 } else {
-                    // Snapped ghost preview for troops/buildings.
+                    // Snapped ghost preview — one circle per unit the card spawns,
+                    // each the size that unit will actually be.
                     let snap = this.snapToGrid(this.mouse.x, this.mouse.y);
                     let gx = snap.x, gy = snap.y;
                     let range = c.rn || 0;
-                    let radius = this.eng.getVisualRadius(c);
                     let valid = canAfford && this.eng.isValid(gy, gx, c, 0) && this.mouse.y < H - 130;
-                    let col = this.getUnitColor(c.n);
+                    let col = valid ? this.getUnitColor(c.n) : "#8a8a8a";
+                    let outline = valid ? "#ffffff" : "#ff6a6a";
 
-                    // Range ring
                     if (range > 0) {
                         ctx.beginPath();
-                        ctx.strokeStyle = "rgba(255,255,255,0.45)";
+                        ctx.strokeStyle = "rgba(255,255,255,0.4)";
                         ctx.lineWidth = 2; ctx.setLineDash([6, 6]);
                         ctx.arc(gx, gy, range, 0, Math.PI * 2); ctx.stroke();
                         ctx.setLineDash([]); ctx.lineWidth = 1;
                     }
-                    // Ghost body in the unit's colour (grey when can't place)
-                    ctx.globalAlpha = valid ? 0.65 : 0.4;
-                    ctx.fillStyle = valid ? col : "#8a8a8a";
-                    ctx.beginPath(); ctx.arc(gx, gy, radius, 0, Math.PI * 2); ctx.fill();
-                    // Dashed outline
-                    ctx.globalAlpha = 1.0;
-                    ctx.strokeStyle = valid ? "#ffffff" : "#ff6a6a";
-                    ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
-                    ctx.beginPath(); ctx.arc(gx, gy, radius + 2, 0, Math.PI * 2); ctx.stroke();
-                    ctx.setLineDash([]); ctx.lineWidth = 1;
-                    // Name label
-                    this.drawCenteredString(c.n, gx, gy - radius - 7, "bold 11px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.9)");
+                    for (const gp of this.ghostLayout(c)) {
+                        let px = gx + gp.dx, py = gy + gp.dy;
+                        ctx.globalAlpha = 0.6;
+                        ctx.fillStyle = col;
+                        ctx.beginPath(); ctx.arc(px, py, gp.r, 0, Math.PI * 2); ctx.fill();
+                        ctx.globalAlpha = 1.0;
+                        ctx.strokeStyle = outline;
+                        ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
+                        ctx.beginPath(); ctx.arc(px, py, gp.r + 1, 0, Math.PI * 2); ctx.stroke();
+                        ctx.setLineDash([]); ctx.lineWidth = 1;
+                    }
+                    this.drawCenteredString(c.n, gx, gy - 26, "700 11px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.92)");
                 }
                 ctx.globalAlpha = 1.0;
             }
 
             // Projectiles
             for (let p of this.eng.projs) {
-                if (p.isArrows || p.isSpellArc || p.isRolling) continue; // drawn in drawProj (top layer)
+                if (p.isArrows || p.isSpellArc || p.isRolling || p.isSpellDrop) continue; // drawn in drawProj (top layer)
                 if (p.barrel) {
                     ctx.fillStyle = "#643200";
                 } else if (p.fireArea) {
@@ -1181,13 +1182,15 @@ class Main {
                         // Only hover effect, no selection offset
                         let paintY = r.y - hoverOff;
 
-                        ctx.fillStyle = canAfford ? "#fff" : "#888"; // Gray if can't afford
-                        if (isSel) ctx.fillStyle = "#32CD32"; // Green if selected
-
-                        this.drawRoundRect(r.x, paintY, r.w, r.h, 5, true, true);
-                        // Image/Text
-                        this.drawCenteredString(c.n, r.x + r.w / 2, paintY + r.h / 2, "bold 10px 'Baloo 2', 'Segoe UI', sans-serif", "black");
-                        // MOVED ELIXIR COST INWARD
+                        // White card, no black outline; greyed when unaffordable.
+                        ctx.fillStyle = canAfford ? "#ffffff" : "#b9bdb7";
+                        this.drawRoundRect(r.x, paintY, r.w, r.h, 5, true, false);
+                        if (isSel) {
+                            ctx.strokeStyle = "#ffd24d"; ctx.lineWidth = 3;
+                            this.drawRoundRect(r.x, paintY, r.w, r.h, 5, false, false); ctx.stroke();
+                            ctx.lineWidth = 1;
+                        }
+                        this.drawCenteredString(c.n, r.x + r.w / 2, paintY + r.h / 2 + 4, "700 10px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
                         this.drawElixirCost(r.x + 15, paintY + 15, c.c);
                     }
                 }
@@ -1196,11 +1199,10 @@ class Main {
                 if (this.eng.p1.pile.length > 0) {
                     let nextC = this.eng.p1.pile[0];
                     let nr = this.nextCardRect;
-                    ctx.fillStyle = "#ccc";
-                    this.drawRoundRect(nr.x, nr.y, nr.w, nr.h, 5, true, true);
-                    this.drawCenteredString("Next:", nr.x + nr.w / 2, nr.y + 15, "10px 'Baloo 2', 'Segoe UI', sans-serif", "black");
-                    this.drawCenteredString(nextC.n, nr.x + nr.w / 2, nr.y + nr.h / 2, "bold 9px 'Baloo 2', 'Segoe UI', sans-serif", "black");
-                    // MOVED ELIXIR COST INWARD
+                    ctx.fillStyle = "rgba(255,255,255,0.18)";
+                    this.drawRoundRect(nr.x, nr.y, nr.w, nr.h, 5, true, false);
+                    this.drawCenteredString("Next", nr.x + nr.w / 2, nr.y + 16, "600 10px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.85)");
+                    this.drawCenteredString(nextC.n, nr.x + nr.w / 2, nr.y + nr.h / 2 + 4, "700 9px 'Baloo 2', 'Segoe UI', sans-serif", "white");
                 }
 
                 // Timer / Messages
@@ -1324,17 +1326,18 @@ class Main {
         }
 
         ctx.fillStyle = color;
-        ctx.strokeStyle = "black"; // RESET STROKE STYLE
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = "rgba(0,0,0,0.3)"; // soft outline, not harsh black
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
         if (e instanceof Tower) {
             // ROUNDED TOWER
             let r = radius;
-            this.drawRoundRect(x - r, y - r, r * 2, r * 2, 8, true, true);
+            this.drawRoundRect(x - r, y - r, r * 2, r * 2, 8, true, false);
+            ctx.stroke();
             // Cannon turret (no barrel) sitting on top of the tower.
             ctx.fillStyle = "#4a4e55";
             ctx.beginPath(); ctx.arc(x, y, r * 0.5, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = 1.5; ctx.stroke();
+            ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.stroke();
             ctx.fillStyle = "#26282c";
             ctx.beginPath(); ctx.arc(x, y, r * 0.22, 0, Math.PI * 2); ctx.fill(); // muzzle
             ctx.lineWidth = 1;
@@ -1347,6 +1350,7 @@ class Main {
             ctx.fill();
             ctx.stroke();
         }
+        ctx.lineWidth = 1;
 
 
         // Health bar — its COLOR is the only friend/foe indicator
@@ -1443,6 +1447,42 @@ class Main {
         return { x: Math.floor(x / T) * T + T / 2, y: Math.floor(y / T) * T + T / 2 };
     }
 
+    // Approximate drawn radius of one unit of a card (mirrors Troop sizing).
+    unitRadius(c) {
+        if (c.t === 3) return this.eng.getVisualRadius(c) * 0.82;
+        let m = 10;
+        const n = c.n;
+        if (["Skeletons", "Bats"].includes(n)) m = 6;
+        else if (n.includes("Spirit")) m = 8;
+        else if (["Goblins", "Archers", "Wall Breakers"].some(x => n.includes(x))) m = 8;
+        else if (["Barbarians", "Elite Barbarians", "Royal Recruits"].includes(n)) m = 12;
+        else if (n === "Mega Knight" || n === "P.E.K.K.A") m = 20;
+        else if (n === "Sparky" || n === "Bowler") m = 18;
+        else if (n.includes("Dragon") || n === "Lava Hound") m = 16;
+        else if (["Giant", "Golem", "Elixir Golem", "Royal Giant", "Electro Giant"].includes(n)) m = 20;
+        return m * 0.82;
+    }
+
+    // Ghost layout: offsets (relative to the snapped point) + radius for each
+    // unit a card spawns, mirroring GameEngine.addU.
+    ghostLayout(c) {
+        const r = this.unitRadius(c);
+        const at = (dx, dy) => ({ dx, dy, r });
+        const n = c.n;
+        if (["Archers", "Wall Breakers"].includes(n)) return [at(-15, 0), at(15, 0)];
+        if (n === "Spear Goblins") return [at(-15, 0), at(15, 0), at(0, 15)];
+        if (["Skeletons", "Goblins", "Minions"].includes(n)) return [at(0, -10), at(-10, 10), at(10, 10)];
+        if (n === "Minion Horde") return [at(-22, -12), at(0, -16), at(22, -12), at(-14, 12), at(14, 12), at(0, 4)];
+        if (n === "Skeleton Army") { let a = []; for (let i = 0; i < 15; i++) { let ang = i * 2.4, rr = Math.sqrt(i / 15) * 28; a.push(at(Math.cos(ang) * rr, Math.sin(ang) * rr)); } return a; }
+        if (n === "Bats") return [at(-18, -8), at(0, -14), at(18, -8), at(-10, 10), at(10, 10)];
+        if (n === "Barbarians") return [at(-12, -12), at(12, -12), at(-12, 12), at(12, 12)];
+        if (n === "Elite Barbarians") return [at(-10, 0), at(10, 0)];
+        if (n === "Zappies") return [at(-10, 0), at(10, 0), at(0, 10)];
+        if (n === "Royal Hogs") return [at(-30, 0), at(-10, 0), at(10, 0), at(30, 0)];
+        if (n === "Royal Recruits") return [-150, -90, -30, 30, 90, 150].map(off => at(off, 0));
+        return [at(0, 0)];
+    }
+
     elixirColor(c) {
         if (c <= 2) return "#3a8f5a";
         if (c <= 4) return "#3a6f9f";
@@ -1453,49 +1493,46 @@ class Main {
     // A deck-builder card tile: elixir-tinted body, unit-color swatch, name,
     // elixir badge, and a gold ring + check when it's in the deck.
     drawDeckCard(cx, cy, w, h, c, selected) {
-        ctx.fillStyle = this.elixirColor(c.c); // solid colour, no gradient
+        ctx.fillStyle = "#ffffff"; // white card, no gradient, no outline
         this.drawRoundRect(cx, cy, w, h, 10, true, false);
 
-        ctx.fillStyle = this.getUnitColor(c.n);
-        this.drawRoundRect(cx + 5, cy + 5, w - 10, 13, 5, true, false);
-
-        this.drawCenteredString(c.n, cx + w / 2, cy + h / 2 + 13, "bold 11px 'Baloo 2', 'Segoe UI', sans-serif", "white");
-        this.drawElixirCost(cx + 12, cy + 13, c.c);
+        this.drawCenteredString(c.n, cx + w / 2, cy + h / 2 + 5, "700 12px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
+        this.drawElixirCost(cx + 13, cy + 14, c.c);
 
         if (selected) {
             ctx.strokeStyle = "#ffd24d"; ctx.lineWidth = 3;
             this.drawRoundRect(cx, cy, w, h, 10, false, false); ctx.stroke();
+            ctx.lineWidth = 1;
             ctx.fillStyle = "#2ecc71";
             ctx.beginPath(); ctx.arc(cx + w - 13, cy + 13, 9, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = "white"; ctx.lineWidth = 2;
             ctx.beginPath(); ctx.moveTo(cx + w - 17, cy + 13); ctx.lineTo(cx + w - 14, cy + 16); ctx.lineTo(cx + w - 9, cy + 9); ctx.stroke();
             ctx.lineWidth = 1;
-        } else {
-            ctx.strokeStyle = "rgba(0,0,0,0.45)"; ctx.lineWidth = 1;
-            this.drawRoundRect(cx, cy, w, h, 10, false, false); ctx.stroke();
         }
     }
 
-    // Faint placement grid over the deployable region + the hovered cell tinted
-    // green (valid) or red (invalid).
-    drawPlacementGrid(sel) {
+    // Always-on tile grid, aligned to the 30px snap cells (lines on cell edges).
+    drawGrid() {
         const T = 30;
-        ctx.strokeStyle = "rgba(255,255,255,0.10)";
+        ctx.strokeStyle = "rgba(255,255,255,0.08)";
         ctx.lineWidth = 1;
-        for (let gx = T; gx < W; gx += T) { ctx.beginPath(); ctx.moveTo(gx, 200); ctx.lineTo(gx, H - 130); ctx.stroke(); }
-        for (let gy = 200; gy < H - 130; gy += T) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+        for (let gx = T; gx < W; gx += T) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H - 130); ctx.stroke(); }
+        for (let gy = T; gy < H - 130; gy += T) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+    }
 
-        if (this.mouse.y < H - 130) {
-            let cx = Math.floor(this.mouse.x / T) * T, cy = Math.floor(this.mouse.y / T) * T;
-            let s = this.snapToGrid(this.mouse.x, this.mouse.y);
-            let valid = this.eng.isValid(s.y, s.x, sel, 0);
-            ctx.fillStyle = valid ? "rgba(80,220,120,0.35)" : "rgba(220,60,60,0.35)";
-            ctx.fillRect(cx, cy, T, T);
-            ctx.strokeStyle = valid ? "#4aff8a" : "#ff5a5a";
-            ctx.lineWidth = 2;
-            ctx.strokeRect(cx, cy, T, T);
-            ctx.lineWidth = 1;
-        }
+    // Hovered cell highlight (green valid / red invalid) while placing.
+    drawHoverCell(sel) {
+        const T = 30;
+        if (this.mouse.y >= H - 130) return;
+        let cx = Math.floor(this.mouse.x / T) * T, cy = Math.floor(this.mouse.y / T) * T;
+        let s = this.snapToGrid(this.mouse.x, this.mouse.y);
+        let valid = this.eng.isValid(s.y, s.x, sel, 0);
+        ctx.fillStyle = valid ? "rgba(80,220,120,0.32)" : "rgba(220,60,60,0.32)";
+        ctx.fillRect(cx, cy, T, T);
+        ctx.strokeStyle = valid ? "#4aff8a" : "#ff5a5a";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(cx, cy, T, T);
+        ctx.lineWidth = 1;
     }
 
     drawBtn(rect, txt, color) {
@@ -1583,6 +1620,7 @@ class Main {
     drawProj(p) {
         if (p.isArrows) { this.drawArrowsVolley(p); return; }
         if (p.isSpellArc) { this.drawSpellArc(p); return; }
+        if (p.isSpellDrop) { this.drawSpellDrop(p); return; }
 
         // Area / ground effects (explosions, poison, clones, placed spells…) are
         // drawn in the inline ground pass in their own colour — don't overpaint
@@ -1611,9 +1649,6 @@ class Main {
                 let yy = (((phase + k * (h / 2)) % h) + h) % h - h / 2;
                 ctx.fillRect(-w / 2 + 3, yy - 1.5, w - 6, 3);
             }
-            ctx.fillStyle = "#caa06a";
-            ctx.beginPath(); ctx.ellipse(-w / 2 + 3, 0, 3, h / 2 - 2, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.beginPath(); ctx.ellipse(w / 2 - 3, 0, 3, h / 2 - 2, 0, 0, Math.PI * 2); ctx.fill();
         } else if (p.isRolling) {
             // Bowler boulder
             ctx.fillStyle = "#5a4a6a";
@@ -1726,6 +1761,59 @@ class Main {
             ctx.strokeStyle = "#eaeaea"; ctx.lineWidth = 1.5;
             ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(-3, -11); ctx.moveTo(0, -8); ctx.lineTo(3, -11); ctx.stroke();
             ctx.restore();
+        }
+        ctx.globalAlpha = 1;
+        ctx.lineWidth = 1;
+    }
+
+    // Placed spell that drops a symbol from the sky, then flashes on impact.
+    drawSpellDrop(p) {
+        const impact = 6;
+        const maxL = p.dropMax || 30;
+        if (p.life > impact) {
+            // descending symbol + a growing target shadow
+            let t = (maxL - p.life) / (maxL - impact); // 0..1
+            ctx.fillStyle = "rgba(0,0,0,0.18)";
+            ctx.beginPath(); ctx.ellipse(p.x, p.y, 5 + 9 * t, (5 + 9 * t) * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.save();
+            ctx.translate(p.x, p.y - (1 - t) * 95);
+            this.drawSpellSymbol(p.dropKind, 1);
+            ctx.restore();
+        } else {
+            // impact flash in the spell's colour, with the symbol fading out
+            let a = Math.max(0, p.life / impact);
+            ctx.globalAlpha = 0.55 * a + 0.15;
+            ctx.fillStyle = p.flashCol || "#ffffff";
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.rad * (1 - 0.25 * a), 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha = 1;
+            ctx.save(); ctx.translate(p.x, p.y);
+            this.drawSpellSymbol(p.dropKind, a);
+            ctx.restore();
+        }
+    }
+
+    drawSpellSymbol(kind, alpha) {
+        ctx.globalAlpha = alpha;
+        if (kind === "freeze") {
+            ctx.strokeStyle = "#dff3ff"; ctx.lineWidth = 2.5; ctx.lineCap = "round";
+            for (let i = 0; i < 6; i++) {
+                ctx.save(); ctx.rotate(i * Math.PI / 3);
+                ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -11);
+                ctx.moveTo(0, -7); ctx.lineTo(-3, -10); ctx.moveTo(0, -7); ctx.lineTo(3, -10);
+                ctx.stroke(); ctx.restore();
+            }
+            ctx.lineCap = "butt";
+        } else if (kind === "zap") {
+            ctx.fillStyle = "#9fe6ff";
+            ctx.beginPath();
+            ctx.moveTo(3, -12); ctx.lineTo(-5, 1); ctx.lineTo(-1, 1); ctx.lineTo(-3, 12);
+            ctx.lineTo(6, -3); ctx.lineTo(1, -3); ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = "#3aa0d6"; ctx.lineWidth = 1; ctx.stroke();
+        } else if (kind === "vines") {
+            ctx.fillStyle = "#7ad06a";
+            ctx.beginPath(); ctx.ellipse(0, 0, 5, 10, 0.5, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = "#3f7a32"; ctx.lineWidth = 1.2;
+            ctx.beginPath(); ctx.moveTo(-4, 7); ctx.lineTo(4, -7); ctx.stroke();
         }
         ctx.globalAlpha = 1;
         ctx.lineWidth = 1;

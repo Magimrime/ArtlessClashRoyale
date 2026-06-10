@@ -470,15 +470,17 @@ export default class GameEngine {
         if (c.t === 2 || c.n === "Goblin Barrel") return true;
 
         if (tm === 0) {
-            if (y >= this.RIV_Y + 40) return true;
-            if (c.t === 3 && y > this.RIV_Y - 40 && y < this.RIV_Y + 40) return false;
+            // Buildings can't go in/near the river; troops can be placed right up
+            // to the bridge bank.
+            if (c.t === 3 && y > this.RIV_Y - 25 && y < this.RIV_Y + 25) return false;
+            if (y >= this.RIV_Y + 15) return true;
             if (this.t2L && this.t2L.hp <= 0 && x < this.W / 2 && y >= 200) return true;
             if (this.t2R && this.t2R.hp <= 0 && x > this.W / 2 && y >= 200) return true;
             return false;
         } else {
             // Enemy placement
-            if (y <= this.RIV_Y - 40) return true;
-            if (c.t === 3 && y > this.RIV_Y - 40 && y < this.RIV_Y + 40) return false;
+            if (c.t === 3 && y > this.RIV_Y - 25 && y < this.RIV_Y + 25) return false;
+            if (y <= this.RIV_Y - 15) return true;
             if (this.t1L && this.t1L.hp <= 0 && x < this.W / 2 && y <= this.H - 200) return true;
             if (this.t1R && this.t1R.hp <= 0 && x > this.W / 2 && y <= this.H - 200) return true;
             return false;
@@ -502,17 +504,20 @@ export default class GameEngine {
     }
 
     getSpellRadius(c) {
-        if (c.n === "Arrows") return { type: 'circle', val: 100 };
-        if (c.n === "Poison" || c.n === "Graveyard") return { type: 'circle', val: 105 };
-        if (c.n === "Freeze") return { type: 'circle', val: 90 };
+        // Real Clash Royale radii at 30px / tile.
+        if (c.n === "Arrows") return { type: 'circle', val: 120 };        // 4.0 tiles
+        if (c.n === "Poison") return { type: 'circle', val: 105 };        // 3.5 tiles
+        if (c.n === "Graveyard") return { type: 'circle', val: 100 };
+        if (c.n === "Freeze") return { type: 'circle', val: 90 };         // 3.0 tiles
         if (c.n === "Vines") return { type: 'circle', val: 80 };
-        if (c.n === "Zap") return { type: 'circle', val: 75 };
-        if (c.n === "Fireball" || c.n === "Royale Delivery" || c.n === "Rocket" || c.n === "Giant Snowball") return { type: 'circle', val: 75 };
-        if (c.n === "The Log") return { type: 'rect', w: 70, h: 20 }; // Visual approximation
-        if (c.n === "Barbarian Barrel") return { type: 'rect', w: 44, h: 20 };
-        if (c.n === "Goblin Barrel") return { type: 'circle', val: 40 }; // Impact radius approx
-        if (c.n === "Clone") return { type: 'circle', val: 90 };
-        if (c.n === "Tornado") return { type: 'circle', val: 110 };
+        if (c.n === "Zap") return { type: 'circle', val: 75 };            // 2.5 tiles
+        if (c.n === "Fireball" || c.n === "Giant Snowball") return { type: 'circle', val: 75 }; // 2.5 tiles
+        if (c.n === "Royale Delivery" || c.n === "Rocket") return { type: 'circle', val: 60 };  // 2.0 tiles
+        if (c.n === "The Log") return { type: 'rect', w: 110, h: 22 };
+        if (c.n === "Barbarian Barrel") return { type: 'rect', w: 64, h: 22 };
+        if (c.n === "Goblin Barrel") return { type: 'circle', val: 45 };
+        if (c.n === "Clone") return { type: 'circle', val: 105 };
+        if (c.n === "Tornado") return { type: 'circle', val: 165 };
         if (c.n === "Heal Spirit") return { type: 'circle', val: 0 };
         if (c.n === "Ice Spirit" || c.n === "Electro Spirit" || c.n === "Fire Spirit") return { type: 'circle', val: 0 };
 
@@ -675,24 +680,26 @@ export default class GameEngine {
             // target; speed/arc height depend on the spell.
             const ARC = {
                 "Fireball": { spd: 9, arc: 130, kind: "fireball" },
-                "Arrows": { spd: 11, arc: 120, kind: "arrows" },
                 "Rocket": { spd: 7, arc: 160, kind: "rocket" },
                 "Giant Snowball": { spd: 10, arc: 110, kind: "snowball" }
             };
-            if (ARC[c.n]) {
+            if (c.n === "Arrows") {
+                // Arrows drop on the target as a 3-wave volley (not from the tower).
+                this.projs.push(new Proj(x, y, x, y, null, 0, true, rad, dmg, tm, false).asArrows());
+            } else if (ARC[c.n]) {
                 let kt = (tm === 0) ? this.t1K : this.t2K;
                 let cfg = ARC[c.n];
                 let p = new Proj(kt.x, kt.y, x, y, null, cfg.spd, false, rad, dmg, tm, false);
                 p.asSpellArc(cfg.arc, cfg.kind);
                 if (c.n === "Fireball") p.hasKnockback = true;
-                if (c.n === "Arrows") p.arrowBurst = true;
                 this.projs.push(p);
             } else {
-                // Placed area spells (Zap, Freeze, Vines) drop directly on target.
+                // Placed spells fall from the sky as a symbol, then resolve.
                 let p = new Proj(x, y, x, y, null, 0, true, rad, dmg, tm, false);
-                if (c.n === "Zap") { p.asStun(); p.flashCol = "#5ec8ff"; }
-                if (c.n === "Vines") { p.isRoot = true; p.flashCol = "#7ad06a"; }
-                if (c.n === "Freeze") { p.isFreeze = true; p.flashCol = "#bfe8ff"; }
+                if (c.n === "Zap") { p.asStun(); p.asSpellDrop("zap", "#5ec8ff", 20); }
+                else if (c.n === "Vines") { p.isRoot = true; p.asSpellDrop("vines", "#7ad06a", 28); }
+                else if (c.n === "Freeze") { p.isFreeze = true; p.asSpellDrop("freeze", "#bfe8ff", 32); }
+                else { p.life = 26; } // any other placed spell still gets a short wind-up
                 this.projs.push(p);
             }
         } else if (["Archers", "Spear Goblins", "Wall Breakers"].includes(c.n)) {
@@ -1053,7 +1060,12 @@ export default class GameEngine {
                 e.x = Math.max(visualR, Math.min(this.W - visualR, e.x));
                 e.y = Math.max(visualR, Math.min(this.H - 140 - visualR, e.y));
                 if (e.y + visualR > this.RIV_Y - 15 && e.y - visualR < this.RIV_Y + 15 && !e.fly) {
-                    if (!((e.x >= this.W / 4 - 30 && e.x <= this.W / 4 + 30) || (e.x >= this.W * 3 / 4 - 30 && e.x <= this.W * 3 / 4 + 30))) {
+                    let onBridge = (e.x >= this.W / 4 - 30 && e.x <= this.W / 4 + 30) || (e.x >= this.W * 3 / 4 - 30 && e.x <= this.W * 3 / 4 + 30);
+                    if (!onBridge) {
+                        // Hold at the near bank but slide toward the nearest bridge,
+                        // so units funnel onto it and cross instead of getting stuck.
+                        let bx = (e.x < this.W / 2) ? this.W / 4 : this.W * 3 / 4;
+                        e.x += Math.max(-2.5, Math.min(2.5, bx - e.x));
                         e.y = e.y < this.RIV_Y ? this.RIV_Y - 15 - visualR : this.RIV_Y + 15 + visualR;
                     }
                 }

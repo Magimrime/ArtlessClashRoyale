@@ -51,6 +51,9 @@ export default class Proj {
         this.spellKind = null;
         this.barrelGoblins = false;
         this.flashCol = null;
+        this.isSpellDrop = false;
+        this.dropKind = null;
+        this.dropMax = 0;
 
         this.stunDuration = 30;
         this.chainTargets = null;
@@ -77,6 +80,8 @@ export default class Proj {
     asCurse() { this.isCurse = true; return this; }
     asRolling() { this.isRolling = true; this.life = 60; return this; }
     asArrows() { this.isArrows = true; this.life = 36; return this; } // 3 staggered waves
+    // Placed spell that falls from the sky as a symbol, then resolves on impact.
+    asSpellDrop(kind, col, life = 30) { this.isSpellDrop = true; this.dropKind = kind; this.flashCol = col; this.life = life; this.dropMax = life; return this; }
     asIceNova() { this.isIceNova = true; this.life = 5; return this; }
 
     asLog() { this.isLog = true; this.asRolling(); this.life = 110; return this; }

@@ -321,8 +321,14 @@ export default class Troop extends Entity {
             if (!this.jp && !this.fly) {
                 if ((this.y < RIV_Y && this.currentTarget.y > RIV_Y) || (this.y > RIV_Y && this.currentTarget.y < RIV_Y)) {
                     let bridgeX = (this.x < W / 2) ? W / 4 : W * 3 / 4;
-                    if (this.currentTarget.y !== RIV_Y || Math.abs(this.currentTarget.x - bridgeX) > 1) {
-                        this.currentTarget = { x: bridgeX, y: RIV_Y, hp: 1, rad: 0 }; // Dummy
+                    // Aim for the FAR bank at the bridge so the unit walks all the
+                    // way across instead of stopping in the middle of the river.
+                    let farY = (this.y < RIV_Y) ? RIV_Y + 50 : RIV_Y - 50;
+                    let onCrossing = this.currentTarget.rad === 0 &&
+                        Math.abs(this.currentTarget.x - bridgeX) < 1 &&
+                        Math.sign(this.currentTarget.y - RIV_Y) === Math.sign(farY - RIV_Y);
+                    if (!onCrossing) {
+                        this.currentTarget = { x: bridgeX, y: farY, hp: 1, rad: 0 }; // Dummy
                         this.currentWaypoint = null;
                     }
                 }

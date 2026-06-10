@@ -95,17 +95,13 @@ export default class EnemyAI {
         const threats = this.getThreats();
 
         // 1) Defend genuine threats first.
-        if (threats.length > 0 && this.p.elx >= 2) {
-            if (this.defend(threats, mode)) { this.actCd = 22; return; }
-        }
+        if (threats.length > 0 && this.p.elx >= 2 && this.defend(threats, mode)) { this.actCd = 22; return; }
         // 2) Spend spells on value (clusters) or chip the weak tower when ahead.
         if (this.castValueSpell(mode)) { this.actCd = 28; return; }
         // 3) Offense, gated by mode/elixir.
-        if (this.p.elx >= (mode === 'pressure' ? 6 : 9)) {
-            if (this.buildPush(mode === 'pressure')) { this.actCd = 38; return; }
-        }
-        // 4) Avoid leaking at max elixir.
-        if (this.p.elx >= 9.7) { this.cycle(); this.actCd = 18; }
+        if (this.p.elx >= (mode === 'pressure' ? 6 : 9) && this.buildPush(mode === 'pressure')) { this.actCd = 38; return; }
+        // 4) Never sit on near-full elixir doing nothing — always play something.
+        if (this.p.elx >= 8.5 && this.forcePlay()) { this.actCd = 16; return; }
     }
 
     // Strategy mode from the tower score: ahead -> pressure, behind -> defend.
@@ -147,8 +143,9 @@ export default class EnemyAI {
             playY = 210;
         }
 
-        if (this.g.isValid(playY, playX, counter, 1)) { this.playAI(counter, playX, playY); return true; }
-        return false;
+        // Keep non-spell placements on our own side of the river.
+        if (counter.t !== 2) playY = Math.max(20, Math.min(this.g.RIV_Y - 20, playY));
+        return this.playAI(counter, playX, playY);
     }
 
     // Densest knot of player troops (used to decide if a spell is worth it).
@@ -167,7 +164,7 @@ export default class EnemyAI {
         const dmg = this.affordable().find(c => ["Fireball", "Arrows", "Poison"].includes(c.n));
         if (dmg) {
             const cl = this.cluster(dmg.n === "Poison" ? 95 : 70);
-            if (cl && cl.count >= 3) { this.playAI(dmg, cl.x, cl.y); return true; }
+            if (cl && cl.count >= 3) return this.playAI(dmg, cl.x, cl.y);
         }
         // When ahead, chip the weaker standing player tower with a spell win-con
         // (Graveyard / Goblin Barrel onto a princess tower).
@@ -178,7 +175,7 @@ export default class EnemyAI {
                 let t;
                 if (g.t1L.hp > 0 && g.t1R.hp > 0) t = g.t1L.hp < g.t1R.hp ? g.t1L : g.t1R;
                 else t = g.t1L.hp > 0 ? g.t1L : (g.t1R.hp > 0 ? g.t1R : g.t1K);
-                if (t && t.hp > 0) { this.playAI(ts, t.x, t.y); return true; }
+                if (t && t.hp > 0) return this.playAI(ts, t.x, t.y);
             }
         }
         return false;
@@ -189,17 +186,29 @@ export default class EnemyAI {
         const lane = (g.t1L.hp <= 0) ? 0 : (g.t1R.hp <= 0) ? 1 : (Math.random() > 0.5 ? 0 : 1);
         const laneX = lane === 0 ? 130 : 410;
         const tank = this.p.h.find(c => c.tags.includes("Tank") && c.c <= this.p.elx);
-        if (tank) { this.playAI(tank, laneX, 30); return true; }
+        if (tank) return this.playAI(tank, laneX, 30);
         const win = this.p.h.find(c => c.tags.includes("WinCon") && c.t !== 2 && c.c <= this.p.elx);
-        if (win) { this.playAI(win, laneX, this.g.RIV_Y - 70); return true; }
+        if (win) return this.playAI(win, laneX, this.g.RIV_Y - 70);
         const support = this.p.h.find(c => c.t === 0 && (c.rn > 60 || c.tags.includes("AOE")) && c.c <= this.p.elx);
-        if (aggressive && support) { this.playAI(support, laneX, 60); return true; }
+        if (aggressive && support) return this.playAI(support, laneX, 60);
         return false;
     }
 
-    cycle() {
-        const c = this.p.h.find(c => c.t !== 2 && c.t !== 3 && c.c <= this.p.elx);
-        if (c) this.playAI(c, Math.random() > 0.5 ? 130 : 410, 40);
+    // Guaranteed action: play any affordable card somewhere valid.
+    forcePlay() {
+        for (const c of this.p.h) {
+            if (c.c > this.p.elx || c.t === 2) continue;
+            const x = Math.random() > 0.5 ? 130 : 410;
+            const y = (c.t === 1 || c.tags.includes("Tank")) ? 30 : 90;
+            if (this.playAI(c, x, y)) return true;
+        }
+        for (const c of this.p.h) {
+            if (c.c > this.p.elx || c.t !== 2) continue;
+            const g = this.g;
+            const t = g.t1L.hp > 0 ? g.t1L : (g.t1R.hp > 0 ? g.t1R : g.t1K);
+            if (this.playAI(c, t.x, t.y)) return true;
+        }
+        return false;
     }
 
     pickCounter(threat) {
@@ -255,7 +264,9 @@ export default class EnemyAI {
     }
 
     playAI(c, x, y) {
-        if (c.t !== 2 && c.n !== "Goblin Barrel" && y > 400 - 40) return;
+        if (c.c > this.p.elx) return false;
+        // Validate placement (spells / Goblin Barrel can go anywhere).
+        if (c.t !== 2 && c.n !== "Goblin Barrel" && !this.g.isValid(y, x, c, 1)) return false;
         this.p.elx -= c.c;
         this.g.addU(1, c, x, y);
 
@@ -265,6 +276,7 @@ export default class EnemyAI {
             this.p.pile.push(c);
             this.p.h.push(this.p.pile.shift());
         }
+        return true;
     }
 }
 
