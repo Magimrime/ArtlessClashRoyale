@@ -49,6 +49,8 @@ export default class Proj {
         this.totalDist = 0;
         this.arrowBurst = false;
         this.spellKind = null;
+        this.barrelGoblins = false;
+        this.flashCol = null;
 
         this.stunDuration = 30;
         this.chainTargets = null;
@@ -74,7 +76,7 @@ export default class Proj {
     asStun(duration = 30) { this.shouldStun = true; this.stunDuration = duration; return this; }
     asCurse() { this.isCurse = true; return this; }
     asRolling() { this.isRolling = true; this.life = 60; return this; }
-    asArrows() { this.isArrows = true; this.life = 16; return this; }
+    asArrows() { this.isArrows = true; this.life = 36; return this; } // 3 staggered waves
     asIceNova() { this.isIceNova = true; this.life = 5; return this; }
 
     asLog() { this.isLog = true; this.asRolling(); this.life = 110; return this; }
@@ -94,6 +96,13 @@ export default class Proj {
 
     // AoE damage + effects applied when an arcing spell lands.
     burstSpell(g) {
+        if (this.barrelGoblins) {
+            const gob = g.getCard("Goblins");
+            g.ents.push(new Troop(this.tm, this.tx, this.ty, gob));
+            g.ents.push(new Troop(this.tm, this.tx - 12, this.ty + 12, gob));
+            g.ents.push(new Troop(this.tm, this.tx + 12, this.ty + 12, gob));
+            return;
+        }
         for (let e of g.ents) {
             if (e.tm !== this.tm && Math.hypot(this.tx - e.x, this.ty - e.y) < this.rad + e.rad) {
                 e.hp -= this.dmg;
@@ -112,7 +121,8 @@ export default class Proj {
             g.projs.push(new Proj(this.tx, this.ty, this.tx, this.ty, null, 0, true, this.rad, 0, this.tm, false).asArrows());
         } else {
             let f = new Proj(this.tx, this.ty, this.tx, this.ty, null, 0, false, this.rad, 0, this.tm, false);
-            f.fireArea = true; f.life = 8; // brief, harmless explosion flash
+            f.fireArea = true; f.life = 10; // brief, harmless explosion flash
+            f.flashCol = (this.spellKind === "snowball") ? "#cfeeff" : "#ff7a1e";
             g.projs.push(f);
         }
     }

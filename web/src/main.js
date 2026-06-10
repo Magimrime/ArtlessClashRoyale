@@ -908,27 +908,34 @@ class Main {
                     ctx.strokeStyle = "black";
                     ctx.stroke();
                 } else {
-                    // Normal Unit/Building Ghost
+                    // Snapped ghost preview for troops/buildings.
+                    let snap = this.snapToGrid(this.mouse.x, this.mouse.y);
+                    let gx = snap.x, gy = snap.y;
                     let range = c.rn || 0;
-                    let radius = this.eng.getVisualRadius(c); // Use dynamic radius
+                    let radius = this.eng.getVisualRadius(c);
+                    let valid = canAfford && this.eng.isValid(gy, gx, c, 0) && this.mouse.y < H - 130;
+                    let col = this.getUnitColor(c.n);
 
-                    // Draw Range Circle
+                    // Range ring
                     if (range > 0) {
                         ctx.beginPath();
-                        ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
-                        ctx.lineWidth = 2;
-                        ctx.setLineDash([5, 5]);
-                        ctx.arc(this.mouse.x, this.mouse.y, range, 0, Math.PI * 2);
-                        ctx.stroke();
-                        ctx.setLineDash([]);
-                        ctx.lineWidth = 1;
+                        ctx.strokeStyle = "rgba(255,255,255,0.45)";
+                        ctx.lineWidth = 2; ctx.setLineDash([6, 6]);
+                        ctx.arc(gx, gy, range, 0, Math.PI * 2); ctx.stroke();
+                        ctx.setLineDash([]); ctx.lineWidth = 1;
                     }
-
-                    // Draw Ghost Unit Body
-                    ctx.fillStyle = canAfford ? "#3296ff" : "#888"; // Blue if affordable, gray if not
-                    ctx.beginPath();
-                    ctx.arc(this.mouse.x, this.mouse.y, radius, 0, Math.PI * 2);
-                    ctx.fill();
+                    // Ghost body in the unit's colour (grey when can't place)
+                    ctx.globalAlpha = valid ? 0.65 : 0.4;
+                    ctx.fillStyle = valid ? col : "#8a8a8a";
+                    ctx.beginPath(); ctx.arc(gx, gy, radius, 0, Math.PI * 2); ctx.fill();
+                    // Dashed outline
+                    ctx.globalAlpha = 1.0;
+                    ctx.strokeStyle = valid ? "#ffffff" : "#ff6a6a";
+                    ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
+                    ctx.beginPath(); ctx.arc(gx, gy, radius + 2, 0, Math.PI * 2); ctx.stroke();
+                    ctx.setLineDash([]); ctx.lineWidth = 1;
+                    // Name label
+                    this.drawCenteredString(c.n, gx, gy - radius - 7, "bold 11px Arial", "rgba(255,255,255,0.9)");
                 }
                 ctx.globalAlpha = 1.0;
             }
@@ -946,9 +953,13 @@ class Main {
                         ctx.fillStyle = "lightgray";
                         ctx.beginPath(); ctx.arc(p.x, p.y, size / 4, 0, Math.PI * 2); ctx.fill();
                     } else {
-                        ctx.fillStyle = "rgba(255, 69, 0, 0.7)";
+                        // Explosion flash in the spell's colour (fireball orange,
+                        // snowball icy, etc.).
+                        ctx.globalAlpha = 0.75;
+                        ctx.fillStyle = p.flashCol || "#ff4500";
                         ctx.beginPath(); ctx.arc(p.x, p.y, size / 2, 0, Math.PI * 2); ctx.fill();
-                        ctx.fillStyle = "yellow";
+                        ctx.globalAlpha = 1.0;
+                        ctx.fillStyle = p.flashCol === "#cfeeff" ? "#eaf7ff" : "yellow";
                         ctx.beginPath(); ctx.arc(p.x, p.y, size / 4, 0, Math.PI * 2); ctx.fill();
                     }
                 } else if (p.isHeal) {
@@ -987,7 +998,7 @@ class Main {
                     }
                     ctx.fillStyle = "#640096";
                 } else {
-                    ctx.fillStyle = p.spl ? (p.rad < 10 ? "cyan" : "orange") : "lightgray";
+                    ctx.fillStyle = p.flashCol || (p.spl ? (p.rad < 10 ? "cyan" : "orange") : "lightgray");
                 }
 
                 if (!p.fireArea && !p.poison && !p.graveyard) {
@@ -1050,20 +1061,22 @@ class Main {
                     ctx.lineWidth = 1;
                 }
 
-                // Ground shadow for flying / jumping units (a flat ellipse on
-                // the unit's ground position, shrinking near a jump's apex).
-                if (e.fly || (e instanceof Troop && e.jp)) {
-                    let baseR = (e instanceof Troop ? e.rad * 0.86 : e.rad);
-                    let shY = e.y + 8;
-                    let sx = baseR * 0.95, sy = baseR * 0.45;
-                    if (e instanceof Troop && e.jp && e.jt) {
-                        let lift = Math.sin((1.0 - (e.dist(e.jt) / (e.jd || 1))) * Math.PI);
-                        shY = e.y;
-                        let shrink = 1 - 0.35 * lift;
-                        sx *= shrink; sy *= shrink;
+                // Soft ground shadow under units. Ground units cast it at their
+                // feet; fliers float above a smaller one; a jumper's shadow
+                // shrinks toward the apex.
+                if (e instanceof Troop || e instanceof Building) {
+                    let baseR = e.rad * 0.82;
+                    if (e.fly) {
+                        ctx.fillStyle = "rgba(0,0,0,0.15)";
+                        ctx.beginPath(); ctx.ellipse(e.x, e.y + 4, baseR * 0.72, baseR * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+                    } else if (e instanceof Troop && e.jp && e.jt) {
+                        let s = 1 - 0.4 * Math.sin((1.0 - (e.dist(e.jt) / (e.jd || 1))) * Math.PI);
+                        ctx.fillStyle = "rgba(0,0,0,0.18)";
+                        ctx.beginPath(); ctx.ellipse(e.x, e.y + baseR * 0.5, baseR * 0.85 * s, baseR * 0.33 * s, 0, 0, Math.PI * 2); ctx.fill();
+                    } else {
+                        ctx.fillStyle = "rgba(0,0,0,0.20)";
+                        ctx.beginPath(); ctx.ellipse(e.x, e.y + baseR * 0.5, baseR * 0.85, baseR * 0.3, 0, 0, Math.PI * 2); ctx.fill();
                     }
-                    ctx.fillStyle = "rgba(0,0,0,0.22)";
-                    ctx.beginPath(); ctx.ellipse(e.x, shY, sx, sy, 0, 0, Math.PI * 2); ctx.fill();
                 }
             }
 
@@ -1242,9 +1255,9 @@ class Main {
 
         let x = e.x;
         let y = e.y;
-        // Sprite is drawn a little smaller than the hitbox so units keep a small
-        // gap instead of overlapping each other.
-        let radius = (e instanceof Troop) ? e.rad * 0.86 : e.rad;
+        // Sprite is drawn smaller than the collision/hitbox radius so units keep
+        // a gap instead of clipping into each other and the towers.
+        let radius = e.rad * 0.82;
 
         // Flying units float above their ground shadow (drawn in the shadow pass).
         if (e.fly) {
@@ -1317,17 +1330,14 @@ class Main {
         ctx.beginPath();
         if (e instanceof Tower) {
             // ROUNDED TOWER
-            let r = e.rad; // use radius as half-width approx
+            let r = radius;
             this.drawRoundRect(x - r, y - r, r * 2, r * 2, 8, true, true);
-            // Cannon: a turret with a barrel aimed toward the enemy side.
-            let dir = (e.tm === 0) ? -1 : 1; // player towers aim up, enemy down
-            ctx.fillStyle = "#2e3033";
-            ctx.fillRect(x - 4, dir < 0 ? y - r - 11 : y + r - 1, 8, 12); // barrel
+            // Cannon turret (no barrel) sitting on top of the tower.
             ctx.fillStyle = "#4a4e55";
-            ctx.beginPath(); ctx.arc(x, y, r * 0.52, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(x, y, r * 0.5, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = 1.5; ctx.stroke();
             ctx.fillStyle = "#26282c";
-            ctx.beginPath(); ctx.arc(x, y, r * 0.24, 0, Math.PI * 2); ctx.fill(); // muzzle
+            ctx.beginPath(); ctx.arc(x, y, r * 0.22, 0, Math.PI * 2); ctx.fill(); // muzzle
             ctx.lineWidth = 1;
         } else if (e instanceof Building) {
             ctx.rect(x - radius, y - radius, radius * 2, radius * 2);
@@ -1455,11 +1465,7 @@ class Main {
     // A deck-builder card tile: elixir-tinted body, unit-color swatch, name,
     // elixir badge, and a gold ring + check when it's in the deck.
     drawDeckCard(cx, cy, w, h, c, selected) {
-        let base = this.elixirColor(c.c);
-        let g = ctx.createLinearGradient(0, cy, 0, cy + h);
-        g.addColorStop(0, this.shade(base, 0.13));
-        g.addColorStop(1, this.shade(base, -0.16));
-        ctx.fillStyle = g;
+        ctx.fillStyle = this.elixirColor(c.c); // solid colour, no gradient
         this.drawRoundRect(cx, cy, w, h, 10, true, false);
 
         ctx.fillStyle = this.getUnitColor(c.n);
@@ -1598,32 +1604,22 @@ class Main {
         ctx.translate(x, y);
 
         if (p.isLog) {
-            // Rolling log: long axis is horizontal (perpendicular to its vertical
-            // roll). Wood body with grain, end-rings and spikes.
-            let w = p.barbBarrelLog ? 46 : 72;
-            let h = 22;
-            let grad = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
-            grad.addColorStop(0, "#a9763f");
-            grad.addColorStop(0.5, "#7c4a22");
-            grad.addColorStop(1, "#5c3416");
-            ctx.fillStyle = grad;
+            // Simple rolling log: a brown cylinder with bands that scroll along
+            // the roll direction so it reads as rolling.
+            let w = p.barbBarrelLog ? 46 : 70;
+            let h = 20;
+            ctx.fillStyle = "#6b4423";
             this.drawRoundRect(-w / 2, -h / 2, w, h, 9, true, false);
-            ctx.strokeStyle = "rgba(40,22,8,0.45)";
-            ctx.lineWidth = 1;
-            for (let gx = -w / 2 + 10; gx < w / 2 - 6; gx += 9) {
-                ctx.beginPath(); ctx.moveTo(gx, -h / 2 + 3); ctx.lineTo(gx, h / 2 - 3); ctx.stroke();
+            let dir = (p.tm === 0) ? -1 : 1;
+            let phase = ((Date.now() / 24 * dir) % h + h) % h;
+            ctx.fillStyle = "rgba(176,124,68,0.95)";
+            for (let k = -1; k <= 1; k++) {
+                let yy = (((phase + k * (h / 2)) % h) + h) % h - h / 2;
+                ctx.fillRect(-w / 2 + 3, yy - 1.5, w - 6, 3);
             }
-            for (const ex of [-w / 2 + 4, w / 2 - 4]) {
-                ctx.fillStyle = "#c79a63";
-                ctx.beginPath(); ctx.ellipse(ex, 0, 4, h / 2 - 2, 0, 0, Math.PI * 2); ctx.fill();
-                ctx.strokeStyle = "#6b4422";
-                ctx.beginPath(); ctx.ellipse(ex, 0, 2, h / 2 - 5, 0, 0, Math.PI * 2); ctx.stroke();
-            }
-            ctx.fillStyle = "#cfcfcf";
-            for (let i = -w / 2 + 9; i < w / 2 - 4; i += 11) {
-                ctx.beginPath(); ctx.moveTo(i, -h / 2); ctx.lineTo(i + 3, -h / 2 - 5); ctx.lineTo(i + 6, -h / 2); ctx.closePath(); ctx.fill();
-                ctx.beginPath(); ctx.moveTo(i, h / 2); ctx.lineTo(i + 3, h / 2 + 5); ctx.lineTo(i + 6, h / 2); ctx.closePath(); ctx.fill();
-            }
+            ctx.fillStyle = "#caa06a";
+            ctx.beginPath(); ctx.ellipse(-w / 2 + 3, 0, 3, h / 2 - 2, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(w / 2 - 3, 0, 3, h / 2 - 2, 0, 0, Math.PI * 2); ctx.fill();
         } else if (p.isRolling) {
             // Bowler boulder
             ctx.fillStyle = "#5a4a6a";
@@ -1674,11 +1670,22 @@ class Main {
         ctx.translate(p.x, p.y - h);
         const k = p.spellKind;
         if (k === "arrows") {
-            ctx.rotate(0.5);
-            ctx.strokeStyle = "#6b4423"; ctx.lineWidth = 2;
-            for (let i = -4; i <= 4; i += 4) { ctx.beginPath(); ctx.moveTo(i, -8); ctx.lineTo(i, 8); ctx.stroke(); }
-            ctx.fillStyle = "#d9d9d9";
-            for (let i = -4; i <= 4; i += 4) { ctx.beginPath(); ctx.moveTo(i, 11); ctx.lineTo(i - 2, 7); ctx.lineTo(i + 2, 7); ctx.closePath(); ctx.fill(); }
+            // a fan of arrows spreading outward as they fly toward the target
+            for (let i = -2; i <= 2; i++) {
+                ctx.save();
+                ctx.rotate(i * 0.17);
+                ctx.strokeStyle = "#6b4423"; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(0, 6); ctx.stroke();
+                ctx.fillStyle = "#d9d9d9";
+                ctx.beginPath(); ctx.moveTo(0, 9); ctx.lineTo(-2, 5); ctx.lineTo(2, 5); ctx.closePath(); ctx.fill();
+                ctx.restore();
+            }
+        } else if (k === "barrel") {
+            ctx.fillStyle = "#7c4a22";
+            this.drawRoundRect(-9, -11, 18, 22, 5, true, false);
+            ctx.strokeStyle = "#4f3016"; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(-9, -3); ctx.lineTo(9, -3); ctx.moveTo(-9, 4); ctx.lineTo(9, 4); ctx.stroke();
+            ctx.lineWidth = 1;
         } else if (k === "snowball") {
             ctx.fillStyle = "#dff1ff"; ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = "#9cc6e8"; ctx.lineWidth = 1.5; ctx.stroke();
@@ -1696,51 +1703,32 @@ class Main {
     }
 
     drawArrowsVolley(p) {
-        const n = 14;
-        // Arrows fall from above and land right as the spell deals damage
-        // (Proj deals damage at life === 5; asArrows starts life at 16).
-        const fall = Math.max(0, (p.life - 5)) / 11 * 75;
-        const landed = p.life <= 5;
-        const alpha = landed ? Math.max(0, p.life / 5) : 1; // fade out after landing
-        ctx.globalAlpha = alpha;
-
-        for (let i = 0; i < n; i++) {
-            // Deterministic spread across the impact circle (golden-angle spiral).
-            const ang = i * 2.399963;
-            const rr = Math.sqrt((i + 0.5) / n) * p.rad;
-            const ax = p.x + Math.cos(ang) * rr;
-            const ay = p.y + Math.sin(ang) * rr;
-
-            ctx.save();
-            ctx.translate(ax, ay - fall);
-            ctx.rotate(0.35); // descending at a slight angle
-
-            // Shaft
-            ctx.strokeStyle = "#6b4423";
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(0, -9);
-            ctx.lineTo(0, 7);
-            ctx.stroke();
-
-            // Arrowhead (points down toward the ground)
-            ctx.fillStyle = "#d9d9d9";
-            ctx.beginPath();
-            ctx.moveTo(0, 12);
-            ctx.lineTo(-3, 6);
-            ctx.lineTo(3, 6);
-            ctx.closePath();
-            ctx.fill();
-
-            // Fletching
-            ctx.strokeStyle = "#eaeaea";
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.moveTo(0, -9); ctx.lineTo(-3, -12);
-            ctx.moveTo(0, -9); ctx.lineTo(3, -12);
-            ctx.stroke();
-
-            ctx.restore();
+        // Three staggered waves of arrows that spread out horizontally, fall in
+        // tilted, and straighten as they land (asArrows starts life at 36).
+        const maxLife = 36;
+        const t = Math.max(0, Math.min(1.3, 1 - p.life / maxLife));
+        const waves = 3, perWave = 6;
+        for (let wv = 0; wv < waves; wv++) {
+            let wt = (t - wv * 0.16) / 0.6;          // each wave staggered, lasts ~0.6
+            if (wt < 0 || wt > 1.25) continue;
+            let fall = Math.max(0, 1 - wt) * 80;     // drop from above
+            ctx.globalAlpha = wt > 1 ? Math.max(0, 1.25 - wt) : 1;
+            for (let i = 0; i < perWave; i++) {
+                let spread = (i / (perWave - 1) - 0.5);            // -0.5..0.5
+                let ax = p.x + spread * p.rad * 1.7;
+                let ay = p.y + (wv - 1) * 10;
+                let tilt = (1 - Math.min(1, wt)) * spread * 1.3;   // tilted, then straight on landing
+                ctx.save();
+                ctx.translate(ax, ay - fall);
+                ctx.rotate(tilt);
+                ctx.strokeStyle = "#6b4423"; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(0, 8); ctx.stroke();
+                ctx.fillStyle = "#d9d9d9";
+                ctx.beginPath(); ctx.moveTo(0, 11); ctx.lineTo(-3, 6); ctx.lineTo(3, 6); ctx.closePath(); ctx.fill();
+                ctx.strokeStyle = "#eaeaea"; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(-3, -11); ctx.moveTo(0, -8); ctx.lineTo(3, -11); ctx.stroke();
+                ctx.restore();
+            }
         }
         ctx.globalAlpha = 1;
         ctx.lineWidth = 1;

@@ -486,8 +486,10 @@ export default class GameEngine {
     }
 
     getHitboxRadius(e) {
-        if (e instanceof Tower) return e.rad / 1.5;
-        if (e instanceof Building) return e.rad / 1.5;
+        // Collision/hitbox radius is intentionally a bit larger than the drawn
+        // sprite (sprites are rendered at ~0.82x) so units don't visually clip.
+        if (e instanceof Tower) return e.rad * 0.95;
+        if (e instanceof Building) return e.rad * 0.9;
         if (e instanceof Troop) return e.rad;
         return e.rad / 2.0;
     }
@@ -606,7 +608,12 @@ export default class GameEngine {
 
     addU(tm, c, x, y) {
         if (c.n === "Goblin Barrel") {
-            this.projs.push(new Proj(tm === 0 ? this.W / 2 : this.W / 2, tm === 0 ? this.H : 0, x, y, null, 15, false, 10, 0, tm, true));
+            // Thrown from the king tower, arcs up and back down, then pops 3 goblins.
+            let kt = (tm === 0) ? this.t1K : this.t2K;
+            let p = new Proj(kt.x, kt.y, x, y, null, 7, false, 20, 0, tm, false);
+            p.asSpellArc(120, "barrel");
+            p.barrelGoblins = true;
+            this.projs.push(p);
         } else if (c.n === "Royale Delivery") {
             let shape = this.getSpellRadius(c);
             let rad = shape && shape.type === 'circle' ? shape.val : 60;
@@ -683,9 +690,9 @@ export default class GameEngine {
             } else {
                 // Placed area spells (Zap, Freeze, Vines) drop directly on target.
                 let p = new Proj(x, y, x, y, null, 0, true, rad, dmg, tm, false);
-                if (c.n === "Zap") p.asStun();
-                if (c.n === "Vines") p.isRoot = true;
-                if (c.n === "Freeze") p.isFreeze = true;
+                if (c.n === "Zap") { p.asStun(); p.flashCol = "#5ec8ff"; }
+                if (c.n === "Vines") { p.isRoot = true; p.flashCol = "#7ad06a"; }
+                if (c.n === "Freeze") { p.isFreeze = true; p.flashCol = "#bfe8ff"; }
                 this.projs.push(p);
             }
         } else if (["Archers", "Spear Goblins", "Wall Breakers"].includes(c.n)) {
@@ -1046,7 +1053,7 @@ export default class GameEngine {
                 e.x = Math.max(visualR, Math.min(this.W - visualR, e.x));
                 e.y = Math.max(visualR, Math.min(this.H - 140 - visualR, e.y));
                 if (e.y + visualR > this.RIV_Y - 15 && e.y - visualR < this.RIV_Y + 15 && !e.fly) {
-                    if (!((e.x >= this.W / 4 - 25 && e.x <= this.W / 4 + 25) || (e.x >= this.W * 3 / 4 - 25 && e.x <= this.W * 3 / 4 + 25))) {
+                    if (!((e.x >= this.W / 4 - 30 && e.x <= this.W / 4 + 30) || (e.x >= this.W * 3 / 4 - 30 && e.x <= this.W * 3 / 4 + 30))) {
                         e.y = e.y < this.RIV_Y ? this.RIV_Y - 15 - visualR : this.RIV_Y + 15 + visualR;
                     }
                 }

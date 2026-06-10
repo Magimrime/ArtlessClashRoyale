@@ -518,11 +518,23 @@ export default class Troop extends Entity {
             }
 
             if (this.isStuck) {
-                dx = this.stuckDir;
-                dy = 0;
-                if (this.stuckTimer > 80) {
-                    this.stuckDir *= -1;
-                    this.stuckTimer = 41;
+                // On the bridge, never sidestep (that pushes units off into the
+                // river and gets them stuck) — steer to the bridge centre and
+                // keep pressing forward so the queue files across.
+                if (Math.abs(this.y - RIV_Y) < 50) {
+                    let bridgeX = (this.x < W / 2) ? W / 4 : W * 3 / 4;
+                    let fwd = (this.tm === 0 ? -1 : 1);
+                    dx = (bridgeX - this.x) * 0.15;
+                    dy = fwd;
+                    let m = Math.hypot(dx, dy) || 1;
+                    dx /= m; dy /= m;
+                } else {
+                    dx = this.stuckDir;
+                    dy = 0;
+                    if (this.stuckTimer > 80) {
+                        this.stuckDir *= -1;
+                        this.stuckTimer = 41;
+                    }
                 }
             } else {
                 if (dist > 0) {
