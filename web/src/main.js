@@ -117,18 +117,16 @@ class Main {
         this.makeGameBtn = { x: W / 2 - 100, y: H / 2 - 50, w: 200, h: 60 };
         this.joinGameBtn = { x: W / 2 - 100, y: H / 2 + 30, w: 200, h: 60 };
 
-        this.visitorCount = "...";
+        this.visitorCount = null;
 
-        // Fetch Visitor Count
+        // Fetch Visitor Count (silently ignored if it fails)
         fetch('https://api.counterapi.dev/v1/clash-royale-clone-gemini/visits/up')
             .then(res => res.json())
             .then(data => {
-                this.visitorCount = data.count;
+                let n = Number(data && data.count);
+                if (Number.isFinite(n)) this.visitorCount = n;
             })
-            .catch(err => {
-                console.error("Counter Error:", err);
-                this.visitorCount = "Err";
-            });
+            .catch(() => { });
 
         let cardPanelY = H - 100;
         let cardAreaW = W - 60;
@@ -599,7 +597,7 @@ class Main {
 
         if (this.state === State.RESUME_PROMPT) {
             this.menuBg();
-            this.drawCenteredString("Resume previous game?", W / 2, H / 2 - 75, "bold 30px Arial", "#004000");
+            this.drawCenteredString("Resume previous game?", W / 2, H / 2 - 75, "bold 30px 'Baloo 2', 'Segoe UI', sans-serif", "#004000");
             this.drawBtn(this.resumeYesBtn, "YES", "#32CD32");
             this.drawBtn(this.resumeNoBtn, "NO", "#FF6347");
             return;
@@ -608,45 +606,52 @@ class Main {
         if (this.state === State.TITLE) {
             this.menuBg();
 
-            // Draw Visitor Count
-            ctx.fillStyle = "#006400";
-            ctx.font = "bold 12px Arial";
-            ctx.textAlign = "left";
-            ctx.fillText(`${this.visitorCount}`, 10, 20);
-
+            // Visitor count (only when we actually have a number)
+            if (typeof this.visitorCount === "number") {
+                ctx.fillStyle = "rgba(255,255,255,0.5)";
+                ctx.font = "600 12px 'Baloo 2', 'Segoe UI', sans-serif";
+                ctx.textAlign = "left";
+                ctx.fillText(`${this.visitorCount} plays`, 12, 22);
+            }
             ctx.textAlign = "center";
 
-            this.drawCenteredString("Clash Clone", W / 2, H / 2 - 50 - 150, "bold 40px Arial", "#006400");
+            // Title — white fill with a green outline and soft shadow for contrast.
+            const titleY = H / 2 - 200;
+            ctx.font = "800 48px 'Baloo 2', 'Segoe UI', sans-serif";
+            ctx.fillStyle = "rgba(0,0,0,0.25)";
+            ctx.fillText("Clash Clone", W / 2 + 2, titleY + 3);
+            ctx.lineWidth = 5; ctx.strokeStyle = "#1c6440";
+            ctx.strokeText("Clash Clone", W / 2, titleY);
+            ctx.fillStyle = "#ffffff";
+            ctx.fillText("Clash Clone", W / 2, titleY);
+            ctx.lineWidth = 1;
 
             let validDeck = this.eng.myDeck.length === 8;
-            this.drawBtn(this.playBtn, "PLAY", validDeck ? "#32CD32" : "gray");
+            this.drawBtn(this.playBtn, "PLAY", validDeck ? "#39c44e" : "#7f8b84");
             if (!validDeck) {
-                this.drawCenteredString("Build a deck of 8 cards!", W / 2, this.playBtn.y - 10, "12px Arial", "red");
+                this.drawCenteredString("Build a deck of 8 cards!", W / 2, this.playBtn.y - 12, "700 13px 'Baloo 2', 'Segoe UI', sans-serif", "#ffe08a");
             }
             this.drawBtn(this.deckBtn, "DECK", "#FFA500");
             this.drawBtn(this.mpBtn, "MULTIPLAYER", "#3296ff");
 
-            this.drawCenteredString(`Cards Unlocked: ${this.eng.unlockedCards.length}/${this.eng.allCards.length}`, W / 2, H - 150 - 120, "italic 14px Arial", "#2E8B57");
-            this.drawCenteredString(`Wins: ${this.eng.gamesWon} | Matches: ${this.eng.gamesPlayed}`, W / 2, H - 130 - 120, "italic 14px Arial", "#2E8B57");
+            this.drawCenteredString(`Cards Unlocked: ${this.eng.unlockedCards.length} / ${this.eng.allCards.length}`, W / 2, H - 270, "600 15px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.82)");
+            this.drawCenteredString(`Wins ${this.eng.gamesWon}   ·   Matches ${this.eng.gamesPlayed}`, W / 2, H - 246, "600 15px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.82)");
 
-            if (!this.eng.cheatPressed) {
-                ctx.fillStyle = "rgba(0,100,0,0.5)";
-                ctx.font = "10px Arial";
-                ctx.fillText("cheat", W - 43, 16);
-            } else if (this.eng.cheated) {
-                ctx.fillStyle = "rgba(0,100,0,0.5)";
-                ctx.font = "10px Arial";
-                ctx.fillText("debug", W - 49, 16);
-            }
+            ctx.textAlign = "right";
+            ctx.fillStyle = "rgba(255,255,255,0.4)";
+            ctx.font = "600 11px 'Baloo 2', 'Segoe UI', sans-serif";
+            if (!this.eng.cheatPressed) ctx.fillText("cheat", W - 10, 18);
+            else if (this.eng.cheated) ctx.fillText("debug", W - 10, 18);
+            ctx.textAlign = "center";
 
-            this.drawCenteredString("by Oliver Zhou", W / 2, H - 20, "10px Arial", "rgba(0, 100, 0, 0.5)");
+            this.drawCenteredString("by Oliver Zhou", W / 2, H - 22, "600 11px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.45)");
             return;
         }
 
         if (this.state === State.MP_MENU) {
             this.menuBg();
 
-            this.drawCenteredString("MULTIPLAYER", W / 2, 100, "bold 40px Arial", "white");
+            this.drawCenteredString("MULTIPLAYER", W / 2, 100, "bold 40px 'Baloo 2', 'Segoe UI', sans-serif", "white");
 
             this.drawBtn(this.makeGameBtn, "MAKE GAME", "#3296ff");
             this.drawBtn(this.joinGameBtn, "JOIN GAME", "#FFA500");
@@ -654,12 +659,12 @@ class Main {
             this.drawBtn(this.backBtn, "BACK", "#FF6347");
             // Red warning note
             ctx.fillStyle = "red";
-            ctx.font = "bold 14px Arial";
+            ctx.font = "bold 14px 'Baloo 2', 'Segoe UI', sans-serif";
             ctx.textAlign = "center";
             ctx.fillText("NOTE: DEBUG FEATURES DISABLED IN MULTIPLAYER", W / 2, H - 20);
             if (this.mp.backendAvailable === false) {
                 ctx.fillStyle = "#ffcc00";
-                ctx.font = "12px Arial";
+                ctx.font = "12px 'Baloo 2', 'Segoe UI', sans-serif";
                 ctx.fillText("No game server reachable for this site.", W / 2, H - 50);
                 ctx.fillText("See README to host one (set MP_API_BASE).", W / 2, H - 36);
             }
@@ -669,12 +674,12 @@ class Main {
         if (this.state === State.MP_HOST) {
             this.menuBg();
 
-            this.drawCenteredString("Waiting for opponent...", W / 2, H / 2 - 100, "24px Arial", "white");
+            this.drawCenteredString("Waiting for opponent...", W / 2, H / 2 - 100, "24px 'Baloo 2', 'Segoe UI', sans-serif", "white");
 
             if (this.mp.code) {
-                this.drawCenteredString(`CODE: ${this.mp.code}`, W / 2, H / 2, "bold 60px Arial", "white");
+                this.drawCenteredString(`CODE: ${this.mp.code}`, W / 2, H / 2, "bold 60px 'Baloo 2', 'Segoe UI', sans-serif", "white");
             } else {
-                this.drawCenteredString(`Generating Code...`, W / 2, H / 2, "italic 20px Arial", "#eee");
+                this.drawCenteredString(`Generating Code...`, W / 2, H / 2, "italic 20px 'Baloo 2', 'Segoe UI', sans-serif", "#eee");
             }
 
             this.drawBtn(this.backBtn, "CANCEL", "#FF6347");
@@ -684,7 +689,7 @@ class Main {
         if (this.state === State.MP_JOIN) {
             this.menuBg();
 
-            this.drawCenteredString("ENTER CODE:", W / 2, H / 2 - 100, "bold 30px Arial", "white");
+            this.drawCenteredString("ENTER CODE:", W / 2, H / 2 - 100, "bold 30px 'Baloo 2', 'Segoe UI', sans-serif", "white");
 
             // Draw Code Digits
             let codeStr = this.enteredCode;
@@ -693,7 +698,7 @@ class Main {
             ctx.textAlign = "center";
             ctx.fillText(codeStr.padEnd(5, '_').split('').join(' '), W / 2, H / 2);
 
-            this.drawCenteredString("Type digits on keyboard. Press Enter to Join.", W / 2, H / 2 + 60, "14px Arial", "#eee");
+            this.drawCenteredString("Type digits on keyboard. Press Enter to Join.", W / 2, H / 2 + 60, "14px 'Baloo 2', 'Segoe UI', sans-serif", "#eee");
 
             this.drawBtn(this.backBtn, "BACK", "#FF6347");
             return;
@@ -702,14 +707,14 @@ class Main {
         if (this.state === State.CHEAT) {
             ctx.fillStyle = "rgba(0,0,0,0.8)";
             ctx.fillRect(0, 0, W, H);
-            this.drawCenteredString("Unlock all cards?", W / 2, H / 2 - 50, "bold 30px Arial", "white");
+            this.drawCenteredString("Unlock all cards?", W / 2, H / 2 - 50, "bold 30px 'Baloo 2', 'Segoe UI', sans-serif", "white");
             this.drawBtn(this.yesBtn, "YES", "green");
             this.drawBtn(this.noBtn, "NO", "red");
             return;
         }
 
         if (this.state === State.DECK) {
-            this.paintBg("#243a2b", "#13201a");
+            this.paintBg("#23362a");
             let cols = 3;
             let margin = 20;
             let cardW = (W - (cols + 1) * margin) / cols;
@@ -733,11 +738,11 @@ class Main {
             ctx.beginPath(); ctx.moveTo(0, 92); ctx.lineTo(W, 92); ctx.stroke();
 
             let valid = this.eng.myDeck.length === 8;
-            this.drawCenteredString("Build Your Deck", W / 2, 38, "bold 26px Arial", "#eaffea");
-            this.drawCenteredString(`${this.eng.myDeck.length} / 8`, W / 2 - 70, 70, "bold 16px Arial", valid ? "#7CFC6A" : "#ffd24d");
+            this.drawCenteredString("Build Your Deck", W / 2, 38, "bold 26px 'Baloo 2', 'Segoe UI', sans-serif", "#eaffea");
+            this.drawCenteredString(`${this.eng.myDeck.length} / 8`, W / 2 - 70, 70, "bold 16px 'Baloo 2', 'Segoe UI', sans-serif", valid ? "#7CFC6A" : "#ffd24d");
             let sum = this.eng.myDeck.reduce((a, b) => a + b.c, 0);
             let avg = this.eng.myDeck.length ? (sum / this.eng.myDeck.length).toFixed(1) : "0.0";
-            this.drawCenteredString(`Avg Elixir ${avg}`, W / 2 + 60, 70, "bold 15px Arial", "#e08cff");
+            this.drawCenteredString(`Avg Elixir ${avg}`, W / 2 + 60, 70, "bold 15px 'Baloo 2', 'Segoe UI', sans-serif", "#e08cff");
 
             this.drawBtn(this.backBtn, "BACK", "#FF6347");
             return;
@@ -775,13 +780,13 @@ class Main {
                 ctx.fillRect(cx, cy, cardW, cardH);
                 ctx.strokeStyle = "black";
                 ctx.strokeRect(cx, cy, cardW, cardH);
-                this.drawCenteredString(c.n, cx + cardW / 2, cy + cardH / 2, "bold 11px Arial", "white");
+                this.drawCenteredString(c.n, cx + cardW / 2, cy + cardH / 2, "bold 11px 'Baloo 2', 'Segoe UI', sans-serif", "white");
                 this.drawElixirCost(cx - 5, cy - 5, c.c);
             }
 
             ctx.fillStyle = "#282828";
             ctx.fillRect(0, 0, W, 90);
-            this.drawCenteredString(`Enemy Deck (${this.eng.enemyDeckSelection.length}/8)`, W / 2, 50, "bold 30px Arial", "white");
+            this.drawCenteredString(`Enemy Deck (${this.eng.enemyDeckSelection.length}/8)`, W / 2, 50, "bold 30px 'Baloo 2', 'Segoe UI', sans-serif", "white");
             this.drawBtn(this.backBtn, "BACK", "red");
             return;
         }
@@ -790,8 +795,8 @@ class Main {
             // (Unchanged new card render)
             ctx.fillStyle = "#e0f0e0";
             ctx.fillRect(0, 0, W, H);
-            this.drawCenteredString("NEW CARD", W / 2, 150, "bold 30px Arial", "#006400");
-            this.drawCenteredString("UNLOCKED!", W / 2, 190, "bold 30px Arial", "#006400");
+            this.drawCenteredString("NEW CARD", W / 2, 150, "bold 30px 'Baloo 2', 'Segoe UI', sans-serif", "#006400");
+            this.drawCenteredString("UNLOCKED!", W / 2, 190, "bold 30px 'Baloo 2', 'Segoe UI', sans-serif", "#006400");
 
             if (this.justUnlocked) {
                 let cardW = 140, cardH = 180;
@@ -801,21 +806,17 @@ class Main {
                 ctx.fillStyle = "white";
                 this.drawRoundRect(cx, cy, cardW, cardH, 15, true, true);
 
-                this.drawCenteredString(this.justUnlocked.n, cx + cardW / 2, cy + cardH / 2, "bold 18px Arial", "black");
+                this.drawCenteredString(this.justUnlocked.n, cx + cardW / 2, cy + cardH / 2, "bold 18px 'Baloo 2', 'Segoe UI', sans-serif", "black");
                 this.drawElixirCost(cx - 10, cy - 10, this.justUnlocked.c);
             }
             this.drawBtn(this.continueBtn, "CONTINUE", "#32CD32");
             return;
         }
 
-        // River with muddy banks and a water gradient
+        // River with muddy banks (solid water, no gradient)
         ctx.fillStyle = "#6b4a2a";
         ctx.fillRect(0, RIV_Y - 18, W, 36);
-        const riv = ctx.createLinearGradient(0, RIV_Y - 14, 0, RIV_Y + 14);
-        riv.addColorStop(0, "#46a7e6");
-        riv.addColorStop(0.5, "#2f7fc0");
-        riv.addColorStop(1, "#46a7e6");
-        ctx.fillStyle = riv;
+        ctx.fillStyle = "#3a8fd0";
         ctx.fillRect(0, RIV_Y - 14, W, 28);
         // Wooden bridges with planks
         for (const bx of [W / 4, W * 3 / 4]) {
@@ -935,7 +936,7 @@ class Main {
                     ctx.beginPath(); ctx.arc(gx, gy, radius + 2, 0, Math.PI * 2); ctx.stroke();
                     ctx.setLineDash([]); ctx.lineWidth = 1;
                     // Name label
-                    this.drawCenteredString(c.n, gx, gy - radius - 7, "bold 11px Arial", "rgba(255,255,255,0.9)");
+                    this.drawCenteredString(c.n, gx, gy - radius - 7, "bold 11px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.9)");
                 }
                 ctx.globalAlpha = 1.0;
             }
@@ -1067,8 +1068,9 @@ class Main {
                 if (e instanceof Troop || e instanceof Building) {
                     let baseR = e.rad * 0.82;
                     if (e.fly) {
-                        ctx.fillStyle = "rgba(0,0,0,0.15)";
-                        ctx.beginPath(); ctx.ellipse(e.x, e.y + 4, baseR * 0.72, baseR * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+                        // Larger, rounder shadow for airborne units.
+                        ctx.fillStyle = "rgba(0,0,0,0.18)";
+                        ctx.beginPath(); ctx.ellipse(e.x, e.y + 4, baseR * 1.05, baseR * 0.62, 0, 0, Math.PI * 2); ctx.fill();
                     } else if (e instanceof Troop && e.jp && e.jt) {
                         let s = 1 - 0.4 * Math.sin((1.0 - (e.dist(e.jt) / (e.jd || 1))) * Math.PI);
                         ctx.fillStyle = "rgba(0,0,0,0.18)";
@@ -1139,16 +1141,13 @@ class Main {
                 ctx.fillStyle = "rgba(18,26,22,0.82)";
                 this.drawRoundRect(-12, H - 138, W + 24, 150, 16, true, false);
 
-                // Elixir bar (rounded, gradient, pip ticks)
+                // Elixir bar (rounded, solid, pip ticks)
                 const ebX = 10, ebY = H - 130, ebW = W - 20, ebH = 22;
                 ctx.fillStyle = "#2a1430";
                 this.drawRoundRect(ebX, ebY, ebW, ebH, 11, true, false);
                 let elxPct = Math.max(0, Math.min(1, this.eng.p1.elx / 10.0));
                 if (elxPct > 0.001) {
-                    const eg = ctx.createLinearGradient(ebX, 0, ebX + ebW, 0);
-                    eg.addColorStop(0, "#ff5ad6");
-                    eg.addColorStop(1, "#b400b4");
-                    ctx.fillStyle = eg;
+                    ctx.fillStyle = "#d426c8";
                     this.drawRoundRect(ebX, ebY, ebW * elxPct, ebH, 11, true, false);
                 }
                 ctx.strokeStyle = "rgba(0,0,0,0.35)";
@@ -1157,12 +1156,12 @@ class Main {
                     let px = ebX + i * (ebW / 10);
                     ctx.beginPath(); ctx.moveTo(px, ebY + 3); ctx.lineTo(px, ebY + ebH - 3); ctx.stroke();
                 }
-                this.drawCenteredString(`${Math.floor(this.eng.p1.elx)}`, W / 2, ebY + ebH - 6, "bold 15px Arial", "white");
+                this.drawCenteredString(`${Math.floor(this.eng.p1.elx)}`, W / 2, ebY + ebH - 6, "bold 15px 'Baloo 2', 'Segoe UI', sans-serif", "white");
 
                 // Debug Opponent Elixir
                 if (this.eng.debugEnemyElixir) {
                     ctx.fillStyle = "red";
-                    ctx.font = "bold 20px Arial";
+                    ctx.font = "bold 20px 'Baloo 2', 'Segoe UI', sans-serif";
                     ctx.textAlign = "right";
                     ctx.fillText(`OPP: ${Math.floor(this.eng.p2.elx)}`, W - 10, 60);
                 }
@@ -1187,7 +1186,7 @@ class Main {
 
                         this.drawRoundRect(r.x, paintY, r.w, r.h, 5, true, true);
                         // Image/Text
-                        this.drawCenteredString(c.n, r.x + r.w / 2, paintY + r.h / 2, "bold 10px Arial", "black");
+                        this.drawCenteredString(c.n, r.x + r.w / 2, paintY + r.h / 2, "bold 10px 'Baloo 2', 'Segoe UI', sans-serif", "black");
                         // MOVED ELIXIR COST INWARD
                         this.drawElixirCost(r.x + 15, paintY + 15, c.c);
                     }
@@ -1199,8 +1198,8 @@ class Main {
                     let nr = this.nextCardRect;
                     ctx.fillStyle = "#ccc";
                     this.drawRoundRect(nr.x, nr.y, nr.w, nr.h, 5, true, true);
-                    this.drawCenteredString("Next:", nr.x + nr.w / 2, nr.y + 15, "10px Arial", "black");
-                    this.drawCenteredString(nextC.n, nr.x + nr.w / 2, nr.y + nr.h / 2, "bold 9px Arial", "black");
+                    this.drawCenteredString("Next:", nr.x + nr.w / 2, nr.y + 15, "10px 'Baloo 2', 'Segoe UI', sans-serif", "black");
+                    this.drawCenteredString(nextC.n, nr.x + nr.w / 2, nr.y + nr.h / 2, "bold 9px 'Baloo 2', 'Segoe UI', sans-serif", "black");
                     // MOVED ELIXIR COST INWARD
                 }
 
@@ -1212,19 +1211,19 @@ class Main {
                     if (count > 0) {
                         ctx.fillStyle = "rgba(0,0,0,0.5)";
                         ctx.fillRect(0, 0, W, H);
-                        this.drawCenteredString(count.toString(), W / 2, H / 2, "bold 100px Arial", "white");
+                        this.drawCenteredString(count.toString(), W / 2, H / 2, "bold 100px 'Baloo 2', 'Segoe UI', sans-serif", "white");
                     }
                 } else {
                     let time = (Date.now() - this.eng.gameStart) / 1000;
                     let remaining = 180 - time;
                     if (remaining < 0) remaining = 0; // Overtime handled by state
                     if (this.eng.tiebreaker) {
-                        this.drawCenteredString("TIEBREAKER!", W / 2, H / 2, "bold 40px Arial", "red");
+                        this.drawCenteredString("TIEBREAKER!", W / 2, H / 2, "bold 40px 'Baloo 2', 'Segoe UI', sans-serif", "red");
                     }
 
                     if (this.eng.doubleElixirAnim > 0) {
                         ctx.globalAlpha = this.eng.doubleElixirAnim / 100;
-                        this.drawCenteredString("2x ELIXIR", W / 2, H / 2, "bold 50px Arial", "magenta");
+                        this.drawCenteredString("2x ELIXIR", W / 2, H / 2, "bold 50px 'Baloo 2', 'Segoe UI', sans-serif", "magenta");
                         ctx.globalAlpha = 1.0;
                     }
 
@@ -1233,7 +1232,7 @@ class Main {
                     let timeStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
                     ctx.fillStyle = (remaining <= 10 && remaining % 1 > 0.5) ? "red" : "black"; // Blink effect
                     if (this.eng.tiebreaker) ctx.fillStyle = "red";
-                    ctx.font = "bold 20px Arial";
+                    ctx.font = "bold 20px 'Baloo 2', 'Segoe UI', sans-serif";
                     ctx.fillText(timeStr, W - 40, 30);
                 }
             }
@@ -1246,7 +1245,7 @@ class Main {
             ctx.fillRect(0, 0, W, H);
             let msg = this.eng.win === 0 ? "You Win!" : "You Lose!";
             let color = this.eng.win === 0 ? "#32CD32" : "#FF6347";
-            this.drawCenteredString(msg, W / 2, H / 2 - 50, "bold 50px Arial", color);
+            this.drawCenteredString(msg, W / 2, H / 2 - 50, "bold 50px 'Baloo 2', 'Segoe UI', sans-serif", color);
             this.drawBtn(this.exitBtn, "EXIT", "#FFA500");
         }
     } // End render()
@@ -1376,7 +1375,7 @@ class Main {
         if (name && name.length > 0) {
             let fontSize = Math.max(9, Math.min(13, 8 + radius * 0.4));
             ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-            ctx.font = `${fontSize}px Arial`;
+            ctx.font = `${fontSize}px 'Baloo 2', 'Segoe UI', sans-serif`;
             ctx.textAlign = "center";
             ctx.shadowColor = "black";
             ctx.shadowBlur = 2;
@@ -1421,30 +1420,19 @@ class Main {
         return `rgb(${r},${g},${b})`;
     }
 
-    paintBg(c1, c2) {
-        const g = ctx.createLinearGradient(0, 0, 0, H);
-        g.addColorStop(0, c1);
-        g.addColorStop(1, c2);
-        ctx.fillStyle = g;
+    paintBg(color) {
+        ctx.fillStyle = color;
         ctx.fillRect(0, 0, W, H);
     }
 
-    // Rich green gradient + soft vignette for menus.
+    // Flat solid green for menus (no gradient).
     menuBg() {
-        this.paintBg("#3a9d63", "#155f39");
-        const r = ctx.createRadialGradient(W / 2, H * 0.33, 60, W / 2, H * 0.45, H * 0.75);
-        r.addColorStop(0, "rgba(255,255,255,0.08)");
-        r.addColorStop(1, "rgba(0,0,0,0.28)");
-        ctx.fillStyle = r;
-        ctx.fillRect(0, 0, W, H);
+        this.paintBg("#3a9d5e");
     }
 
-    // Mowed-grass arena background.
+    // Flat grass arena (no gradient); faintly darken the enemy half for orientation.
     arenaGrass() {
-        this.paintBg("#69bf64", "#54a554");
-        ctx.fillStyle = "rgba(0,0,0,0.045)";
-        for (let gy = 0; gy < H; gy += 64) ctx.fillRect(0, gy, W, 32);
-        // faintly darken the enemy (top) half for orientation
+        this.paintBg("#5cb356");
         ctx.fillStyle = "rgba(0,0,0,0.05)";
         ctx.fillRect(0, 0, W, RIV_Y - 15);
     }
@@ -1471,7 +1459,7 @@ class Main {
         ctx.fillStyle = this.getUnitColor(c.n);
         this.drawRoundRect(cx + 5, cy + 5, w - 10, 13, 5, true, false);
 
-        this.drawCenteredString(c.n, cx + w / 2, cy + h / 2 + 13, "bold 11px Arial", "white");
+        this.drawCenteredString(c.n, cx + w / 2, cy + h / 2 + 13, "bold 11px 'Baloo 2', 'Segoe UI', sans-serif", "white");
         this.drawElixirCost(cx + 12, cy + 13, c.c);
 
         if (selected) {
@@ -1524,28 +1512,28 @@ class Main {
             drawRect.h = h;
         }
 
-        // Drop shadow + vertical gradient body
+        // Solid body with a soft drop shadow (no gradient, no gloss).
         ctx.save();
-        ctx.shadowColor = "rgba(0,0,0,0.35)";
-        ctx.shadowBlur = 8;
+        ctx.shadowColor = "rgba(0,0,0,0.3)";
+        ctx.shadowBlur = 7;
         ctx.shadowOffsetY = 3;
-        const g = ctx.createLinearGradient(0, drawRect.y, 0, drawRect.y + drawRect.h);
-        g.addColorStop(0, this.shade(color, 0.16));
-        g.addColorStop(1, this.shade(color, -0.12));
-        ctx.fillStyle = g;
+        ctx.fillStyle = color;
         this.drawRoundRect(drawRect.x, drawRect.y, drawRect.w, drawRect.h, 12, true, false);
         ctx.restore();
 
-        // Glossy top highlight
-        ctx.fillStyle = "rgba(255,255,255,0.16)";
-        this.drawRoundRect(drawRect.x + 3, drawRect.y + 3, drawRect.w - 6, drawRect.h * 0.42, 8, true, false);
+        // Thin darker outline for definition
+        ctx.strokeStyle = this.shade(color, -0.22);
+        ctx.lineWidth = 2;
+        this.drawRoundRect(drawRect.x, drawRect.y, drawRect.w, drawRect.h, 12, false, false);
+        ctx.stroke();
+        ctx.lineWidth = 1;
 
         // Label
         ctx.fillStyle = "white";
-        ctx.font = "bold 16px Arial";
+        ctx.font = "bold 17px 'Baloo 2', 'Segoe UI', sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.shadowColor = "rgba(0,0,0,0.45)";
+        ctx.shadowColor = "rgba(0,0,0,0.4)";
         ctx.shadowBlur = 2;
         ctx.fillText(txt, drawRect.x + drawRect.w / 2, drawRect.y + drawRect.h / 2);
         ctx.shadowBlur = 0;
@@ -1568,7 +1556,7 @@ class Main {
         ctx.strokeStyle = "black";
         ctx.stroke();
         ctx.fillStyle = "white";
-        ctx.font = "bold 12px Arial";
+        ctx.font = "bold 12px 'Baloo 2', 'Segoe UI', sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(val, x, y);
@@ -1595,6 +1583,12 @@ class Main {
     drawProj(p) {
         if (p.isArrows) { this.drawArrowsVolley(p); return; }
         if (p.isSpellArc) { this.drawSpellArc(p); return; }
+
+        // Area / ground effects (explosions, poison, clones, placed spells…) are
+        // drawn in the inline ground pass in their own colour — don't overpaint
+        // them here with a team-coloured ball.
+        if (p.fireArea || p.redArea || p.brownArea || p.poison || p.graveyard ||
+            p.isHeal || p.barbBarrel || p.isClone || p.isIceNova || p.isLightBlue || p.spl) return;
 
         let x = p.x;
         let y = p.y;
@@ -1661,10 +1655,10 @@ class Main {
         prog = Math.max(0, Math.min(1, prog));
         let h = (p.arcMax || 100) * Math.sin(prog * Math.PI);
 
-        // Ground shadow at the projectile's ground position; shrinks while high.
-        let sr = Math.max(5, p.rad * 0.34) * (1 - 0.35 * Math.sin(prog * Math.PI));
+        // Larger, rounder ground shadow; shrinks a little while high.
+        let sr = Math.max(8, p.rad * 0.5) * (1 - 0.3 * Math.sin(prog * Math.PI));
         ctx.fillStyle = "rgba(0,0,0,0.28)";
-        ctx.beginPath(); ctx.ellipse(p.x, p.y, sr, sr * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(p.x, p.y, sr, sr * 0.62, 0, 0, Math.PI * 2); ctx.fill();
 
         ctx.save();
         ctx.translate(p.x, p.y - h);
@@ -1681,10 +1675,12 @@ class Main {
                 ctx.restore();
             }
         } else if (k === "barrel") {
-            ctx.fillStyle = "#7c4a22";
-            this.drawRoundRect(-9, -11, 18, 22, 5, true, false);
-            ctx.strokeStyle = "#4f3016"; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.moveTo(-9, -3); ctx.lineTo(9, -3); ctx.moveTo(-9, 4); ctx.lineTo(9, 4); ctx.stroke();
+            // Simple barrel that tumbles end-over-end as it flies.
+            ctx.rotate(Date.now() / 60 * (p.tm === 0 ? -1 : 1));
+            ctx.fillStyle = "#8a5a2c";
+            this.drawRoundRect(-8, -10, 16, 20, 4, true, false);
+            ctx.strokeStyle = "#5c3a18"; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(-8, -1); ctx.lineTo(8, -1); ctx.stroke();
             ctx.lineWidth = 1;
         } else if (k === "snowball") {
             ctx.fillStyle = "#dff1ff"; ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
@@ -1703,32 +1699,33 @@ class Main {
     }
 
     drawArrowsVolley(p) {
-        // Three staggered waves of arrows that spread out horizontally, fall in
-        // tilted, and straighten as they land (asArrows starts life at 36).
+        // Arrows spread across the impact circle in 3 staggered waves; each comes
+        // in tilted and straightens as it lands (asArrows starts life at 36).
         const maxLife = 36;
-        const t = Math.max(0, Math.min(1.3, 1 - p.life / maxLife));
-        const waves = 3, perWave = 6;
-        for (let wv = 0; wv < waves; wv++) {
-            let wt = (t - wv * 0.16) / 0.6;          // each wave staggered, lasts ~0.6
-            if (wt < 0 || wt > 1.25) continue;
-            let fall = Math.max(0, 1 - wt) * 80;     // drop from above
-            ctx.globalAlpha = wt > 1 ? Math.max(0, 1.25 - wt) : 1;
-            for (let i = 0; i < perWave; i++) {
-                let spread = (i / (perWave - 1) - 0.5);            // -0.5..0.5
-                let ax = p.x + spread * p.rad * 1.7;
-                let ay = p.y + (wv - 1) * 10;
-                let tilt = (1 - Math.min(1, wt)) * spread * 1.3;   // tilted, then straight on landing
-                ctx.save();
-                ctx.translate(ax, ay - fall);
-                ctx.rotate(tilt);
-                ctx.strokeStyle = "#6b4423"; ctx.lineWidth = 2;
-                ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(0, 8); ctx.stroke();
-                ctx.fillStyle = "#d9d9d9";
-                ctx.beginPath(); ctx.moveTo(0, 11); ctx.lineTo(-3, 6); ctx.lineTo(3, 6); ctx.closePath(); ctx.fill();
-                ctx.strokeStyle = "#eaeaea"; ctx.lineWidth = 1.5;
-                ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(-3, -11); ctx.moveTo(0, -8); ctx.lineTo(3, -11); ctx.stroke();
-                ctx.restore();
-            }
+        const t = Math.max(0, Math.min(1.2, 1 - p.life / maxLife));
+        const n = 15, waves = 3;
+        for (let i = 0; i < n; i++) {
+            let wave = i % waves;
+            let wt = (t - wave * 0.16) / 0.6;
+            if (wt < 0 || wt > 1.2) continue;
+            // Position inside the impact circle (golden-angle spiral).
+            let ang = i * 2.399963;
+            let rr = Math.sqrt((i + 0.5) / n) * p.rad * 0.9;
+            let ax = p.x + Math.cos(ang) * rr;
+            let ay = p.y + Math.sin(ang) * rr;
+            let fall = Math.max(0, 1 - wt) * 75;
+            let tilt = (1 - Math.min(1, wt)) * 0.5;       // tilted, straightens on landing
+            ctx.globalAlpha = wt > 1 ? Math.max(0, 1.2 - wt) : 1;
+            ctx.save();
+            ctx.translate(ax, ay - fall);
+            ctx.rotate(tilt);
+            ctx.strokeStyle = "#6b4423"; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(0, 8); ctx.stroke();
+            ctx.fillStyle = "#d9d9d9";
+            ctx.beginPath(); ctx.moveTo(0, 11); ctx.lineTo(-3, 6); ctx.lineTo(3, 6); ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = "#eaeaea"; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(-3, -11); ctx.moveTo(0, -8); ctx.lineTo(3, -11); ctx.stroke();
+            ctx.restore();
         }
         ctx.globalAlpha = 1;
         ctx.lineWidth = 1;
