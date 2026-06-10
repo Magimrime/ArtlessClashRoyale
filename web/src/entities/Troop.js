@@ -182,7 +182,7 @@ export default class Troop extends Entity {
                     if (this.c.n === "Mega Knight") {
                         for (let e of g.ents)
                             if (e.tm !== this.tm && !e.fly && this.dist(e) < 60)
-                                e.hp -= 120;
+                                e.hp -= 340; // jump-land area damage (real L11)
                     }
                 } else {
                     this.x += (dx / d) * jumpSpeed;
@@ -223,7 +223,7 @@ export default class Troop extends Entity {
             if (t && this.dist(t) < 30 + targetHitboxRad) {
                 this.hp = 0;
                 if (this.c.n === "Fire Spirit") {
-                    g.projs.push(new Proj(this.x, this.y, t.x, t.y, t, 10, false, 60, 120, this.tm, false).asFireArea());
+                    g.projs.push(new Proj(this.x, this.y, t.x, t.y, t, 10, false, 60, this.c.d, this.tm, false).asFireArea());
                     return;
                 }
                 if (this.c.n === "Heal Spirit") {
@@ -232,13 +232,13 @@ export default class Troop extends Entity {
                 }
                 if (this.c.n === "Wall Breakers") {
                     g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 60, 0, this.tm, false).asFireArea());
-                    if (t.constructor.name === "Tower" || t.constructor.name === "Building") t.hp -= 560;
+                    if (t.constructor.name === "Tower" || t.constructor.name === "Building") t.hp -= this.c.d;
                     for (let e of g.ents) {
                         if (e.tm !== this.tm && this.dist(e) < 60) {
                             if (e.constructor.name === "Tower" || e.constructor.name === "Building") {
-                                if (e !== t) e.hp -= 560;
+                                if (e !== t) e.hp -= this.c.d;
                             } else {
-                                e.hp -= 200;
+                                e.hp -= Math.floor(this.c.d / 2);
                             }
                         }
                     }
@@ -543,11 +543,11 @@ export default class Troop extends Entity {
     die(g) {
         if (this.c.n === "Golem") {
             this.spawnDeathTroops(g, g.getCard("Golemite") || { n: "Golemite", hp: 1039, ms: 25, fl: false, ar: false }, 2, 10);
-            let p = new Proj(this.x, this.y, this.x, this.y, null, 0, false, 60, 259, this.tm, false);
+            let p = new Proj(this.x, this.y, this.x, this.y, null, 0, false, 60, 320, this.tm, false);
             p.fireArea = true; p.isGray = true; p.life = 6;
             g.projs.push(p);
         } else if (this.c.n === "Golemite") {
-            let p = new Proj(this.x, this.y, this.x, this.y, null, 0, false, 40, 53, this.tm, false);
+            let p = new Proj(this.x, this.y, this.x, this.y, null, 0, false, 40, 79, this.tm, false);
             p.fireArea = true; p.isGray = true; p.life = 6;
             g.projs.push(p);
         } else if (this.c.n === "Lava Hound") {
@@ -580,7 +580,7 @@ export default class Troop extends Entity {
 
             for (let e of g.ents) {
                 if (e.tm !== this.tm && this.dist(e) < 80 + e.rad) {
-                    e.hp -= 20;
+                    e.hp -= 84; // Ice Golem death damage (real L11)
                     e.sl = 156; // 2.6 seconds slow (1.3x)
                 }
             }

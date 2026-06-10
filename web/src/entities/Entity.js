@@ -36,6 +36,7 @@ export default class Entity {
 
     getInfernoMultiplier(stage) {
         if (stage <= 0) return 1;
+        if (stage > 6) stage = 6; // cap the damage ramp (x64) so it doesn't run away
         return 2 * this.getInfernoMultiplier(stage - 1);
     }
 }

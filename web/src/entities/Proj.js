@@ -7,6 +7,9 @@ export default class Proj {
     constructor(x, y, tx, ty, t, s, sp, r, d, tm, bar) {
         this.x = x;
         this.y = y;
+        // Previous-tick position, used for render interpolation.
+        this.lx = x;
+        this.ly = y;
         this.tx = tx;
         this.ty = ty;
         this.t = t; // Target entity
@@ -38,6 +41,7 @@ export default class Proj {
         this.isGray = false;
         this.hasKnockback = false;
         this.isRolling = false;
+        this.isArrows = false;
 
         this.stunDuration = 30;
         this.chainTargets = null;
@@ -63,6 +67,7 @@ export default class Proj {
     asStun(duration = 30) { this.shouldStun = true; this.stunDuration = duration; return this; }
     asCurse() { this.isCurse = true; return this; }
     asRolling() { this.isRolling = true; this.life = 60; return this; }
+    asArrows() { this.isArrows = true; this.life = 16; return this; }
     asIceNova() { this.isIceNova = true; this.life = 5; return this; }
 
     asLog() { this.isLog = true; this.asRolling(); this.life = 110; return this; }

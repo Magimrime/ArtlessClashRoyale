@@ -547,16 +547,54 @@ class Main {
             setTimeout(() => loader.style.display = 'none', 500);
         }
 
-        this.render();
+        // Render entities at an interpolated position between the last two
+        // simulation ticks so motion is smooth regardless of refresh rate.
+        const alpha = this.step > 0 ? this.accumulator / this.step : 0;
+        this.applyInterp(alpha);
+        try {
+            this.render();
+        } finally {
+            this.restoreInterp();
+        }
+    }
+
+    // Temporarily move entities/projectiles to their interpolated render
+    // position. The authoritative positions are saved and put back by
+    // restoreInterp() right after rendering, so the simulation is untouched.
+    applyInterp(alpha) {
+        this._interpActive = false;
+        if (this.eng.isMultiplayer) return; // lockstep syncs positions; don't smear corrections
+        if (this.state !== State.PLAY && this.state !== State.CNT) return;
+        if (!(alpha > 0)) return;
+        this._interpActive = true;
+        for (const e of this.eng.ents) {
+            e._sx = e.x; e._sy = e.y;
+            if (e.lx !== undefined) {
+                e.x = e.lx + (e.x - e.lx) * alpha;
+                e.y = e.ly + (e.y - e.ly) * alpha;
+            }
+        }
+        for (const p of this.eng.projs) {
+            p._sx = p.x; p._sy = p.y;
+            if (p.lx !== undefined) {
+                p.x = p.lx + (p.x - p.lx) * alpha;
+                p.y = p.ly + (p.y - p.ly) * alpha;
+            }
+        }
+    }
+
+    restoreInterp() {
+        if (!this._interpActive) return;
+        for (const e of this.eng.ents) { if (e._sx !== undefined) { e.x = e._sx; e.y = e._sy; } }
+        for (const p of this.eng.projs) { if (p._sx !== undefined) { p.x = p._sx; p.y = p._sy; } }
+        this._interpActive = false;
     }
 
     render() {
-        ctx.fillStyle = '#66BB6A';
-        ctx.fillRect(0, 0, W, H);
+        this.arenaGrass();
 
         if (this.state === State.RESUME_PROMPT) {
-            ctx.fillStyle = '#66BB6A';
-            ctx.fillRect(0, 0, W, H);
+            this.menuBg();
             this.drawCenteredString("Resume previous game?", W / 2, H / 2 - 75, "bold 30px Arial", "#004000");
             this.drawBtn(this.resumeYesBtn, "YES", "#32CD32");
             this.drawBtn(this.resumeNoBtn, "NO", "#FF6347");
@@ -564,8 +602,7 @@ class Main {
         }
 
         if (this.state === State.TITLE) {
-            ctx.fillStyle = '#66BB6A';
-            ctx.fillRect(0, 0, W, H);
+            this.menuBg();
 
             // Draw Visitor Count
             ctx.fillStyle = "#006400";
@@ -603,8 +640,7 @@ class Main {
         }
 
         if (this.state === State.MP_MENU) {
-            ctx.fillStyle = '#66BB6A';
-            ctx.fillRect(0, 0, W, H);
+            this.menuBg();
 
             this.drawCenteredString("MULTIPLAYER", W / 2, 100, "bold 40px Arial", "white");
 
@@ -627,8 +663,7 @@ class Main {
         }
 
         if (this.state === State.MP_HOST) {
-            ctx.fillStyle = '#66BB6A';
-            ctx.fillRect(0, 0, W, H);
+            this.menuBg();
 
             this.drawCenteredString("Waiting for opponent...", W / 2, H / 2 - 100, "24px Arial", "white");
 
@@ -643,8 +678,7 @@ class Main {
         }
 
         if (this.state === State.MP_JOIN) {
-            ctx.fillStyle = '#66BB6A';
-            ctx.fillRect(0, 0, W, H);
+            this.menuBg();
 
             this.drawCenteredString("ENTER CODE:", W / 2, H / 2 - 100, "bold 30px Arial", "white");
 
@@ -711,8 +745,7 @@ class Main {
 
         if (this.state === State.DEBUG_MENU) {
             // (Unchanged debug render)
-            ctx.fillStyle = '#66BB6A';
-            ctx.fillRect(0, 0, W, H);
+            this.menuBg();
             this.drawBtn(this.debugToggleBtn, "SHOW PATH/RANGE", this.eng.debugView ? "#32CD32" : "#FF6347");
             this.drawBtn(this.debugEnemyElixirBtn, "SHOW OPP ELIXIR", this.eng.debugEnemyElixir ? "#32CD32" : "#FF6347");
             this.drawBtn(this.enemyDeckBtn, "BUILD ENEMY DECK", "#FFA500");
@@ -775,12 +808,26 @@ class Main {
             return;
         }
 
-        // GAMEPLAY RENDER - River and bridges
-        ctx.fillStyle = "#3296ff";
-        ctx.fillRect(0, RIV_Y - 15, W, 30);
-        ctx.fillStyle = "#8b4513";
-        ctx.fillRect(W / 4 - 25, RIV_Y - 18, 50, 36);
-        ctx.fillRect(W * 3 / 4 - 25, RIV_Y - 18, 50, 36);
+        // River with muddy banks and a water gradient
+        ctx.fillStyle = "#6b4a2a";
+        ctx.fillRect(0, RIV_Y - 18, W, 36);
+        const riv = ctx.createLinearGradient(0, RIV_Y - 14, 0, RIV_Y + 14);
+        riv.addColorStop(0, "#46a7e6");
+        riv.addColorStop(0.5, "#2f7fc0");
+        riv.addColorStop(1, "#46a7e6");
+        ctx.fillStyle = riv;
+        ctx.fillRect(0, RIV_Y - 14, W, 28);
+        // Wooden bridges with planks
+        for (const bx of [W / 4, W * 3 / 4]) {
+            ctx.fillStyle = "#9c6b3a";
+            ctx.fillRect(bx - 26, RIV_Y - 20, 52, 40);
+            ctx.strokeStyle = "rgba(60,35,15,0.55)";
+            ctx.lineWidth = 2;
+            for (let py = RIV_Y - 16; py <= RIV_Y + 18; py += 8) {
+                ctx.beginPath(); ctx.moveTo(bx - 26, py); ctx.lineTo(bx + 26, py); ctx.stroke();
+            }
+            ctx.lineWidth = 1;
+        }
 
         // Render Game during COUNTDOWN (CNT) or PLAY
         if (this.state === State.PLAY || this.state === State.CNT) {
@@ -891,6 +938,7 @@ class Main {
 
             // Projectiles
             for (let p of this.eng.projs) {
+                if (p.isArrows) continue; // drawn as an arrow volley in drawProj (top layer)
                 if (p.barrel) {
                     ctx.fillStyle = "#643200";
                 } else if (p.fireArea) {
@@ -1076,17 +1124,29 @@ class Main {
 
             // Gameplay UI
             if (this.state === State.PLAY || this.state === State.CNT) {
-                // Elixir Bar
-                ctx.fillStyle = "#333";
-                ctx.fillRect(0, H - 130, W, 25);
-                ctx.fillStyle = "#c800c8";
-                ctx.fillRect(0, H - 130, W * (this.eng.p1.elx / 10.0), 25);
-                ctx.strokeStyle = "white";
-                ctx.strokeRect(0, H - 130, W, 25);
-                for (let i = 1; i < 10; i++) {
-                    ctx.beginPath(); ctx.moveTo(i * (W / 10), H - 130); ctx.lineTo(i * (W / 10), H - 105); ctx.stroke();
+                // HUD backdrop panel behind the elixir bar + card tray
+                ctx.fillStyle = "rgba(18,26,22,0.82)";
+                this.drawRoundRect(-12, H - 138, W + 24, 150, 16, true, false);
+
+                // Elixir bar (rounded, gradient, pip ticks)
+                const ebX = 10, ebY = H - 130, ebW = W - 20, ebH = 22;
+                ctx.fillStyle = "#2a1430";
+                this.drawRoundRect(ebX, ebY, ebW, ebH, 11, true, false);
+                let elxPct = Math.max(0, Math.min(1, this.eng.p1.elx / 10.0));
+                if (elxPct > 0.001) {
+                    const eg = ctx.createLinearGradient(ebX, 0, ebX + ebW, 0);
+                    eg.addColorStop(0, "#ff5ad6");
+                    eg.addColorStop(1, "#b400b4");
+                    ctx.fillStyle = eg;
+                    this.drawRoundRect(ebX, ebY, ebW * elxPct, ebH, 11, true, false);
                 }
-                this.drawCenteredString(`${Math.floor(this.eng.p1.elx)}`, W / 2, H - 112, "bold 16px Arial", "white");
+                ctx.strokeStyle = "rgba(0,0,0,0.35)";
+                ctx.lineWidth = 1;
+                for (let i = 1; i < 10; i++) {
+                    let px = ebX + i * (ebW / 10);
+                    ctx.beginPath(); ctx.moveTo(px, ebY + 3); ctx.lineTo(px, ebY + ebH - 3); ctx.stroke();
+                }
+                this.drawCenteredString(`${Math.floor(this.eng.p1.elx)}`, W / 2, ebY + ebH - 6, "bold 15px Arial", "white");
 
                 // Debug Opponent Elixir
                 if (this.eng.debugEnemyElixir) {
@@ -1243,20 +1303,20 @@ class Main {
         }
 
         let isFriend = (e.tm === 0);
-        let color = isFriend ? "#3296ff" : (e.isClone ? "cyan" : "#ff3232");
-        if (e.isClone) color = isFriend ? "#32ffff" : "#ff32ff";
+        // Each unit keeps its own identity color; friend vs foe is shown ONLY by
+        // the health-bar color drawn below. Crown towers stay team-colored.
+        let color;
+        if (e instanceof Tower) {
+            color = isFriend ? "#4aa3ff" : "#ff5a5a";
+        } else {
+            color = this.getUnitColor(name);
+            if (e.isClone) color = "rgba(185, 240, 255, 0.9)";
+        }
 
-
-
-
-        // Freeze/Slow effect
+        // Freeze/Slow status tints temporarily override the identity color.
         if (e instanceof Troop) {
-            if (e.fr > 0) {
-                color = "#add8e6"; // Light Blue
-            } else if (e.sl > 0) {
-                // Blend with Light Sky Blue or just simple tint
-                color = "#87CEFA";
-            }
+            if (e.fr > 0) color = "#bfe8ff";
+            else if (e.sl > 0) color = "#9ad2f5";
         }
 
         ctx.fillStyle = color;
@@ -1279,46 +1339,103 @@ class Main {
         }
 
 
-        // HP Bar
-        // HP Bar / Shield Bar
+        // Health bar — its COLOR is the only friend/foe indicator
+        // (blue = yours, red = enemy). Always shown for units so the team is
+        // readable even at full HP; towers show it only when damaged.
+        let teamCol = isFriend ? "#2f8bff" : "#ff4d4d";
+        let barW = (e instanceof Tower) ? 42 : Math.max(24, radius * 1.9);
+        let barY = y - radius - 9;
+
         if (e.shield > 0) {
-            // Purple Shield Bar
             let shPct = Math.max(0, e.shield / e.maxShield);
-            let barW = 30;
-            ctx.fillStyle = "#4B0082"; // Dark Indigo background
-            ctx.fillRect(x - barW / 2, y - radius - 10, barW, 4);
-            ctx.fillStyle = "#DDA0DD"; // Plum/Purple foreground
-            ctx.fillRect(x - barW / 2, y - radius - 10, barW * shPct, 4);
-        } else if (e.hp < e.mhp) {
+            ctx.fillStyle = "rgba(0,0,0,0.5)";
+            ctx.fillRect(x - barW / 2 - 1, barY - 6, barW + 2, 5);
+            ctx.fillStyle = "#d9b3ff";
+            ctx.fillRect(x - barW / 2, barY - 5, barW * shPct, 3);
+        }
+        if (!(e instanceof Tower) || e.hp < e.mhp) {
             let hpPct = Math.max(0, e.hp / e.mhp);
-            let barW = 30;
-            ctx.fillStyle = "red";
-            ctx.fillRect(x - barW / 2, y - radius - 10, barW, 4);
-            ctx.fillStyle = "#32CD32";
-            ctx.fillRect(x - barW / 2, y - radius - 10, barW * hpPct, 4);
+            ctx.fillStyle = "rgba(0,0,0,0.55)";
+            ctx.fillRect(x - barW / 2 - 1, barY - 1, barW + 2, 6);
+            ctx.fillStyle = teamCol;
+            ctx.fillRect(x - barW / 2, barY, barW * hpPct, 4);
         }
 
-        // Level / Name
-        // Level / Name
+        // Unit name
         if (name && name.length > 0) {
             let fontSize = Math.max(9, Math.min(13, 8 + radius * 0.4));
-            ctx.fillStyle = "rgba(255, 255, 255, 0.7)"; // Less visible
-            ctx.font = `${fontSize}px Arial`; // Simple Arial, no bold
+            ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+            ctx.font = `${fontSize}px Arial`;
             ctx.textAlign = "center";
-
-            // Drop shadow for readability instead of heavy stroke
             ctx.shadowColor = "black";
             ctx.shadowBlur = 2;
-
-            let textY = y - radius - 20; // Above HP bar
-            if (e.hp >= e.mhp) textY = y - radius - 5; // Lower if no HP bar
-
-            ctx.fillText(name, x, textY);
-
-            // Reset shadow
+            ctx.fillText(name, x, barY - (e.shield > 0 ? 9 : 4));
             ctx.shadowBlur = 0;
             ctx.shadowColor = "transparent";
         }
+    }
+
+    // Per-card identity color so units aren't just blue/red. Friend vs foe is
+    // conveyed by the health-bar color, not the body.
+    getUnitColor(name) {
+        const C = {
+            "Knight": "#9aa6b2", "Archers": "#c98fb0", "Giant": "#e0a458",
+            "Mini PEKKA": "#5566a0", "Skeletons": "#e6e3d3", "Skeleton Army": "#e6e3d3",
+            "Musketeer": "#7c8fc7", "Mega Knight": "#6b5b8a", "P.E.K.K.A": "#4b4f86",
+            "Barbarians": "#d8a24e", "Fire Spirit": "#ff7a3c", "Ice Spirit": "#9ddcef",
+            "Electro Spirit": "#ffe14d", "Heal Spirit": "#76d98a", "Minions": "#356b6b",
+            "Goblins": "#79b44a", "Spear Goblins": "#8cc04f", "Bats": "#6a4a78",
+            "Wizard": "#ff7043", "Witch": "#8e4fb0", "Mega Minion": "#2f4f6e",
+            "Minion Horde": "#356b6b", "Baby Dragon": "#79c267", "Inferno Dragon": "#ff5a2c",
+            "Golem": "#8a6a4a", "Lava Hound": "#cf5a3c", "Elixir Golem": "#d56ab5",
+            "Elite Barbarians": "#e0934a", "Zappies": "#ffd24d", "Sparky": "#ffb13c",
+            "Wall Breakers": "#b5733a", "Royal Giant": "#e6b15a", "Electro Giant": "#46b6c4",
+            "Bowler": "#7456b0", "Hog Rider": "#b07a45", "Royal Hogs": "#e89ab5",
+            "Prince": "#f1c64a", "Mother Witch": "#7a3f9c", "Royal Recruits": "#b9a06a",
+            "Dark Prince": "#4a3f5a", "Ice Golem": "#a9dcef", "Cannon": "#6b7079",
+            "Inferno Tower": "#b5563a", "Elixir Collector": "#c46fb0", "Crate": "#9c7b4a",
+            "Golemite": "#8a6a4a", "Lava Pup": "#ff8a4c", "Elixir Golemite": "#d56ab5",
+            "Elixir Blob": "#d56ab5", "Cursed Hog": "#8e4fb0"
+        };
+        return C[name] || "#b9b1a0";
+    }
+
+    // Lighten (amt > 0) or darken (amt < 0) a #rrggbb color. Non-hex passes through.
+    shade(hex, amt) {
+        if (typeof hex !== "string" || hex[0] !== "#" || hex.length < 7) return hex;
+        const clamp = v => Math.max(0, Math.min(255, Math.round(v + 255 * amt)));
+        const r = clamp(parseInt(hex.slice(1, 3), 16));
+        const g = clamp(parseInt(hex.slice(3, 5), 16));
+        const b = clamp(parseInt(hex.slice(5, 7), 16));
+        return `rgb(${r},${g},${b})`;
+    }
+
+    paintBg(c1, c2) {
+        const g = ctx.createLinearGradient(0, 0, 0, H);
+        g.addColorStop(0, c1);
+        g.addColorStop(1, c2);
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, W, H);
+    }
+
+    // Rich green gradient + soft vignette for menus.
+    menuBg() {
+        this.paintBg("#3a9d63", "#155f39");
+        const r = ctx.createRadialGradient(W / 2, H * 0.33, 60, W / 2, H * 0.45, H * 0.75);
+        r.addColorStop(0, "rgba(255,255,255,0.08)");
+        r.addColorStop(1, "rgba(0,0,0,0.28)");
+        ctx.fillStyle = r;
+        ctx.fillRect(0, 0, W, H);
+    }
+
+    // Mowed-grass arena background.
+    arenaGrass() {
+        this.paintBg("#69bf64", "#54a554");
+        ctx.fillStyle = "rgba(0,0,0,0.045)";
+        for (let gy = 0; gy < H; gy += 64) ctx.fillRect(0, gy, W, 32);
+        // faintly darken the enemy (top) half for orientation
+        ctx.fillStyle = "rgba(0,0,0,0.05)";
+        ctx.fillRect(0, 0, W, RIV_Y - 15);
     }
 
     drawBtn(rect, txt, color) {
@@ -1335,13 +1452,32 @@ class Main {
             drawRect.h = h;
         }
 
-        ctx.fillStyle = color;
-        this.drawRoundRect(drawRect.x, drawRect.y, drawRect.w, drawRect.h, 10, true, true);
+        // Drop shadow + vertical gradient body
+        ctx.save();
+        ctx.shadowColor = "rgba(0,0,0,0.35)";
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetY = 3;
+        const g = ctx.createLinearGradient(0, drawRect.y, 0, drawRect.y + drawRect.h);
+        g.addColorStop(0, this.shade(color, 0.16));
+        g.addColorStop(1, this.shade(color, -0.12));
+        ctx.fillStyle = g;
+        this.drawRoundRect(drawRect.x, drawRect.y, drawRect.w, drawRect.h, 12, true, false);
+        ctx.restore();
+
+        // Glossy top highlight
+        ctx.fillStyle = "rgba(255,255,255,0.16)";
+        this.drawRoundRect(drawRect.x + 3, drawRect.y + 3, drawRect.w - 6, drawRect.h * 0.42, 8, true, false);
+
+        // Label
         ctx.fillStyle = "white";
         ctx.font = "bold 16px Arial";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
+        ctx.shadowColor = "rgba(0,0,0,0.45)";
+        ctx.shadowBlur = 2;
         ctx.fillText(txt, drawRect.x + drawRect.w / 2, drawRect.y + drawRect.h / 2);
+        ctx.shadowBlur = 0;
+        ctx.shadowColor = "transparent";
         ctx.textBaseline = "alphabetic"; // Reset
     }
 
@@ -1385,6 +1521,8 @@ class Main {
     }
 
     drawProj(p) {
+        if (p.isArrows) { this.drawArrowsVolley(p); return; }
+
         let x = p.x;
         let y = p.y;
         let r = p.rad || 5;
@@ -1440,6 +1578,57 @@ class Main {
         }
 
         ctx.restore();
+    }
+
+    drawArrowsVolley(p) {
+        const n = 14;
+        // Arrows fall from above and land right as the spell deals damage
+        // (Proj deals damage at life === 5; asArrows starts life at 16).
+        const fall = Math.max(0, (p.life - 5)) / 11 * 75;
+        const landed = p.life <= 5;
+        const alpha = landed ? Math.max(0, p.life / 5) : 1; // fade out after landing
+        ctx.globalAlpha = alpha;
+
+        for (let i = 0; i < n; i++) {
+            // Deterministic spread across the impact circle (golden-angle spiral).
+            const ang = i * 2.399963;
+            const rr = Math.sqrt((i + 0.5) / n) * p.rad;
+            const ax = p.x + Math.cos(ang) * rr;
+            const ay = p.y + Math.sin(ang) * rr;
+
+            ctx.save();
+            ctx.translate(ax, ay - fall);
+            ctx.rotate(0.35); // descending at a slight angle
+
+            // Shaft
+            ctx.strokeStyle = "#6b4423";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, -9);
+            ctx.lineTo(0, 7);
+            ctx.stroke();
+
+            // Arrowhead (points down toward the ground)
+            ctx.fillStyle = "#d9d9d9";
+            ctx.beginPath();
+            ctx.moveTo(0, 12);
+            ctx.lineTo(-3, 6);
+            ctx.lineTo(3, 6);
+            ctx.closePath();
+            ctx.fill();
+
+            // Fletching
+            ctx.strokeStyle = "#eaeaea";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(0, -9); ctx.lineTo(-3, -12);
+            ctx.moveTo(0, -9); ctx.lineTo(3, -12);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+        ctx.globalAlpha = 1;
+        ctx.lineWidth = 1;
     }
 }
 

@@ -48,102 +48,89 @@ export default class GameEngine {
         this.debugView = false;
         this.debugEnemyElixir = false;
 
+        // Real Clash Royale stats at Tournament Standard (Level 11), sourced from
+        // RoyaleAPI cr-api-data per-level tables. Engine units:
+        //   hp / d = real Level 11 hitpoints & per-hit damage
+        //   s      = px/tick (tiles-per-min / 120: Slow .375, Med .5, Fast .75, VFast 1)
+        //   rn     = px gap (tiles * 30, minus a hitbox allowance)
+        //   rt     = reload in ticks (hit-speed seconds * 60)
+        //   m      = building lifetime in ticks (unused for troops); si = sight px
+        // Spells/Goblin Barrel/Graveyard/Mirror/Clone/Crate/Vines keep d as their
+        // effect value (Crate and Vines have no real counterpart).
         this.allCards = [
-            new Card("Knight", 3, 1000, 30, 1.5, 20, 0, 15, 60, 150, false, false),
-            new Card("Archers", 3, 200, 25, 1.5, 100, 0, 3, 60, 180, false, true),
-            new Card("Giant", 5, 3000, 150, 0.8, 20, 1, 500, 90, 150, false, false),
-            new Card("Fireball", 4, 0, 200, 0, 0, 2, 0, 0, 0, false, true),
-            new Card("Mini PEKKA", 4, 900, 300, 1.6, 20, 0, 15, 60, 150, false, false),
-            new Card("Zap", 2, 0, 60, 0, 0, 2, 0, 0, 0, false, true),
-            new Card("Skeletons", 1, 20, 40, 1.6, 6, 0, 2, 22, 150, false, false),
-            new Card("Musketeer", 4, 500, 150, 1.5, 140, 0, 10, 60, 220, false, true),
-            new Card("Cannon", 3, 700, 100, 0, 120, 3, 10000, 100, 120, false, false),
-            new Card("Mega Knight", 7, 3000, 500, 1.2, 22, 0, 200, 100, 200, false, false),
-            new Card("P.E.K.K.A", 7, 4000, 980, 0.5, 22, 0, 200, 120, 200, false, false),
-            new Card("Skeleton Army", 3, 20, 40, 1.6, 6, 0, 2, 10, 150, false, false),
-            new Card("Barbarians", 5, 600, 150, 1.2, 18, 0, 10, 90, 180, false, false),
+            new Card("Knight", 3, 1766, 202, 0.5, 14, 0, 100, 72, 150, false, false),
+            new Card("Archers", 3, 304, 107, 0.5, 128, 0, 100, 54, 150, false, true),
+            new Card("Giant", 5, 4091, 254, 0.375, 14, 1, 100, 90, 150, false, false),
+            new Card("Fireball", 4, 0, 689, 0, 0, 2, 0, 0, 0, false, true),
+            new Card("Mini PEKKA", 4, 1361, 720, 0.75, 8, 0, 100, 96, 150, false, false),
+            new Card("Zap", 2, 0, 192, 0, 0, 2, 0, 0, 0, false, true),
+            new Card("Skeletons", 1, 81, 81, 0.75, 8, 0, 100, 60, 150, false, false),
+            new Card("Musketeer", 4, 720, 218, 0.5, 158, 0, 100, 60, 150, false, true),
+            new Card("Cannon", 3, 824, 212, 0, 143, 3, 1800, 54, 165, false, false),
+            new Card("Mega Knight", 7, 3993, 268, 0.5, 14, 0, 100, 102, 150, false, false),
+            new Card("P.E.K.K.A", 7, 3760, 816, 0.375, 14, 0, 100, 108, 150, false, false),
+            new Card("Skeleton Army", 3, 81, 81, 0.75, 8, 0, 100, 60, 150, false, false),
+            new Card("Barbarians", 5, 670, 192, 0.5, 8, 0, 100, 78, 150, false, false),
             new Card("Goblin Barrel", 3, 0, 0, 0, 0, 2, 0, 0, 0, false, false),
-            new Card("Royale Delivery", 3, 0, 0, 0, 0, 2, 0, 0, 0, false, false),
+            new Card("Royale Delivery", 3, 0, 198, 0, 0, 2, 0, 0, 0, false, false),
             new Card("Vines", 2, 0, 20, 0, 0, 2, 0, 0, 0, false, true),
-            new Card("Freeze", 4, 0, 5, 0, 0, 2, 0, 0, 0, false, true),
-            new Card("Fire Spirit", 1, 230, 0, 2.0, 12, 0, 2, 10, 150, false, true),
-            new Card("Ice Spirit", 1, 230, 8, 2.0, 12, 0, 2, 10, 150, false, true),
-            new Card("Electro Spirit", 1, 230, 8, 2.0, 12, 0, 2, 10, 150, false, true),
-            new Card("Heal Spirit", 1, 230, 8, 2.0, 12, 0, 2, 10, 150, false, true),
-            new Card("Arrows", 3, 0, 120, 0, 0, 2, 0, 0, 0, false, true),
-            new Card("Minions", 3, 190, 50, 1.6, 12, 0, 3, 40, 150, true, true),
-            new Card("Goblins", 2, 90, 100, 1.7, 12, 0, 2, 60, 150, false, false),
-            new Card("Spear Goblins", 2, 110, 50, 2.0, 90, 0, 2, 50, 180, false, true),
-            new Card("Bats", 2, 67, 67, 2.5, 10, 0, 2, 60, 150, true, true),
-            new Card("Poison", 4, 0, 3000, 0, 200, 2, 0, 0, 0, false, true),
-            new Card("Wizard", 5, 700, 230, 1.5, 100, 0, 10, 84, 220, false, true),
-            new Card("Witch", 5, 800, 111, 1.5, 100, 0, 10, 42, 220, false, true),
-            new Card("Graveyard", 5, 0, 0, 0, 33, 2, 0, 0, 0, false, true),
-            new Card("Mega Minion", 3, 700, 250, 1.5, 20, 0, 200, 60, 150, true, true),
-            new Card("Minion Horde", 5, 190, 50, 1.6, 12, 0, 6, 40, 150, true, true),
-            new Card("Baby Dragon", 4, 1000, 130, 1.5, 80, 0, 10, 80, 180, true, true),
-            new Card("Inferno Dragon", 4, 1070, 1, 1.5, 50, 0, 4, 1, 150, true, true),
-            new Card("Inferno Tower", 5, 1400, 1, 0.4, 120, 3, 30 * 60, 1, 120, false, true),
-            new Card("Golem", 8, 5120, 312, 0.8, 25, 1, 1000, 150, 200, false, false),
-            new Card("Lava Hound", 7, 3581, 53, 0.8, 100, 1, 4000, 78, 180, true, false),
-            new Card("Elixir Golem", 3, 1569, 253, 0.66, 25, 1, 4000, 117, 200, false, false),
-            new Card("Elite Barbarians", 6, 1341, 318, 1.4, 18, 0, 15, 60, 180, false, false),
-            new Card("Elixir Collector", 6, 1070, 0, 0, 0, 3, 93 * 60, 1, 120, false, false),
-            new Card("Zappies", 4, 250, 55, 1.2, 70, 0, 10, 126, 150, false, true),
-            new Card("Sparky", 6, 2000, 1500, 0.8, 90, 0, 2000, 300, 150, false, false),
+            new Card("Freeze", 4, 0, 115, 0, 0, 2, 0, 0, 0, false, true),
+            new Card("Fire Spirit", 1, 230, 207, 1, 38, 0, 100, 18, 150, false, true),
+            new Card("Ice Spirit", 1, 230, 110, 1, 53, 0, 100, 18, 150, false, true),
+            new Card("Electro Spirit", 1, 230, 99, 1, 53, 0, 100, 18, 150, false, true),
+            new Card("Heal Spirit", 1, 231, 110, 1, 53, 0, 100, 18, 150, false, true),
+            new Card("Arrows", 3, 0, 122, 0, 0, 2, 0, 0, 0, false, true),
+            new Card("Minions", 3, 230, 117, 0.75, 26, 0, 100, 60, 150, true, true),
+            new Card("Goblins", 2, 202, 120, 1, 8, 0, 100, 66, 150, false, false),
+            new Card("Spear Goblins", 2, 133, 81, 1, 143, 0, 100, 102, 150, false, true),
+            new Card("Bats", 2, 81, 81, 1, 14, 0, 100, 78, 150, true, true),
+            new Card("Poison", 4, 0, 70, 0, 0, 2, 0, 0, 0, false, true),
+            new Card("Wizard", 5, 720, 281, 0.5, 143, 0, 100, 84, 150, false, true),
+            new Card("Witch", 5, 838, 134, 0.5, 143, 0, 100, 66, 150, false, true),
+            new Card("Graveyard", 5, 0, 0, 0, 0, 2, 0, 0, 0, false, true),
+            new Card("Mega Minion", 3, 837, 311, 0.5, 26, 0, 100, 90, 150, true, true),
+            new Card("Minion Horde", 5, 230, 117, 0.75, 26, 0, 100, 60, 150, true, true),
+            new Card("Baby Dragon", 4, 1152, 160, 0.75, 83, 0, 100, 90, 150, true, true),
+            new Card("Inferno Dragon", 4, 1294, 10, 0.5, 83, 0, 100, 24, 150, true, true),
+            new Card("Inferno Tower", 5, 1749, 10, 0, 158, 3, 1800, 24, 180, false, true),
+            new Card("Golem", 8, 5120, 312, 0.375, 8, 1, 100, 150, 150, false, false),
+            new Card("Lava Hound", 7, 3811, 54, 0.375, 83, 1, 100, 78, 150, true, false),
+            new Card("Elixir Golem", 3, 1568, 254, 0.375, 8, 1, 100, 66, 150, false, false),
+            new Card("Elite Barbarians", 6, 1341, 384, 0.75, 14, 0, 100, 84, 150, false, false),
+            new Card("Elixir Collector", 6, 1070, 0, 0, 8, 3, 3900, 0, 0, false, false),
+            new Card("Zappies", 4, 530, 116, 0.5, 113, 0, 100, 126, 150, false, true),
+            new Card("Sparky", 6, 1452, 1331, 0.375, 128, 0, 100, 240, 150, false, false),
             new Card("Mirror", 1, 0, 0, 0, 0, 2, 0, 0, 0, false, true),
             new Card("Clone", 3, 0, 0, 0, 0, 2, 0, 0, 0, false, true),
-            new Card("Wall Breakers", 2, 230, 560, 4.0, 12, 1, 4, 60, 150, false, false),
-            new Card("Royal Giant", 6, 4500, 390, 0.8, 120, 1, 500, 102, 200, false, false),
-            new Card("Electro Giant", 7, 4500, 150, 0.8, 20, 1, 150, 90, 150, false, false),
-            new Card("Bowler", 5, 2000, 200, 0.8, 100, 0, 180, 150, 150, false, false),
-            new Card("Hog Rider", 4, 1600, 264, 2.0, 20, 1, 300, 60, 150, false, false),
-            new Card("Royal Hogs", 5, 695, 68, 2.0, 20, 1, 150, 60, 120, false, false),
-            new Card("Prince", 5, 1615, 325, 1.2, 20, 0, 120, 60, 150, false, false),
-            new Card("Mother Witch", 4, 532, 133, 1.2, 110, 0, 10, 72, 150, false, true),
-            new Card("The Log", 2, 0, 268, 0, 0, 2, 0, 0, 0, false, true),
-            new Card("Barbarian Barrel", 2, 0, 200, 0, 0, 2, 0, 0, 0, false, false),
-            new Card("Royal Recruits", 7, 500, 110, 1.5, 23, 0, 20, 78, 150, false, false),
-            new Card("Dark Prince", 4, 1000, 200, 1.2, 20, 0, 120, 60, 150, false, false),
+            new Card("Wall Breakers", 2, 331, 392, 1, 8, 1, 100, 72, 150, false, false),
+            new Card("Royal Giant", 6, 3072, 307, 0.375, 128, 1, 100, 102, 150, false, false),
+            new Card("Electro Giant", 7, 3856, 163, 0.375, 14, 1, 100, 126, 150, false, false),
+            new Card("Bowler", 5, 2080, 288, 0.375, 98, 0, 100, 150, 150, false, false),
+            new Card("Hog Rider", 4, 1696, 318, 1, 8, 1, 100, 96, 150, false, false),
+            new Card("Royal Hogs", 5, 837, 74, 1, 8, 1, 100, 72, 150, false, false),
+            new Card("Prince", 5, 1920, 392, 0.5, 26, 0, 100, 84, 150, false, false),
+            new Card("Mother Witch", 4, 532, 133, 0.5, 143, 0, 100, 60, 150, false, true),
+            new Card("The Log", 2, 0, 290, 0, 0, 2, 0, 0, 0, false, true),
+            new Card("Barbarian Barrel", 2, 0, 241, 0, 0, 2, 0, 0, 0, false, false),
+            new Card("Royal Recruits", 7, 532, 133, 0.5, 26, 0, 100, 78, 150, false, false),
+            new Card("Dark Prince", 4, 1200, 248, 0.5, 14, 0, 100, 78, 150, false, false),
             new Card("Crate", 2, 300, 0, 0, 0, 3, 1800, 0, 0, false, false),
-            new Card("Ice Golem", 2, 1100, 70, 0.8, 12, 1, 150, 60, 150, false, false)
+            new Card("Ice Golem", 2, 1197, 84, 0.375, 8, 1, 100, 150, 150, false, false)
         ];
 
-        // Apply Stat Adjustments
-        this.allCards.forEach(c => {
-            if (c.n !== "Mother Witch") c.hp = Math.floor(c.hp * 1.30);
-
-            // Global reductions
-            c.hp = Math.floor(c.hp / 2);
-            c.s = c.s / 2;
-
-            if (c.t === 2) { // Spell
-                if (c.n === "Fireball") c.d = Math.floor(c.d * 1.60);
-                else c.d = Math.floor(c.d * 1.30);
-            }
-
-            // Role tags drive the enemy AI's counter logic.
-            c.tags = this.getCardTags(c);
-        });
+        // Role tags drive the enemy AI's counter logic. (Stats above are already
+        // real Level 11 values, so no scaling is applied.)
+        this.allCards.forEach(c => { c.tags = this.getCardTags(c); });
 
         this.tokens = [
-            new Card("Golemite", 0, 1039, 50, 0.8, 20, 0, 10, 60, 150, false, false),
-            new Card("Lava Pup", 0, 134, 45, 2.0, 60, 0, 6, 60, 150, true, true),
-            new Card("Elixir Golemite", 0, 762, 40, 0.66, 20, 0, 10, 60, 150, false, false),
-            new Card("Elixir Blob", 0, 360, 20, 0.66, 20, 0, 6, 60, 150, false, false),
-            new Card("Cursed Hog", 0, 520, 50, 2.0, 20, 1, 10, 60, 150, false, false)
+            new Card("Golemite", 0, 1040, 49, 0.375, 8, 0, 100, 150, 150, false, false),
+            new Card("Lava Pup", 0, 216, 90, 0.5, 26, 0, 100, 102, 150, true, true),
+            new Card("Elixir Golemite", 0, 763, 127, 0.5, 8, 0, 100, 66, 150, false, false),
+            new Card("Elixir Blob", 0, 360, 63, 0.75, 8, 0, 100, 66, 150, false, false),
+            new Card("Cursed Hog", 0, 520, 84, 1, 8, 1, 100, 72, 150, false, false)
         ];
 
-        // Apply Stat Adjustments to Tokens
-        this.tokens.forEach(c => {
-            if (c.n !== "Mother Witch") c.hp = Math.floor(c.hp * 1.30);
-
-            // Global reductions
-            c.hp = Math.floor(c.hp / 2);
-            c.s = c.s / 2;
-
-            c.tags = this.getCardTags(c);
-        });
+        this.tokens.forEach(c => { c.tags = this.getCardTags(c); });
 
         this.enemyAI = null;
         this.isMultiplayer = false;
@@ -513,10 +500,12 @@ export default class GameEngine {
     }
 
     getSpellRadius(c) {
-        if (c.n === "Arrows" || c.n === "Poison" || c.n === "Graveyard" || c.n === "Freeze") return { type: 'circle', val: 80 };
+        if (c.n === "Arrows") return { type: 'circle', val: 100 };
+        if (c.n === "Poison" || c.n === "Graveyard") return { type: 'circle', val: 105 };
+        if (c.n === "Freeze") return { type: 'circle', val: 90 };
         if (c.n === "Vines") return { type: 'circle', val: 80 };
-        if (c.n === "Zap") return { type: 'circle', val: 50 };
-        if (c.n === "Fireball" || c.n === "Royale Delivery" || c.n === "Rocket" || c.n === "Giant Snowball") return { type: 'circle', val: 60 };
+        if (c.n === "Zap") return { type: 'circle', val: 75 };
+        if (c.n === "Fireball" || c.n === "Royale Delivery" || c.n === "Rocket" || c.n === "Giant Snowball") return { type: 'circle', val: 75 };
         if (c.n === "The Log") return { type: 'rect', w: 70, h: 20 }; // Visual approximation
         if (c.n === "Barbarian Barrel") return { type: 'rect', w: 44, h: 20 };
         if (c.n === "Goblin Barrel") return { type: 'circle', val: 40 }; // Impact radius approx
@@ -621,13 +610,13 @@ export default class GameEngine {
         } else if (c.n === "Royale Delivery") {
             let shape = this.getSpellRadius(c);
             let rad = shape && shape.type === 'circle' ? shape.val : 60;
-            this.projs.push(new Proj(x, y, x, y, null, 0, false, rad, 50, tm, false).asBrownArea());
+            this.projs.push(new Proj(x, y, x, y, null, 0, false, rad, c.d, tm, false).asBrownArea());
             let recruit = this.getCard("Royal Recruits");
             this.ents.push(new Troop(tm, x, y, recruit));
         } else if (c.n === "Poison") {
             let shape = this.getSpellRadius(c); // Returns val: 100
             let rad = shape && shape.type === 'circle' ? shape.val : 100;
-            this.projs.push(new Proj(x, y, x, y, null, 0, true, rad, 25, tm, false).asPoison());
+            this.projs.push(new Proj(x, y, x, y, null, 0, true, rad, c.d, tm, false).asPoison());
         } else if (c.n === "Graveyard") {
             let shape = this.getSpellRadius(c); // Returns val: 100
             let rad = shape && shape.type === 'circle' ? shape.val : 100;
@@ -637,7 +626,7 @@ export default class GameEngine {
             // Speed: 2.66
             let dist = 280;
             let ty = (tm === 0) ? y - dist : y + dist;
-            let p = new Proj(x, y, x, ty, null, 2.66, false, 60, Math.floor(c.d * 0.8), tm, false).asLog();
+            let p = new Proj(x, y, x, ty, null, 2.66, false, 60, c.d, tm, false).asLog();
             this.projs.push(p);
         } else if (c.n === "Barbarian Barrel") {
             // 3x shorter than log (303 / 3 = 101)
@@ -673,17 +662,14 @@ export default class GameEngine {
         } else if (c.t === 2) {
             let shape = this.getSpellRadius(c);
             let rad = shape && shape.type === 'circle' ? shape.val : 60;
-            let dmg = c.d;
-            if (c.n === "Zap") { dmg = 150; }
-            if (c.n === "Vines") { dmg = 20; }
-            if (c.n === "Freeze") { dmg = 5; }
-            if (c.n === "Arrows") { dmg = 120; }
+            let dmg = c.d; // real Level 11 spell damage from the card table
 
             let p = new Proj(x, y, x, y, null, 0, true, rad, dmg, tm, false);
             if (c.n === "Zap") p.asStun();
             if (c.n === "Vines") p.isRoot = true;
             if (c.n === "Freeze") p.isFreeze = true;
             if (c.n === "Fireball") p.hasKnockback = true;
+            if (c.n === "Arrows") p.asArrows();
             this.projs.push(p);
         } else if (["Archers", "Spear Goblins", "Wall Breakers"].includes(c.n)) {
             this.ents.push(new Troop(tm, x - 15, y, c));
@@ -722,7 +708,7 @@ export default class GameEngine {
             this.ents.push(new Troop(tm, x, y, c));
             for (let e of this.ents)
                 if (e.tm !== tm && !e.fly && Math.hypot(e.x - x, e.y - y) < 100)
-                    e.hp -= 100;
+                    e.hp -= 340; // spawn-in area damage (real L11)
         } else if (c.t === 3) {
             this.ents.push(new Building(tm, x, y, c));
         } else if (c.n === "Royal Hogs") {
@@ -847,9 +833,15 @@ export default class GameEngine {
     }
 
     upd() {
-        // Assign IDs to any new entities
+        // Assign IDs to new entities and snapshot positions for render interpolation.
         for (let e of this.ents) {
             if (!e.id) e.id = this.nextEntityId++;
+            e.lx = e.x;
+            e.ly = e.y;
+        }
+        for (let p of this.projs) {
+            p.lx = p.x;
+            p.ly = p.y;
         }
 
         let elapsed = Date.now() - this.gameStart;
