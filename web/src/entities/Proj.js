@@ -43,6 +43,13 @@ export default class Proj {
         this.isRolling = false;
         this.isArrows = false;
 
+        // Spell-arc (launched from the king tower, arcs to a target then bursts)
+        this.isSpellArc = false;
+        this.arcMax = 0;
+        this.totalDist = 0;
+        this.arrowBurst = false;
+        this.spellKind = null;
+
         this.stunDuration = 30;
         this.chainTargets = null;
         this.hitEntities = [];
@@ -62,8 +69,8 @@ export default class Proj {
     asFireArea() { this.fireArea = true; this.life = 6; return this; }
     asRedArea() { this.redArea = true; this.life = 12; return this; }
     asBrownArea() { this.brownArea = true; this.life = 12; return this; }
-    asPoison() { this.poison = true; this.life = 240; return this; }
-    asGraveyard() { this.graveyard = true; this.life = 300; return this; }
+    asPoison() { this.poison = true; this.life = 480; return this; }       // ~8s, real Poison
+    asGraveyard() { this.graveyard = true; this.life = 570; return this; }  // ~9.5s, real Graveyard
     asStun(duration = 30) { this.shouldStun = true; this.stunDuration = duration; return this; }
     asCurse() { this.isCurse = true; return this; }
     asRolling() { this.isRolling = true; this.life = 60; return this; }
@@ -73,18 +80,69 @@ export default class Proj {
     asLog() { this.isLog = true; this.asRolling(); this.life = 110; return this; }
     asBarbBarrelLog() { this.isLog = true; this.barbBarrelLog = true; this.asRolling(); return this; }
 
+    // Spell thrown from the king tower that arcs to (tx,ty) then bursts. The
+    // arc height (arcMax) drives the flying shadow gap in rendering.
+    asSpellArc(h, kind) {
+        this.isSpellArc = true;
+        this.spl = false;
+        this.arcMax = h;
+        this.spellKind = kind || "fireball";
+        this.totalDist = Math.max(1, Math.hypot(this.tx - this.x, this.ty - this.y));
+        this.life = 2000;
+        return this;
+    }
+
+    // AoE damage + effects applied when an arcing spell lands.
+    burstSpell(g) {
+        for (let e of g.ents) {
+            if (e.tm !== this.tm && Math.hypot(this.tx - e.x, this.ty - e.y) < this.rad + e.rad) {
+                e.hp -= this.dmg;
+                if (this.shouldStun) e.st = this.stunDuration;
+                if (this.isRoot) e.rt = 84;
+                if (this.isFreeze) e.fr = 240;
+                if (this.hasKnockback && e instanceof Troop && !(e instanceof Tower) && !(e instanceof Building)) {
+                    if (!["Mega Knight", "P.E.K.K.A", "Golem"].includes(e.c.n)) {
+                        let ang = Math.atan2(e.y - this.ty, e.x - this.tx);
+                        e.kbTime = 10; e.kbX = Math.cos(ang) * 6.0; e.kbY = Math.sin(ang) * 6.0;
+                    }
+                }
+            }
+        }
+        if (this.arrowBurst) {
+            g.projs.push(new Proj(this.tx, this.ty, this.tx, this.ty, null, 0, true, this.rad, 0, this.tm, false).asArrows());
+        } else {
+            let f = new Proj(this.tx, this.ty, this.tx, this.ty, null, 0, false, this.rad, 0, this.tm, false);
+            f.fireArea = true; f.life = 8; // brief, harmless explosion flash
+            g.projs.push(f);
+        }
+    }
+
     upd(g) {
         if (this.chainTargets || this.barbBreak || this.isIceNova) {
             this.life--;
             return;
         }
 
+        if (this.isSpellArc) {
+            let d = Math.hypot(this.tx - this.x, this.ty - this.y);
+            if (d <= this.spd) {
+                this.x = this.tx; this.y = this.ty;
+                this.life = 0;
+                this.burstSpell(g);
+            } else {
+                let a = Math.atan2(this.ty - this.y, this.tx - this.x);
+                this.x += Math.cos(a) * this.spd;
+                this.y += Math.sin(a) * this.spd;
+            }
+            return;
+        }
+
         if (this.poison) {
             this.life--;
-            if (this.life % 36 === 0) {
+            if (this.life % 48 === 0) { // damage tick ~0.8s, ~10 ticks over 8s
                 for (let e of g.ents) {
                     if (e.tm !== this.tm && Math.hypot(this.x - e.x, this.y - e.y) < this.rad) {
-                        e.hp -= Math.floor(this.dmg * 1.8);
+                        e.hp -= this.dmg;
                     }
                 }
             }
@@ -93,7 +151,7 @@ export default class Proj {
 
         if (this.graveyard) {
             this.life--;
-            if (this.life % 18 === 0) {
+            if (this.life % 30 === 0) { // spawn a skeleton every ~0.5s
                 let angle = Math.random() * Math.PI * 2;
                 let dist = Math.sqrt(Math.random()) * (this.rad);
                 g.ents.push(new Troop(this.tm, this.x + Math.cos(angle) * dist, this.y + Math.sin(angle) * dist, g.getCard("Skeletons")));

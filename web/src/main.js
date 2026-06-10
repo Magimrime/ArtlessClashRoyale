@@ -408,8 +408,12 @@ class Main {
                     }
                 }
             } else {
-                let rx = x;
-                let ry = y;
+                let rx = x, ry = y;
+                // Troops/buildings snap to the tile grid; spells are placed freely.
+                if (this.eng.sel && this.eng.sel.t !== 2) {
+                    let s = this.snapToGrid(x, y);
+                    rx = s.x; ry = s.y;
+                }
 
                 if (this.eng.isMultiplayer) {
                     // Send Spawn Request via MP
@@ -705,9 +709,7 @@ class Main {
         }
 
         if (this.state === State.DECK) {
-            // (Unchanged deck render)
-            ctx.fillStyle = "#e0f0e0";
-            ctx.fillRect(0, 0, W, H);
+            this.paintBg("#243a2b", "#13201a");
             let cols = 3;
             let margin = 20;
             let cardW = (W - (cols + 1) * margin) / cols;
@@ -721,23 +723,21 @@ class Main {
                 let cx = margin + col * (cardW + margin);
                 let cy = 100 + row * (cardH + margin) - this.scrollY;
                 if (cy > H || cy + cardH < 0) continue;
-
-                ctx.fillStyle = selected ? "#32CD32" : "#A9A9A9";
-                this.drawRoundRect(cx, cy, cardW, cardH, 10, true, true);
-                this.drawCenteredString(c.n, cx + cardW / 2, cy + cardH / 2, "bold 11px Arial", "white");
-                this.drawElixirCost(cx - 5, cy - 5, c.c);
+                this.drawDeckCard(cx, cy, cardW, cardH, c, selected);
             }
 
-            ctx.fillStyle = "#81C784";
-            ctx.fillRect(0, 0, W, 90);
-            this.drawCenteredString(`Build Deck (${this.eng.myDeck.length}/8)`, W / 2, 50, "bold 30px Arial", "#006400");
+            // Header panel
+            ctx.fillStyle = "rgba(10,18,12,0.94)";
+            ctx.fillRect(0, 0, W, 92);
+            ctx.strokeStyle = "rgba(255,255,255,0.12)"; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(0, 92); ctx.lineTo(W, 92); ctx.stroke();
 
+            let valid = this.eng.myDeck.length === 8;
+            this.drawCenteredString("Build Your Deck", W / 2, 38, "bold 26px Arial", "#eaffea");
+            this.drawCenteredString(`${this.eng.myDeck.length} / 8`, W / 2 - 70, 70, "bold 16px Arial", valid ? "#7CFC6A" : "#ffd24d");
             let sum = this.eng.myDeck.reduce((a, b) => a + b.c, 0);
-            let avg = this.eng.myDeck.length ? (sum / this.eng.myDeck.length).toFixed(1) : 0;
-            ctx.fillStyle = "#800080";
-            ctx.font = "italic 16px Arial";
-            ctx.textAlign = "right";
-            ctx.fillText(`Avg Elixir: ${avg}`, W - 20, 80);
+            let avg = this.eng.myDeck.length ? (sum / this.eng.myDeck.length).toFixed(1) : "0.0";
+            this.drawCenteredString(`Avg Elixir ${avg}`, W / 2 + 60, 70, "bold 15px Arial", "#e08cff");
 
             this.drawBtn(this.backBtn, "BACK", "#FF6347");
             return;
@@ -833,20 +833,17 @@ class Main {
         if (this.state === State.PLAY || this.state === State.CNT) {
             if (this.eng.sel && (this.eng.sel.t !== 2 || ["The Log", "Barbarian Barrel"].includes(this.eng.sel.n))) {
                 // Draw invalid area (red tint)
-                ctx.fillStyle = "rgba(255, 0, 0, 0.4)";
+                ctx.fillStyle = "rgba(255, 0, 0, 0.32)";
 
                 // Top Half (Always invalid) - Area behind towers/King
-                ctx.fillRect(0, 0, W, 200); // Updated to 200
+                ctx.fillRect(0, 0, W, 200);
 
-                // Bottom Left Enemy Side (Invalid if Left Tower alive)
-                if (this.eng.t2L && this.eng.t2L.hp > 0) {
-                    ctx.fillRect(0, 200, W / 2, RIV_Y - 200); // Updated start to 200
-                }
+                // Enemy side is invalid until that lane's princess tower falls
+                if (this.eng.t2L && this.eng.t2L.hp > 0) ctx.fillRect(0, 200, W / 2, RIV_Y - 200);
+                if (this.eng.t2R && this.eng.t2R.hp > 0) ctx.fillRect(W / 2, 200, W / 2, RIV_Y - 200);
 
-                // Bottom Right Enemy Side (Invalid if Right Tower alive)
-                if (this.eng.t2R && this.eng.t2R.hp > 0) {
-                    ctx.fillRect(W / 2, 200, W / 2, RIV_Y - 200); // Updated start to 200
-                }
+                // Tile grid + hovered-cell highlight for troops/buildings
+                if (this.eng.sel.t !== 2) this.drawPlacementGrid(this.eng.sel);
             } // Close Invalid Area Logic
 
             // Entity bodies are drawn below in layered passes
@@ -938,7 +935,7 @@ class Main {
 
             // Projectiles
             for (let p of this.eng.projs) {
-                if (p.isArrows) continue; // drawn as an arrow volley in drawProj (top layer)
+                if (p.isArrows || p.isSpellArc || p.isRolling) continue; // drawn in drawProj (top layer)
                 if (p.barrel) {
                     ctx.fillStyle = "#643200";
                 } else if (p.fireArea) {
@@ -1053,19 +1050,20 @@ class Main {
                     ctx.lineWidth = 1;
                 }
 
-                // Shadows
+                // Ground shadow for flying / jumping units (a flat ellipse on
+                // the unit's ground position, shrinking near a jump's apex).
                 if (e.fly || (e instanceof Troop && e.jp)) {
-                    let visualR = e.rad;
-                    let shadowOffset = 20;
+                    let baseR = (e instanceof Troop ? e.rad * 0.86 : e.rad);
+                    let shY = e.y + 8;
+                    let sx = baseR * 0.95, sy = baseR * 0.45;
                     if (e instanceof Troop && e.jp && e.jt) {
-                        let totalDist = e.jd;
-                        let currentDist = e.dist(e.jt);
-                        let progress = 1.0 - (currentDist / totalDist);
-                        let jumpHeight = 50.0 * Math.sin(progress * Math.PI);
-                        shadowOffset = jumpHeight + 10;
+                        let lift = Math.sin((1.0 - (e.dist(e.jt) / (e.jd || 1))) * Math.PI);
+                        shY = e.y;
+                        let shrink = 1 - 0.35 * lift;
+                        sx *= shrink; sy *= shrink;
                     }
-                    ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
-                    ctx.beginPath(); ctx.arc(e.x, e.y + shadowOffset, visualR, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = "rgba(0,0,0,0.22)";
+                    ctx.beginPath(); ctx.ellipse(e.x, shY, sx, sy, 0, 0, Math.PI * 2); ctx.fill();
                 }
             }
 
@@ -1244,28 +1242,22 @@ class Main {
 
         let x = e.x;
         let y = e.y;
-        let radius = e.rad;
+        // Sprite is drawn a little smaller than the hitbox so units keep a small
+        // gap instead of overlapping each other.
+        let radius = (e instanceof Troop) ? e.rad * 0.86 : e.rad;
 
-        // Visual Z-Index offset for flying
+        // Flying units float above their ground shadow (drawn in the shadow pass).
         if (e.fly) {
-            // Shadow (Higher up as requested)
-            ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
-            ctx.beginPath();
-            ctx.ellipse(e.x, e.y - 15, radius * 0.8, radius * 0.4, 0, 0, Math.PI * 2);
-            ctx.fill();
-
-            y -= 25;
+            y -= 22;
             radius *= 1.1;
         }
 
-        // Jump offset
+        // Jump offset (kept low — just enough to hop the river)
         if (e instanceof Troop && e.jp) {
             let jumpHeight = 0;
             if (e.jt) {
-                let totalDist = e.jd;
-                let currentDist = e.dist(e.jt);
-                let progress = 1.0 - (currentDist / totalDist);
-                jumpHeight = 50.0 * Math.sin(progress * Math.PI);
+                let progress = 1.0 - (e.dist(e.jt) / (e.jd || 1));
+                jumpHeight = 22.0 * Math.sin(progress * Math.PI);
             }
             y -= jumpHeight;
         }
@@ -1326,8 +1318,17 @@ class Main {
         if (e instanceof Tower) {
             // ROUNDED TOWER
             let r = e.rad; // use radius as half-width approx
-            // drawRoundRect expects x,y as top-left
-            this.drawRoundRect(x - r, y - r, r * 2, r * 2, 8, true, true); // 5px radius corner
+            this.drawRoundRect(x - r, y - r, r * 2, r * 2, 8, true, true);
+            // Cannon: a turret with a barrel aimed toward the enemy side.
+            let dir = (e.tm === 0) ? -1 : 1; // player towers aim up, enemy down
+            ctx.fillStyle = "#2e3033";
+            ctx.fillRect(x - 4, dir < 0 ? y - r - 11 : y + r - 1, 8, 12); // barrel
+            ctx.fillStyle = "#4a4e55";
+            ctx.beginPath(); ctx.arc(x, y, r * 0.52, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.lineWidth = 1.5; ctx.stroke();
+            ctx.fillStyle = "#26282c";
+            ctx.beginPath(); ctx.arc(x, y, r * 0.24, 0, Math.PI * 2); ctx.fill(); // muzzle
+            ctx.lineWidth = 1;
         } else if (e instanceof Building) {
             ctx.rect(x - radius, y - radius, radius * 2, radius * 2);
             ctx.fill();
@@ -1438,6 +1439,71 @@ class Main {
         ctx.fillRect(0, 0, W, RIV_Y - 15);
     }
 
+    // Troops/buildings deploy on a 30px tile grid (like the real game).
+    snapToGrid(x, y) {
+        const T = 30;
+        return { x: Math.floor(x / T) * T + T / 2, y: Math.floor(y / T) * T + T / 2 };
+    }
+
+    elixirColor(c) {
+        if (c <= 2) return "#3a8f5a";
+        if (c <= 4) return "#3a6f9f";
+        if (c <= 6) return "#6a4a9f";
+        return "#9f3a6a";
+    }
+
+    // A deck-builder card tile: elixir-tinted body, unit-color swatch, name,
+    // elixir badge, and a gold ring + check when it's in the deck.
+    drawDeckCard(cx, cy, w, h, c, selected) {
+        let base = this.elixirColor(c.c);
+        let g = ctx.createLinearGradient(0, cy, 0, cy + h);
+        g.addColorStop(0, this.shade(base, 0.13));
+        g.addColorStop(1, this.shade(base, -0.16));
+        ctx.fillStyle = g;
+        this.drawRoundRect(cx, cy, w, h, 10, true, false);
+
+        ctx.fillStyle = this.getUnitColor(c.n);
+        this.drawRoundRect(cx + 5, cy + 5, w - 10, 13, 5, true, false);
+
+        this.drawCenteredString(c.n, cx + w / 2, cy + h / 2 + 13, "bold 11px Arial", "white");
+        this.drawElixirCost(cx + 12, cy + 13, c.c);
+
+        if (selected) {
+            ctx.strokeStyle = "#ffd24d"; ctx.lineWidth = 3;
+            this.drawRoundRect(cx, cy, w, h, 10, false, false); ctx.stroke();
+            ctx.fillStyle = "#2ecc71";
+            ctx.beginPath(); ctx.arc(cx + w - 13, cy + 13, 9, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = "white"; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(cx + w - 17, cy + 13); ctx.lineTo(cx + w - 14, cy + 16); ctx.lineTo(cx + w - 9, cy + 9); ctx.stroke();
+            ctx.lineWidth = 1;
+        } else {
+            ctx.strokeStyle = "rgba(0,0,0,0.45)"; ctx.lineWidth = 1;
+            this.drawRoundRect(cx, cy, w, h, 10, false, false); ctx.stroke();
+        }
+    }
+
+    // Faint placement grid over the deployable region + the hovered cell tinted
+    // green (valid) or red (invalid).
+    drawPlacementGrid(sel) {
+        const T = 30;
+        ctx.strokeStyle = "rgba(255,255,255,0.10)";
+        ctx.lineWidth = 1;
+        for (let gx = T; gx < W; gx += T) { ctx.beginPath(); ctx.moveTo(gx, 200); ctx.lineTo(gx, H - 130); ctx.stroke(); }
+        for (let gy = 200; gy < H - 130; gy += T) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+
+        if (this.mouse.y < H - 130) {
+            let cx = Math.floor(this.mouse.x / T) * T, cy = Math.floor(this.mouse.y / T) * T;
+            let s = this.snapToGrid(this.mouse.x, this.mouse.y);
+            let valid = this.eng.isValid(s.y, s.x, sel, 0);
+            ctx.fillStyle = valid ? "rgba(80,220,120,0.35)" : "rgba(220,60,60,0.35)";
+            ctx.fillRect(cx, cy, T, T);
+            ctx.strokeStyle = valid ? "#4aff8a" : "#ff5a5a";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(cx, cy, T, T);
+            ctx.lineWidth = 1;
+        }
+    }
+
     drawBtn(rect, txt, color) {
         let isHover = this.contains(rect, this.mouse.x, this.mouse.y);
         let drawRect = { ...rect };
@@ -1522,6 +1588,7 @@ class Main {
 
     drawProj(p) {
         if (p.isArrows) { this.drawArrowsVolley(p); return; }
+        if (p.isSpellArc) { this.drawSpellArc(p); return; }
 
         let x = p.x;
         let y = p.y;
@@ -1530,28 +1597,39 @@ class Main {
         ctx.save();
         ctx.translate(x, y);
 
-        if (p.isLog || p.isRolling) {
-            // Rotate towards travel direction (target point relative to current pos)
-            let angle = Math.atan2(p.ty - y, p.tx - x);
-            ctx.rotate(angle);
-
-            // Draw Log
-            ctx.fillStyle = "#8B4513"; // SaddleBrown
-            let w = p.isLog ? 70 : 40;
-            let h = 20;
-            ctx.fillRect(-w / 2, -h / 2, w, h);
-
-            // Spikes
-            ctx.fillStyle = "#A9A9A9";
-            for (let i = -w / 2 + 5; i < w / 2; i += 10) {
-                ctx.beginPath();
-                ctx.arc(i, -h / 2, 3, 0, Math.PI, true);
-                ctx.fill();
-                ctx.beginPath();
-                ctx.arc(i, h / 2, 3, 0, Math.PI, false);
-                ctx.fill();
+        if (p.isLog) {
+            // Rolling log: long axis is horizontal (perpendicular to its vertical
+            // roll). Wood body with grain, end-rings and spikes.
+            let w = p.barbBarrelLog ? 46 : 72;
+            let h = 22;
+            let grad = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+            grad.addColorStop(0, "#a9763f");
+            grad.addColorStop(0.5, "#7c4a22");
+            grad.addColorStop(1, "#5c3416");
+            ctx.fillStyle = grad;
+            this.drawRoundRect(-w / 2, -h / 2, w, h, 9, true, false);
+            ctx.strokeStyle = "rgba(40,22,8,0.45)";
+            ctx.lineWidth = 1;
+            for (let gx = -w / 2 + 10; gx < w / 2 - 6; gx += 9) {
+                ctx.beginPath(); ctx.moveTo(gx, -h / 2 + 3); ctx.lineTo(gx, h / 2 - 3); ctx.stroke();
             }
-
+            for (const ex of [-w / 2 + 4, w / 2 - 4]) {
+                ctx.fillStyle = "#c79a63";
+                ctx.beginPath(); ctx.ellipse(ex, 0, 4, h / 2 - 2, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = "#6b4422";
+                ctx.beginPath(); ctx.ellipse(ex, 0, 2, h / 2 - 5, 0, 0, Math.PI * 2); ctx.stroke();
+            }
+            ctx.fillStyle = "#cfcfcf";
+            for (let i = -w / 2 + 9; i < w / 2 - 4; i += 11) {
+                ctx.beginPath(); ctx.moveTo(i, -h / 2); ctx.lineTo(i + 3, -h / 2 - 5); ctx.lineTo(i + 6, -h / 2); ctx.closePath(); ctx.fill();
+                ctx.beginPath(); ctx.moveTo(i, h / 2); ctx.lineTo(i + 3, h / 2 + 5); ctx.lineTo(i + 6, h / 2); ctx.closePath(); ctx.fill();
+            }
+        } else if (p.isRolling) {
+            // Bowler boulder
+            ctx.fillStyle = "#5a4a6a";
+            ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = "#2e2440"; ctx.lineWidth = 2; ctx.stroke();
+            ctx.lineWidth = 1;
         } else if (p.poison || p.graveyard || p.isHeal) {
             // Area effects
             ctx.fillStyle = p.isHeal ? "rgba(255, 255, 0, 0.3)" : (p.poison ? "rgba(255, 165, 0, 0.3)" : "rgba(128, 128, 128, 0.3)");
@@ -1577,6 +1655,43 @@ class Main {
             ctx.stroke();
         }
 
+        ctx.restore();
+    }
+
+    // A spell launched from the king tower, arcing to its target. Drawn raised
+    // by the arc height with a ground shadow — the gap shows how high it is.
+    drawSpellArc(p) {
+        let prog = p.totalDist ? 1 - Math.hypot(p.tx - p.x, p.ty - p.y) / p.totalDist : 0;
+        prog = Math.max(0, Math.min(1, prog));
+        let h = (p.arcMax || 100) * Math.sin(prog * Math.PI);
+
+        // Ground shadow at the projectile's ground position; shrinks while high.
+        let sr = Math.max(5, p.rad * 0.34) * (1 - 0.35 * Math.sin(prog * Math.PI));
+        ctx.fillStyle = "rgba(0,0,0,0.28)";
+        ctx.beginPath(); ctx.ellipse(p.x, p.y, sr, sr * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+
+        ctx.save();
+        ctx.translate(p.x, p.y - h);
+        const k = p.spellKind;
+        if (k === "arrows") {
+            ctx.rotate(0.5);
+            ctx.strokeStyle = "#6b4423"; ctx.lineWidth = 2;
+            for (let i = -4; i <= 4; i += 4) { ctx.beginPath(); ctx.moveTo(i, -8); ctx.lineTo(i, 8); ctx.stroke(); }
+            ctx.fillStyle = "#d9d9d9";
+            for (let i = -4; i <= 4; i += 4) { ctx.beginPath(); ctx.moveTo(i, 11); ctx.lineTo(i - 2, 7); ctx.lineTo(i + 2, 7); ctx.closePath(); ctx.fill(); }
+        } else if (k === "snowball") {
+            ctx.fillStyle = "#dff1ff"; ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = "#9cc6e8"; ctx.lineWidth = 1.5; ctx.stroke();
+        } else if (k === "rocket") {
+            ctx.fillStyle = "#d23b3b"; ctx.fillRect(-4, -10, 8, 16);
+            ctx.fillStyle = "#bbb"; ctx.beginPath(); ctx.moveTo(-4, -10); ctx.lineTo(0, -18); ctx.lineTo(4, -10); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = "#ffb13c"; ctx.beginPath(); ctx.arc(0, 9, 4, 0, Math.PI * 2); ctx.fill();
+        } else {
+            // fireball
+            ctx.fillStyle = "rgba(255,120,30,0.55)"; ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#ff7a1e"; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#ffd24d"; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
+        }
         ctx.restore();
     }
 

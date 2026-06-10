@@ -664,13 +664,30 @@ export default class GameEngine {
             let rad = shape && shape.type === 'circle' ? shape.val : 60;
             let dmg = c.d; // real Level 11 spell damage from the card table
 
-            let p = new Proj(x, y, x, y, null, 0, true, rad, dmg, tm, false);
-            if (c.n === "Zap") p.asStun();
-            if (c.n === "Vines") p.isRoot = true;
-            if (c.n === "Freeze") p.isFreeze = true;
-            if (c.n === "Fireball") p.hasKnockback = true;
-            if (c.n === "Arrows") p.asArrows();
-            this.projs.push(p);
+            // Thrown spells launch from the caster's king tower and arc to the
+            // target; speed/arc height depend on the spell.
+            const ARC = {
+                "Fireball": { spd: 9, arc: 130, kind: "fireball" },
+                "Arrows": { spd: 11, arc: 120, kind: "arrows" },
+                "Rocket": { spd: 7, arc: 160, kind: "rocket" },
+                "Giant Snowball": { spd: 10, arc: 110, kind: "snowball" }
+            };
+            if (ARC[c.n]) {
+                let kt = (tm === 0) ? this.t1K : this.t2K;
+                let cfg = ARC[c.n];
+                let p = new Proj(kt.x, kt.y, x, y, null, cfg.spd, false, rad, dmg, tm, false);
+                p.asSpellArc(cfg.arc, cfg.kind);
+                if (c.n === "Fireball") p.hasKnockback = true;
+                if (c.n === "Arrows") p.arrowBurst = true;
+                this.projs.push(p);
+            } else {
+                // Placed area spells (Zap, Freeze, Vines) drop directly on target.
+                let p = new Proj(x, y, x, y, null, 0, true, rad, dmg, tm, false);
+                if (c.n === "Zap") p.asStun();
+                if (c.n === "Vines") p.isRoot = true;
+                if (c.n === "Freeze") p.isFreeze = true;
+                this.projs.push(p);
+            }
         } else if (["Archers", "Spear Goblins", "Wall Breakers"].includes(c.n)) {
             this.ents.push(new Troop(tm, x - 15, y, c));
             this.ents.push(new Troop(tm, x + 15, y, c));

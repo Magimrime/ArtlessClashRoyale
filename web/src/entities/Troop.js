@@ -279,8 +279,13 @@ export default class Troop extends Entity {
             }
         }
 
-        // 1 & 2. Find Target
-        this.findTarget(g);
+        // Find target — throttled so units don't re-path every tick; re-scan
+        // immediately if the current target is gone.
+        if (this.retargetTimer === undefined) this.retargetTimer = 0;
+        if (--this.retargetTimer <= 0 || !this.currentTarget || this.currentTarget.hp <= 0) {
+            this.findTarget(g);
+            this.retargetTimer = 10;
+        }
 
         // Bridge Logic
         if (!this.fly && this.currentTarget) {
@@ -297,13 +302,14 @@ export default class Troop extends Entity {
                                 this.isCharging = false;
                                 this.distWalked = 0;
                             }
-                            let landingY = (this.y < RIV_Y) ? RIV_Y + 55 : RIV_Y - 55;
+                            // Land just past the far bank — only far enough to cross.
+                            let landingY = (this.y < RIV_Y) ? RIV_Y + 42 : RIV_Y - 42;
                             let angle = Math.atan2(this.currentTarget.y - this.y, this.currentTarget.x - this.x);
                             let dy = landingY - this.y;
                             let dx = 0;
                             if (Math.abs(Math.tan(angle)) > 0.1) dx = dy / Math.tan(angle);
-                            if (dx > 80) dx = 80;
-                            if (dx < -80) dx = -80;
+                            if (dx > 45) dx = 45;
+                            if (dx < -45) dx = -45;
 
                             this.jt = { x: this.x + dx, y: landingY, hp: 1 }; // Dummy target
                             this.jd = this.dist(this.jt);
@@ -650,62 +656,42 @@ export default class Troop extends Entity {
     }
 
     findTarget(g) {
-        // 1. Distraction Check
+        const towers = [g.t1L, g.t1R, g.t1K, g.t2L, g.t2R, g.t2K];
+
+        // Stick with a living, in-range enemy unit/building instead of re-picking
+        // every tick — this stops the jittery retargeting against still units.
+        let cur = this.currentTarget;
+        if (cur && cur.hp > 0 && cur.rad !== 0 && cur.tm !== this.tm &&
+            !towers.includes(cur) && !(cur.fly && !this.air) &&
+            this.dist(cur) < this.sightRange * 1.3) {
+            return;
+        }
+
+        // 1. Nearest valid distraction (enemy unit or building, not a crown tower)
         let distraction = null;
         let minDist = this.sightRange;
-
         for (let e of g.ents) {
-            if (e.tm !== this.tm && e.hp > 0) {
-                let isBldg = e.constructor.name === "Tower" || e.constructor.name === "Building";
-                if (this.c.t === 1 && !isBldg) continue;
-                // Fix: Check if target is flying and if I can attack air.
-                // this.air (from c.ar) dictates if I can attack air.
-                // If target flies (e.fly) and I CANNOT attack air (!this.air), skip.
-                if (e.fly && !this.air) continue;
-
-                let d = this.dist(e);
-                if (d < minDist) {
-                    minDist = d;
-                    distraction = e;
-                }
-            }
+            if (e.tm === this.tm || e.hp <= 0) continue;
+            if (e.constructor.name === "Tower") continue;
+            let isBldg = e.constructor.name === "Building";
+            if (this.c.t === 1 && !isBldg) continue; // building-targeters ignore units
+            if (e.fly && !this.air) continue;
+            let d = this.dist(e);
+            if (d < minDist) { minDist = d; distraction = e; }
         }
 
-        // 2. Primary Target Selection (Tower)
-        let primaryTarget = null;
-        if (this.tm === 0) {
-            if (g.t2L.hp > 0 && this.x < W / 2) primaryTarget = g.t2L;
-            else if (g.t2R.hp > 0 && this.x >= W / 2) primaryTarget = g.t2R;
-            else primaryTarget = g.t2K;
-        } else {
-            if (g.t1L.hp > 0 && this.x < W / 2) primaryTarget = g.t1L;
-            else if (g.t1R.hp > 0 && this.x >= W / 2) primaryTarget = g.t1R;
-            else primaryTarget = g.t1K;
-        }
+        // 2. Lane tower (primary objective)
+        let primaryTarget;
+        if (this.tm === 0) primaryTarget = (g.t2L.hp > 0 && this.x < W / 2) ? g.t2L : (g.t2R.hp > 0 && this.x >= W / 2) ? g.t2R : g.t2K;
+        else primaryTarget = (g.t1L.hp > 0 && this.x < W / 2) ? g.t1L : (g.t1R.hp > 0 && this.x >= W / 2) ? g.t1R : g.t1K;
 
         let newTarget = primaryTarget;
-        if (distraction) {
-            // Only switch to distraction if path is NOT blocked by friendly building
-            if (!this.checkPathBlocked(g, this.x, this.y, distraction.x, distraction.y)) {
-                newTarget = distraction;
-            }
+        if (distraction && !this.checkPathBlocked(g, this.x, this.y, distraction.x, distraction.y)) {
+            newTarget = distraction;
         }
-
-        if (!this.currentTarget || this.currentTarget.hp <= 0 || (this.currentTarget.rad === 0 && this.currentTarget !== primaryTarget)) {
+        if (newTarget !== this.currentTarget) {
             this.currentTarget = newTarget;
             this.currentWaypoint = null;
-        } else {
-            if (distraction && distraction !== this.currentTarget) {
-                this.currentTarget = distraction;
-                this.currentWaypoint = null;
-            } else if (this.currentTarget === distraction) {
-                // Keep
-            } else {
-                if (primaryTarget !== this.currentTarget && !distraction) {
-                    this.currentTarget = primaryTarget;
-                    this.currentWaypoint = null;
-                }
-            }
         }
     }
 

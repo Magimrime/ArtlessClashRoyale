@@ -7,6 +7,7 @@ export default class EnemyAI {
         this.g = g;
         this.p = g.p2;
         this.aiTick = 0;
+        this.actCd = 0; // ticks until the AI may act again
     }
 
     generateDeck() {
@@ -87,64 +88,118 @@ export default class EnemyAI {
     update() {
         if (this.g.over) return;
         this.aiTick++;
+        if (this.aiTick < 120) return;            // brief opening pause
+        if (this.actCd > 0) { this.actCd--; return; }
 
-        // Initial Delay
-        if (this.aiTick < 60) return;
+        const mode = this.computeMode();
+        const threats = this.getThreats();
 
+        // 1) Defend genuine threats first.
+        if (threats.length > 0 && this.p.elx >= 2) {
+            if (this.defend(threats, mode)) { this.actCd = 22; return; }
+        }
+        // 2) Spend spells on value (clusters) or chip the weak tower when ahead.
+        if (this.castValueSpell(mode)) { this.actCd = 28; return; }
+        // 3) Offense, gated by mode/elixir.
+        if (this.p.elx >= (mode === 'pressure' ? 6 : 9)) {
+            if (this.buildPush(mode === 'pressure')) { this.actCd = 38; return; }
+        }
+        // 4) Avoid leaking at max elixir.
+        if (this.p.elx >= 9.7) { this.cycle(); this.actCd = 18; }
+    }
 
+    // Strategy mode from the tower score: ahead -> pressure, behind -> defend.
+    // This is how the AI decides to go for crowns vs. protect once a tower falls.
+    computeMode() {
+        const g = this.g;
+        const myDown = (g.t2L.hp <= 0 ? 1 : 0) + (g.t2R.hp <= 0 ? 1 : 0);
+        const plDown = (g.t1L.hp <= 0 ? 1 : 0) + (g.t1R.hp <= 0 ? 1 : 0);
+        if (plDown > myDown) return 'pressure';   // push for the 2nd / 3rd crown
+        if (myDown > plDown) return 'defend';      // protect the king tower
+        return 'balanced';
+    }
 
+    // Player troops on our half / crossing, most dangerous (closest) first.
+    getThreats() {
+        return this.g.ents
+            .filter(e => e.tm === 0 && e instanceof Troop && e.hp > 0 && e.y < 520)
+            .sort((a, b) => a.y - b.y);
+    }
 
-        // Elixir Management - Don't leak unless waiting (handled by handleFullElixir)
-        if (this.p.elx >= 9.5) {
-            this.handleFullElixir();
-            // Return if handled to avoid logic conflict
+    affordable() { return this.p.h.filter(c => c.c <= this.p.elx); }
+
+    defend(threats, mode) {
+        const threat = threats[0];
+        const counter = this.pickCounter(threat);
+        if (!counter) return false;
+
+        let playX = Math.max(40, Math.min(500, threat.x));
+        let playY = Math.max(70, threat.y - 110);
+        if (counter.tags.includes("Building")) { playX = 270; playY = 150; }
+        else if (counter.t === 2) { playX = threat.x; playY = threat.y; }
+        else if (counter.tags.includes("Swarm")) { playY = threat.y - 45; }
+        else if (counter.tags.includes("DamageDealer")) { playY = threat.y - 70; }
+
+        // Kite a win-condition: drop a cheap swarm toward our centre so the
+        // win-con chases the bait across, away from the tower.
+        if (threat.tags.includes("WinCon") && counter.t !== 2 && counter.tags.includes("Swarm")) {
+            playX = 270 + (threat.x < 270 ? 40 : -40);
+            playY = 210;
         }
 
-        // Defensive Logic - Analyze Threats
-        // Filter threats: Player troops on our side or menacingly close (bridge)
-        let threats = this.g.ents.filter(e => e.tm === 0 && e instanceof Troop);
-        // Sort threats by "danger" (closer to tower = more dangerous)
-        threats.sort((a, b) => a.y - b.y); // Higher Y = closer to enemy tower (at top)
+        if (this.g.isValid(playY, playX, counter, 1)) { this.playAI(counter, playX, playY); return true; }
+        return false;
+    }
 
-        if (threats.length > 0) {
-            // Pick most dangerous threat
-            let primaryThreat = threats[0];
+    // Densest knot of player troops (used to decide if a spell is worth it).
+    cluster(rad) {
+        const troops = this.g.ents.filter(e => e.tm === 0 && e instanceof Troop);
+        let best = null;
+        for (const a of troops) {
+            const count = troops.filter(b => Math.hypot(a.x - b.x, a.y - b.y) < rad).length;
+            if (!best || count > best.count) best = { x: a.x, y: a.y, count };
+        }
+        return best;
+    }
 
-            // Do we have enough elixir to counter?
-            // Simple heuristic to not dump elixir on small threats if low
-            if (this.p.elx >= 2) {
-                let counter = this.pickCounter(primaryThreat);
-                if (counter) {
-                    // Logic for placement
-                    let playX = primaryThreat.x;
-                    let playY = primaryThreat.y - 120; // Default defensive planting 
-
-                    // Adjust placement based on counter type
-                    if (counter.tags.includes("Building")) {
-                        playX = 540 / 2; // Pull to center
-                        playY = 150;
-                    } else if (counter.tags.includes("Spell")) {
-                        playX = primaryThreat.x;
-                        playY = primaryThreat.y;
-                    } else if (counter.tags.includes("Swarm")) {
-                        playY = primaryThreat.y - 50; // Surround/On top
-                    } else if (counter.tags.includes("DamageDealer") && primaryThreat.tags.includes("Tank")) {
-                        playY = primaryThreat.y - 80; // DPS down
-                    }
-
-                    if (this.g.isValid(playY, playX, counter, 1)) {
-                        this.playAI(counter, playX, playY);
-                        return; // Action taken
-                    }
-                }
+    castValueSpell(mode) {
+        // Damage spell on a tight cluster of player troops.
+        const dmg = this.affordable().find(c => ["Fireball", "Arrows", "Poison"].includes(c.n));
+        if (dmg) {
+            const cl = this.cluster(dmg.n === "Poison" ? 95 : 70);
+            if (cl && cl.count >= 3) { this.playAI(dmg, cl.x, cl.y); return true; }
+        }
+        // When ahead, chip the weaker standing player tower with a spell win-con
+        // (Graveyard / Goblin Barrel onto a princess tower).
+        if (mode === 'pressure') {
+            const ts = this.affordable().find(c => ["Graveyard", "Goblin Barrel"].includes(c.n));
+            if (ts && this.p.elx >= ts.c + 1) {
+                const g = this.g;
+                let t;
+                if (g.t1L.hp > 0 && g.t1R.hp > 0) t = g.t1L.hp < g.t1R.hp ? g.t1L : g.t1R;
+                else t = g.t1L.hp > 0 ? g.t1L : (g.t1R.hp > 0 ? g.t1R : g.t1K);
+                if (t && t.hp > 0) { this.playAI(ts, t.x, t.y); return true; }
             }
         }
+        return false;
+    }
 
-        // Offensive Logic - If no immediate high-priority threats
-        // Build a push if high elixir
-        if (this.p.elx >= 8) {
-            this.playOffensivePush();
-        }
+    buildPush(aggressive) {
+        const g = this.g;
+        const lane = (g.t1L.hp <= 0) ? 0 : (g.t1R.hp <= 0) ? 1 : (Math.random() > 0.5 ? 0 : 1);
+        const laneX = lane === 0 ? 130 : 410;
+        const tank = this.p.h.find(c => c.tags.includes("Tank") && c.c <= this.p.elx);
+        if (tank) { this.playAI(tank, laneX, 30); return true; }
+        const win = this.p.h.find(c => c.tags.includes("WinCon") && c.t !== 2 && c.c <= this.p.elx);
+        if (win) { this.playAI(win, laneX, this.g.RIV_Y - 70); return true; }
+        const support = this.p.h.find(c => c.t === 0 && (c.rn > 60 || c.tags.includes("AOE")) && c.c <= this.p.elx);
+        if (aggressive && support) { this.playAI(support, laneX, 60); return true; }
+        return false;
+    }
+
+    cycle() {
+        const c = this.p.h.find(c => c.t !== 2 && c.t !== 3 && c.c <= this.p.elx);
+        if (c) this.playAI(c, Math.random() > 0.5 ? 130 : 410, 40);
     }
 
     pickCounter(threat) {
@@ -199,41 +254,6 @@ export default class EnemyAI {
         return available.sort((a, b) => a.c - b.c)[0];
     }
 
-    playOffensivePush() {
-        // High Cost Card Logic (6+) -> Play in back
-        let highCost = this.p.h.find(c => c.c >= 6);
-        if (highCost) {
-            let laneX = (Math.random() > 0.5) ? 100 : 440;
-            this.playAI(highCost, laneX, 20); // Back
-            return;
-        }
-
-        // Win Condition Push
-        let winCon = this.p.h.find(c => c.tags && c.tags.includes("WinCon"));
-        if (winCon) {
-            let laneX = (Math.random() > 0.5) ? 100 : 440;
-            this.playAI(winCon, laneX, 100); // Bridge/near
-            // Support will be handled in next ticks by reacting to the push or generic support logic
-            return;
-        }
-
-        // Generic Tank in back
-        let tank = this.p.h.find(c => c.tags && c.tags.includes("Tank"));
-        if (tank) {
-            let laneX = (Math.random() > 0.5) ? 100 : 440;
-            this.playAI(tank, laneX, 20);
-            return;
-        }
-
-        // Cycle
-        this.handleFullElixir();
-    }
-
-    getTankInHand() { return this.p.h.find(c => c.hp > 2000 && c.t === 1); }
-    getTankOnField() { return this.g.ents.find(e => e.tm === 1 && e.hp > 1000 && e instanceof Troop); }
-    getSupportCard() { return this.p.h.find(c => (c.rn > 3 || c.ar) && c.c <= 5); }
-    getAICard(name) { return this.p.h.find(c => c.n === name); }
-
     playAI(c, x, y) {
         if (c.t !== 2 && c.n !== "Goblin Barrel" && y > 400 - 40) return;
         this.p.elx -= c.c;
@@ -244,83 +264,6 @@ export default class EnemyAI {
             this.p.h.splice(idx, 1);
             this.p.pile.push(c);
             this.p.h.push(this.p.pile.shift());
-        }
-    }
-
-    handleFullElixir() {
-        // If player has units on board, standard defense logic (above) or force play logic will handle it
-        let playerHasUnits = this.g.ents.some(e => e.tm === 0 && e instanceof Troop);
-
-        if (!playerHasUnits) {
-            // Player is passive.
-            // 5% chance per tick to act when full
-            if (Math.random() < 0.05) {
-                let r = Math.random();
-                if (r < 0.4) {
-                    this.playCycleCard();
-                } else if (r < 0.7) {
-                    this.playTankInBack();
-                } else {
-                    // Do nothing (wait), effectively leaking.
-                }
-            }
-        } else {
-            // Player has units. We should respond.
-            let threat = this.g.ents.find(e => e.tm === 0 && e instanceof Troop);
-            let laneX = (threat && threat.x < 540 / 2) ? 540 / 4 : 540 * 3 / 4; // Match lane
-
-            // Try to play something in that lane
-            let c = this.p.h.find(c => c.c <= this.p.elx && c.t !== 2 && c.t !== 3);
-            if (c) {
-                this.playAI(c, laneX, 100);
-            } else {
-                this.forcePlay();
-            }
-        }
-    }
-
-    playCycleCard() {
-        let cycle = this.p.h.find(c => c.c <= 3 && c.t !== 2); // Cheap troop
-        if (cycle) {
-            let x = (Math.random() > 0.5) ? 540 / 4 : 540 * 3 / 4;
-            this.playAI(cycle, x, 50); // In back
-        } else {
-            this.forcePlay();
-        }
-    }
-
-    playTankInBack() {
-        let tank = this.p.h.find(c => c.hp > 1000 && c.t === 1);
-        if (tank && tank.c <= this.p.elx) {
-            let x = (Math.random() > 0.5) ? 540 / 4 : 540 * 3 / 4;
-            this.playAI(tank, x, 20); // Way back
-        } else {
-            this.playCycleCard();
-        }
-    }
-
-    forcePlay() {
-        for (let c of this.p.h) {
-            if (c.t !== 2 && c.c <= this.p.elx) {
-                let playX = 540 / 2 + (Math.random() > 0.5 ? 50 : -50);
-                let playY = 100;
-                if (c.t === 1 && c.hp > 1000) playY = 50;
-                else if (c.t === 1) playY = 400 - 60; // RIV_Y - 60
-
-                if (this.g.isValid(playY, playX, c, 1)) {
-                    this.playAI(c, playX, playY);
-                    return;
-                }
-            }
-        }
-        // Spell dump
-        for (let c of this.p.h) {
-            if (c.t === 2 && c.c <= this.p.elx) {
-                let target = (this.g.t1L.hp > 0) ? this.g.t1L : this.g.t1R;
-                if (target.hp <= 0) target = this.g.t1K;
-                this.playAI(c, target.x, target.y);
-                return;
-            }
         }
     }
 }
