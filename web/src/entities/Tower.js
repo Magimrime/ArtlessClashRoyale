@@ -3,8 +3,9 @@ import Proj from './Proj.js';
 
 export default class Tower extends Entity {
     constructor(t, x, y, k) {
-        // Real Level 11 crown-tower hitpoints (King 6144, Princess 3584).
-        super(0, t, x, y, k ? 6144 : 3584, k ? 25 : 20, 10000, false, true);
+        // Real Level 11 crown-tower hitpoints (King 4824, Princess 3052).
+        // Larger footprint so towers read as solid structures.
+        super(0, t, x, y, k ? 4824 : 3052, k ? 33 : 28, 10000, false, true);
         this.kg = k; // King Tower?
         this.actv = !k; // Active?
         this.cd = 0; // Cooldown
@@ -29,9 +30,10 @@ export default class Tower extends Entity {
             if (d < bestD) { bestD = d; best = e; }
         }
         if (best) {
-            // Real Level 11 crown-tower hit: 128 damage every 0.8s (48 ticks).
-            g.projs.push(new Proj(this.x, this.y, best.x, best.y, best, 10, false, 4, 128, this.tm, false));
-            this.cd = 48;
+            // Real Level 11 crown-tower hit: 109 damage. Princess hits every 0.8s
+            // (48 ticks), King every 1.0s (60 ticks).
+            g.projs.push(new Proj(this.x, this.y, best.x, best.y, best, 10, false, 4, 109, this.tm, false));
+            this.cd = this.kg ? 60 : 48;
         }
     }
 }

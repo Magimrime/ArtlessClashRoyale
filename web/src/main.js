@@ -92,7 +92,7 @@ class Main {
         this.enteredCode = "";
 
         this.cardRects = [];
-        this.nextCardRect = { x: W - 60, y: H - 105, w: 60, h: 105 };
+        this.nextCardRect = { x: W - 60, y: H - 135, w: 60, h: 125 };
         this.cardOffsets = [0, 0, 0, 0]; // For hover animation
 
         this.init();
@@ -128,11 +128,11 @@ class Main {
             })
             .catch(() => { });
 
-        let cardPanelY = H - 100;
+        let cardPanelY = H - 135;            // moved up — bigger card area, less dead space
         let cardAreaW = W - 60;
         let cardW = (cardAreaW - 30) / 4;
         for (let i = 0; i < 4; i++) {
-            this.cardRects.push({ x: 6 + i * (cardW + 6), y: cardPanelY, w: cardW, h: 95 });
+            this.cardRects.push({ x: 6 + i * (cardW + 6), y: cardPanelY, w: cardW, h: 125 });
         }
 
         canvas.width = W;
@@ -395,7 +395,7 @@ class Main {
                 }
             }
         } else if (this.state === State.PLAY) {
-            if (y > H - 130) {
+            if (y > H - 165) {
                 if (this.eng.p1) {
                     for (let i = 0; i < 4; i++) {
                         if (i < this.eng.p1.h.length) {
@@ -413,17 +413,18 @@ class Main {
                     rx = s.x; ry = s.y;
                 }
 
-                if (this.eng.isMultiplayer) {
-                    // Send Spawn Request via MP
-                    if (this.eng.sel) {
-                        let myTeam = this.mp.isHost ? 0 : 1;
-                        this.mp.sendSpawnRequest(this.eng.sel.n, rx, ry, myTeam);
-                        this.eng.sel = null;
-                    }
-                } else {
-                    // Singleplayer
-                    if (this.eng.sel) {
-                        this.eng.spawn(rx, ry);
+                if (this.eng.sel) {
+                    // Only place (and clear the selection) if it's actually placeable
+                    // here AND affordable; otherwise keep the card picked.
+                    let sel = this.eng.sel;
+                    let cost = (sel.n === "Mirror" && this.eng.p1.lastPlayedCard) ? this.eng.p1.lastPlayedCard.c + 1 : sel.c;
+                    let placeable = this.eng.p1.elx >= cost && this.eng.isValid(ry, rx, sel, 0);
+                    if (placeable) {
+                        if (this.eng.isMultiplayer) {
+                            this.mp.sendSpawnRequest(sel.n, rx, ry, this.mp.isHost ? 0 : 1);
+                        } else {
+                            this.eng.spawn(rx, ry);
+                        }
                         this.eng.sel = null;
                     }
                 }
@@ -813,21 +814,13 @@ class Main {
             return;
         }
 
-        // River with muddy banks (solid water, no gradient)
-        ctx.fillStyle = "#6b4a2a";
-        ctx.fillRect(0, RIV_Y - 18, W, 36);
+        // River — solid water, no lines/ripples.
         ctx.fillStyle = "#3a8fd0";
-        ctx.fillRect(0, RIV_Y - 14, W, 28);
-        // Wooden bridges with planks
+        ctx.fillRect(0, RIV_Y - 16, W, 32);
+        // Bridges — solid wood, no plank lines.
+        ctx.fillStyle = "#9c6b3a";
         for (const bx of [W / 4, W * 3 / 4]) {
-            ctx.fillStyle = "#9c6b3a";
             ctx.fillRect(bx - 26, RIV_Y - 20, 52, 40);
-            ctx.strokeStyle = "rgba(60,35,15,0.55)";
-            ctx.lineWidth = 2;
-            for (let py = RIV_Y - 16; py <= RIV_Y + 18; py += 8) {
-                ctx.beginPath(); ctx.moveTo(bx - 26, py); ctx.lineTo(bx + 26, py); ctx.stroke();
-            }
-            ctx.lineWidth = 1;
         }
 
         // Render Game during COUNTDOWN (CNT) or PLAY
@@ -850,7 +843,7 @@ class Main {
             // (shadows/effects -> ground units -> projectiles -> flying units).
 
             // HOVER PREVIEW (Ghost Unit & Range)
-            if ((this.state === State.PLAY || this.state === State.CNT) && this.eng.sel && this.mouse.y < H - 120) {
+            if ((this.state === State.PLAY || this.state === State.CNT) && this.eng.sel && this.mouse.y < H - 165) {
                 let c = this.eng.sel;
                 let spellShape = this.eng.getSpellRadius(c);
                 let canAfford = this.eng.p1.elx >= c.c;
@@ -862,8 +855,11 @@ class Main {
                     // Animated Dashed Border Style
                     let time = Date.now() / 50; // Speed of animation
 
-                    ctx.fillStyle = canAfford ? "rgba(255, 255, 255, 0.2)" : "rgba(100, 100, 100, 0.2)";
-                    ctx.strokeStyle = "white"; // Always white for visibility
+                    // Rolling spells (Log / Barb Barrel) turn RED where they can't be placed.
+                    let rollValid = !["The Log", "Barbarian Barrel"].includes(c.n) || this.eng.isValid(gm.y, gm.x, c, 0);
+                    let ghostFill = !rollValid ? "rgba(255,70,70,0.3)" : (canAfford ? "rgba(255, 255, 255, 0.2)" : "rgba(100, 100, 100, 0.2)");
+                    ctx.fillStyle = ghostFill;
+                    ctx.strokeStyle = rollValid ? "white" : "#ff5a5a";
                     ctx.lineWidth = 3;
                     ctx.setLineDash([10, 10]);
                     ctx.lineDashOffset = -time; // Animate march
@@ -884,7 +880,7 @@ class Main {
 
                         // Also fill rect for body width
                         let w = (c.n === "The Log") ? 70 : 44;
-                        ctx.fillStyle = canAfford ? "rgba(255, 255, 255, 0.2)" : "rgba(100, 100, 100, 0.2)";
+                        ctx.fillStyle = ghostFill;
                         ctx.fillRect(gm.x - w / 2, ey, w, dist);
                     } else if (spellShape.type === 'circle') {
                         ctx.beginPath();
@@ -915,7 +911,7 @@ class Main {
                     let snap = this.snapToGrid(this.mouse.x, this.mouse.y);
                     let gx = snap.x, gy = snap.y;
                     let range = c.rn || 0;
-                    let valid = canAfford && this.eng.isValid(gy, gx, c, 0) && this.mouse.y < H - 130;
+                    let valid = canAfford && this.eng.isValid(gy, gx, c, 0) && this.mouse.y < H - 165;
                     let col = valid ? this.getUnitColor(c.n) : "#8a8a8a";
                     let outline = valid ? "#ffffff" : "#ff6a6a";
 
@@ -944,7 +940,7 @@ class Main {
 
             // Projectiles
             for (let p of this.eng.projs) {
-                if (p.isArrows || p.isSpellArc || p.isRolling || p.isSpellDrop) continue; // drawn in drawProj (top layer)
+                if (p.isArrows || p.isSpellArc || p.isRolling || p.isSpellDrop || p.isVines) continue; // drawn in drawProj (top layer); Vines is invisible
                 if (p.barrel) {
                     ctx.fillStyle = "#643200";
                 } else if (p.fireArea) {
@@ -964,6 +960,13 @@ class Main {
                         ctx.fillStyle = p.flashCol === "#cfeeff" ? "#eaf7ff" : "yellow";
                         ctx.beginPath(); ctx.arc(p.x, p.y, size / 4, 0, Math.PI * 2); ctx.fill();
                     }
+                } else if (p.isCannonball) {
+                    // Royal Giant: a heavy dark cannonball with a highlight.
+                    ctx.fillStyle = "#2b2b2b";
+                    ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = "#5a5a5a";
+                    ctx.beginPath(); ctx.arc(p.x - 2, p.y - 2, 2.5, 0, Math.PI * 2); ctx.fill();
+                    continue;
                 } else if (p.isHeal) {
                     ctx.fillStyle = "rgba(0, 255, 0, 0.6)";
                 } else if (p.redArea) {
@@ -1010,27 +1013,36 @@ class Main {
                 }
 
                 if (p.chainTargets) {
-                    ctx.strokeStyle = "cyan";
-                    ctx.beginPath();
+                    // Blue electric bolt between chained targets: mostly a straight
+                    // line with a small, static jagged edge (no wiggle).
+                    ctx.lineCap = "round";
                     for (let i = 0; i < p.chainTargets.length - 1; i++) {
-                        let e1 = p.chainTargets[i];
-                        let e2 = p.chainTargets[i + 1];
-                        if (e1 && e2) {
-                            ctx.moveTo(e1.x, e1.y);
-                            ctx.lineTo(e2.x, e2.y);
+                        let a = p.chainTargets[i], b = p.chainTargets[i + 1];
+                        if (!a || !b) continue;
+                        let dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+                        let nx = -dy / len, ny = dx / len;
+                        const segs = 4;
+                        const pts = [];
+                        for (let s = 0; s <= segs; s++) {
+                            let f = s / segs;
+                            // small fixed zig-zag (alternating), zero at the endpoints
+                            let jit = (s === 0 || s === segs) ? 0 : (s % 2 === 0 ? 2.5 : -2.5);
+                            pts.push([a.x + dx * f + nx * jit, a.y + dy * f + ny * jit]);
                         }
+                        ctx.strokeStyle = "#4f9bff"; ctx.lineWidth = 3;
+                        ctx.beginPath(); pts.forEach((q, k) => k ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
+                        ctx.strokeStyle = "#e6f3ff"; ctx.lineWidth = 1;
+                        ctx.beginPath(); pts.forEach((q, k) => k ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
                     }
-                    ctx.stroke();
+                    ctx.lineCap = "butt"; ctx.lineWidth = 1;
                 }
             }
 
             // Entities (Shadows/Effects first)
             for (let e of this.eng.ents) {
                 if (e instanceof Troop) {
-                    if (e.chargeT > 0) {
-                        ctx.fillStyle = `rgba(100, 200, 255, ${0.6 + 0.2 * Math.sin(e.chargeT * 0.2)})`;
-                        let r = e.rad + 5;
-                        ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI * 2); ctx.stroke();
+                    if ((e.c.n === "Sparky" || e.c.n === "Zappies") && e.chargeT > 0) {
+                        this.drawCharge(e);
                     }
                     if (e.c.n === "Electro Giant") {
                         ctx.strokeStyle = "rgba(0, 255, 255, 0.4)";
@@ -1067,18 +1079,18 @@ class Main {
                 // feet; fliers float above a smaller one; a jumper's shadow
                 // shrinks toward the apex.
                 if (e instanceof Troop || e instanceof Building) {
-                    let baseR = e.rad * 0.82;
+                    let baseR = e.rad * 0.88;
                     if (e.fly) {
-                        // Larger, rounder shadow for airborne units.
+                        // Perfect-circle shadow for airborne units.
                         ctx.fillStyle = "rgba(0,0,0,0.18)";
-                        ctx.beginPath(); ctx.ellipse(e.x, e.y + 4, baseR * 1.05, baseR * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+                        ctx.beginPath(); ctx.arc(e.x, e.y + 4, baseR * 0.85, 0, Math.PI * 2); ctx.fill();
                     } else if (e instanceof Troop && e.jp && e.jt) {
                         let s = 1 - 0.4 * Math.sin((1.0 - (e.dist(e.jt) / (e.jd || 1))) * Math.PI);
                         ctx.fillStyle = "rgba(0,0,0,0.18)";
-                        ctx.beginPath(); ctx.ellipse(e.x, e.y + baseR * 0.5, baseR * 0.85 * s, baseR * 0.33 * s, 0, 0, Math.PI * 2); ctx.fill();
+                        ctx.beginPath(); ctx.arc(e.x, e.y + baseR * 0.5, baseR * 0.6 * s, 0, Math.PI * 2); ctx.fill();
                     } else {
                         ctx.fillStyle = "rgba(0,0,0,0.20)";
-                        ctx.beginPath(); ctx.ellipse(e.x, e.y + baseR * 0.5, baseR * 0.85, baseR * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+                        ctx.beginPath(); ctx.arc(e.x, e.y + baseR * 0.5, baseR * 0.6, 0, Math.PI * 2); ctx.fill();
                     }
                 }
             }
@@ -1100,15 +1112,20 @@ class Main {
                 }
             }
 
-            // Draw Entities
+            // Layered draw order (bottom → top): ground units/towers, then flying
+            // units above them, then deploy clocks, and finally spells on the very
+            // top. (Anything airborne — a jumping unit, the goblin barrel — already
+            // has fly set, so it renders in the flying layer.)
             for (let e of this.eng.ents) if (!e.fly) this.drawEntityBody(e);
+            for (let e of this.eng.ents) if (e.fly) this.drawEntityBody(e);
 
-            // Draw Projectiles
+            // Deploy-time clocks (one per card, above the units)
+            this.drawDeploys();
+
+            // Spells (arcs, arrow volleys, sky strikes, barrels) on the top layer.
             if (this.eng.projs) {
                 for (let p of this.eng.projs) this.drawProj(p);
             }
-
-            for (let e of this.eng.ents) if (e.fly) this.drawEntityBody(e);
 
             // Status Effects
             for (let e of this.eng.ents) {
@@ -1143,7 +1160,7 @@ class Main {
                 this.drawRoundRect(-12, H - 138, W + 24, 150, 16, true, false);
 
                 // Elixir bar (rounded, solid, pip ticks)
-                const ebX = 10, ebY = H - 130, ebW = W - 20, ebH = 22;
+                const ebX = 10, ebY = H - 160, ebW = W - 20, ebH = 22;
                 ctx.fillStyle = "#2a1430";
                 this.drawRoundRect(ebX, ebY, ebW, ebH, 11, true, false);
                 let elxPct = Math.max(0, Math.min(1, this.eng.p1.elx / 10.0));
@@ -1258,7 +1275,7 @@ class Main {
         let y = e.y;
         // Sprite is drawn smaller than the collision/hitbox radius so units keep
         // a gap instead of clipping into each other and the towers.
-        let radius = e.rad * 0.82;
+        let radius = e.rad * 0.88;
 
         // Flying units float above their ground shadow (drawn in the shadow pass).
         if (e.fly) {
@@ -1274,6 +1291,13 @@ class Main {
                 jumpHeight = 22.0 * Math.sin(progress * Math.PI);
             }
             y -= jumpHeight;
+        }
+
+        // Spirit hop onto the enemy — arc up (the ground shadow stays put, showing
+        // it's airborne) then explode on landing.
+        if (e instanceof Troop && e.sjT > 0) {
+            let prog = 1 - e.sjT / (e.sjMax || 1);
+            y -= 20 * Math.sin(prog * Math.PI);
         }
 
         // Electric Aura (Blue, Flickering)
@@ -1325,6 +1349,9 @@ class Main {
             else if (e.sl > 0) color = "#9ad2f5";
         }
 
+        // While deploying, the body is a touch translucent (the per-card clock
+        // indicator is drawn separately, once per card — see drawDeploys).
+        ctx.globalAlpha = (e instanceof Troop && e.deployTime > 0) ? 0.75 : 1;
         ctx.fillStyle = color;
         ctx.strokeStyle = "rgba(0,0,0,0.3)"; // soft outline, not harsh black
         ctx.lineWidth = 1.5;
@@ -1350,7 +1377,26 @@ class Main {
             ctx.fill();
             ctx.stroke();
         }
+        ctx.globalAlpha = 1;
         ctx.lineWidth = 1;
+
+        // Vined: a simple green ring that gently pulses (no movement) + a few
+        // small static tendrils.
+        if (e instanceof Troop && e.vinedTime > 0) {
+            let pulse = 0.55 + 0.4 * Math.sin(Date.now() / 200);
+            ctx.strokeStyle = `rgba(95,211,90,${pulse})`;
+            ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.arc(x, y, radius + 3, 0, Math.PI * 2); ctx.stroke();
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 4; i++) {
+                let a = i * Math.PI / 2 + Math.PI / 4;
+                ctx.beginPath();
+                ctx.moveTo(x + Math.cos(a) * (radius + 1), y + Math.sin(a) * (radius + 1));
+                ctx.lineTo(x + Math.cos(a) * (radius + 6), y + Math.sin(a) * (radius + 6));
+                ctx.stroke();
+            }
+            ctx.lineWidth = 1;
+        }
 
 
         // Health bar — its COLOR is the only friend/foe indicator
@@ -1397,7 +1443,7 @@ class Main {
             "Mini PEKKA": "#5566a0", "Skeletons": "#e6e3d3", "Skeleton Army": "#e6e3d3",
             "Musketeer": "#7c8fc7", "Mega Knight": "#6b5b8a", "P.E.K.K.A": "#4b4f86",
             "Barbarians": "#d8a24e", "Fire Spirit": "#ff7a3c", "Ice Spirit": "#9ddcef",
-            "Electro Spirit": "#ffe14d", "Heal Spirit": "#76d98a", "Minions": "#356b6b",
+            "Electro Spirit": "#4f9bff", "Heal Spirit": "#76d98a", "Minions": "#356b6b",
             "Goblins": "#79b44a", "Spear Goblins": "#8cc04f", "Bats": "#6a4a78",
             "Wizard": "#ff7043", "Witch": "#8e4fb0", "Mega Minion": "#2f4f6e",
             "Minion Horde": "#356b6b", "Baby Dragon": "#79c267", "Inferno Dragon": "#ff5a2c",
@@ -1408,8 +1454,8 @@ class Main {
             "Prince": "#f1c64a", "Mother Witch": "#7a3f9c", "Royal Recruits": "#b9a06a",
             "Dark Prince": "#4a3f5a", "Ice Golem": "#a9dcef", "Cannon": "#6b7079",
             "Inferno Tower": "#b5563a", "Elixir Collector": "#c46fb0", "Crate": "#9c7b4a",
-            "Golemite": "#8a6a4a", "Lava Pup": "#ff8a4c", "Elixir Golemite": "#d56ab5",
-            "Elixir Blob": "#d56ab5", "Cursed Hog": "#8e4fb0"
+            "Golemite": "#8a8a8a", "Lava Pup": "#ff8a4c", "Elixir Golemite": "#d56ab5",
+            "Elixir Blob": "#d56ab5", "Cursed Hog": "#8e4fb0", "Golem": "#8a8a8a"
         };
         return C[name] || "#b9b1a0";
     }
@@ -1434,33 +1480,36 @@ class Main {
         this.paintBg("#3a9d5e");
     }
 
-    // Flat grass arena (no gradient); faintly darken the enemy half for orientation.
+    // Clean grass arena (no gradients): subtle mowed bands and a cooler tint on
+    // the enemy half for orientation.
     arenaGrass() {
         this.paintBg("#5cb356");
-        ctx.fillStyle = "rgba(0,0,0,0.05)";
+        ctx.fillStyle = "rgba(255,255,255,0.025)";
+        for (let gy = 0; gy < H - 165; gy += 60) ctx.fillRect(0, gy, W, 30);
+        ctx.fillStyle = "rgba(20,45,75,0.06)";
         ctx.fillRect(0, 0, W, RIV_Y - 15);
     }
 
     // Troops/buildings deploy on a 30px tile grid (like the real game).
     snapToGrid(x, y) {
-        const T = 30;
-        return { x: Math.floor(x / T) * T + T / 2, y: Math.floor(y / T) * T + T / 2 };
+        const T = 30, oy = RIV_Y % T; // rows anchored so a line runs through the river
+        return { x: Math.floor(x / T) * T + T / 2, y: Math.floor((y - oy) / T) * T + oy + T / 2 };
     }
 
     // Approximate drawn radius of one unit of a card (mirrors Troop sizing).
     unitRadius(c) {
-        if (c.t === 3) return this.eng.getVisualRadius(c) * 0.82;
+        if (c.t === 3) return this.eng.getVisualRadius(c) * 0.88;
         let m = 10;
         const n = c.n;
         if (["Skeletons", "Bats"].includes(n)) m = 6;
-        else if (n.includes("Spirit")) m = 8;
+        else if (n.includes("Spirit")) m = 10;
         else if (["Goblins", "Archers", "Wall Breakers"].some(x => n.includes(x))) m = 8;
         else if (["Barbarians", "Elite Barbarians", "Royal Recruits"].includes(n)) m = 12;
         else if (n === "Mega Knight" || n === "P.E.K.K.A") m = 20;
         else if (n === "Sparky" || n === "Bowler") m = 18;
         else if (n.includes("Dragon") || n === "Lava Hound") m = 16;
         else if (["Giant", "Golem", "Elixir Golem", "Royal Giant", "Electro Giant"].includes(n)) m = 20;
-        return m * 0.82;
+        return m * 0.88;
     }
 
     // Ghost layout: offsets (relative to the snapped point) + radius for each
@@ -1473,7 +1522,7 @@ class Main {
         if (n === "Spear Goblins") return [at(-15, 0), at(15, 0), at(0, 15)];
         if (["Skeletons", "Goblins", "Minions"].includes(n)) return [at(0, -10), at(-10, 10), at(10, 10)];
         if (n === "Minion Horde") return [at(-22, -12), at(0, -16), at(22, -12), at(-14, 12), at(14, 12), at(0, 4)];
-        if (n === "Skeleton Army") { let a = []; for (let i = 0; i < 15; i++) { let ang = i * 2.4, rr = Math.sqrt(i / 15) * 28; a.push(at(Math.cos(ang) * rr, Math.sin(ang) * rr)); } return a; }
+        if (n === "Skeleton Army") { let a = []; for (let i = 0; i < 15; i++) { let ang = i * 2.39996, rr = Math.sqrt((i + 0.5) / 15) * 48; a.push(at(Math.cos(ang) * rr, Math.sin(ang) * rr)); } return a; }
         if (n === "Bats") return [at(-18, -8), at(0, -14), at(18, -8), at(-10, 10), at(10, 10)];
         if (n === "Barbarians") return [at(-12, -12), at(12, -12), at(-12, 12), at(12, 12)];
         if (n === "Elite Barbarians") return [at(-10, 0), at(10, 0)];
@@ -1513,18 +1562,18 @@ class Main {
 
     // Always-on tile grid, aligned to the 30px snap cells (lines on cell edges).
     drawGrid() {
-        const T = 30;
+        const T = 30, oy = RIV_Y % T; // a horizontal line runs through the river centre
         ctx.strokeStyle = "rgba(255,255,255,0.08)";
         ctx.lineWidth = 1;
-        for (let gx = T; gx < W; gx += T) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H - 130); ctx.stroke(); }
-        for (let gy = T; gy < H - 130; gy += T) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+        for (let gx = T; gx < W; gx += T) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H - 165); ctx.stroke(); }
+        for (let gy = oy; gy < H - 165; gy += T) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
     }
 
     // Hovered cell highlight (green valid / red invalid) while placing.
     drawHoverCell(sel) {
-        const T = 30;
-        if (this.mouse.y >= H - 130) return;
-        let cx = Math.floor(this.mouse.x / T) * T, cy = Math.floor(this.mouse.y / T) * T;
+        const T = 30, oy = RIV_Y % T;
+        if (this.mouse.y >= H - 165) return;
+        let cx = Math.floor(this.mouse.x / T) * T, cy = Math.floor((this.mouse.y - oy) / T) * T + oy;
         let s = this.snapToGrid(this.mouse.x, this.mouse.y);
         let valid = this.eng.isValid(s.y, s.x, sel, 0);
         ctx.fillStyle = valid ? "rgba(80,220,120,0.32)" : "rgba(220,60,60,0.32)";
@@ -1622,11 +1671,11 @@ class Main {
         if (p.isSpellArc) { this.drawSpellArc(p); return; }
         if (p.isSpellDrop) { this.drawSpellDrop(p); return; }
 
-        // Area / ground effects (explosions, poison, clones, placed spells…) are
-        // drawn in the inline ground pass in their own colour — don't overpaint
-        // them here with a team-coloured ball.
-        if (p.fireArea || p.redArea || p.brownArea || p.poison || p.graveyard ||
-            p.isHeal || p.barbBarrel || p.isClone || p.isIceNova || p.isLightBlue || p.spl) return;
+        // Only the rolling log / boulder render here (top layer) — they're skipped
+        // in the inline pass. EVERY other projectile (bullets, the Royal Giant
+        // cannonball, area effects) is drawn beneath the units in the inline pass,
+        // so return and don't redraw it on top.
+        if (!p.isRolling && !p.isLog) return;
 
         let x = p.x;
         let y = p.y;
@@ -1690,10 +1739,10 @@ class Main {
         prog = Math.max(0, Math.min(1, prog));
         let h = (p.arcMax || 100) * Math.sin(prog * Math.PI);
 
-        // Larger, rounder ground shadow; shrinks a little while high.
+        // Perfect-circle ground shadow; shrinks a little while high.
         let sr = Math.max(8, p.rad * 0.5) * (1 - 0.3 * Math.sin(prog * Math.PI));
         ctx.fillStyle = "rgba(0,0,0,0.28)";
-        ctx.beginPath(); ctx.ellipse(p.x, p.y, sr, sr * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(p.x, p.y, sr, 0, Math.PI * 2); ctx.fill();
 
         ctx.save();
         ctx.translate(p.x, p.y - h);
@@ -1710,12 +1759,12 @@ class Main {
                 ctx.restore();
             }
         } else if (k === "barrel") {
-            // Simple barrel that tumbles end-over-end as it flies.
+            // Bigger barrel that tumbles end-over-end as it flies.
             ctx.rotate(Date.now() / 60 * (p.tm === 0 ? -1 : 1));
             ctx.fillStyle = "#8a5a2c";
-            this.drawRoundRect(-8, -10, 16, 20, 4, true, false);
-            ctx.strokeStyle = "#5c3a18"; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.moveTo(-8, -1); ctx.lineTo(8, -1); ctx.stroke();
+            this.drawRoundRect(-13, -16, 26, 32, 6, true, false);
+            ctx.strokeStyle = "#5c3a18"; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(-13, -5); ctx.lineTo(13, -5); ctx.moveTo(-13, 5); ctx.lineTo(13, 5); ctx.stroke();
             ctx.lineWidth = 1;
         } else if (k === "snowball") {
             ctx.fillStyle = "#dff1ff"; ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
@@ -1733,48 +1782,137 @@ class Main {
         ctx.restore();
     }
 
+    // One clock-wipe per card played, coloured by team (blue=player, red=enemy).
+    // It fills over the troops' ~1s deploy time, like the real game.
+    drawDeploys() {
+        for (const d of this.eng.deploys) {
+            let frac = Math.max(0, Math.min(1, 1 - d.t / d.max));
+            let r = 9;                 // small clock
+            // Sits low, near the bottom of the spawned card. Flying units are drawn
+            // raised, so their clock sits at the bottom of that raised sprite.
+            let cy = d.fly ? d.y - 8 : d.y + 18;
+            let col = d.tm === 0 ? "#2f9bff" : "#ff4d4d";
+            ctx.fillStyle = "rgba(0,0,0,0.3)";
+            ctx.beginPath(); ctx.arc(d.x, cy, r, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = col;
+            ctx.beginPath(); ctx.moveTo(d.x, cy);
+            ctx.arc(d.x, cy, r, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2, false);
+            ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(d.x, cy, r, 0, Math.PI * 2); ctx.stroke();
+            ctx.lineWidth = 1;
+        }
+    }
+
     drawArrowsVolley(p) {
-        // Arrows spread across the impact circle in 3 staggered waves; each comes
-        // in tilted and straightens as it lands (asArrows starts life at 36).
-        const maxLife = 36;
-        const t = Math.max(0, Math.min(1.2, 1 - p.life / maxLife));
-        const n = 15, waves = 3;
-        for (let i = 0; i < n; i++) {
-            let wave = i % waves;
-            let wt = (t - wave * 0.16) / 0.6;
-            if (wt < 0 || wt > 1.2) continue;
-            // Position inside the impact circle (golden-angle spiral).
-            let ang = i * 2.399963;
-            let rr = Math.sqrt((i + 0.5) / n) * p.rad * 0.9;
-            let ax = p.x + Math.cos(ang) * rr;
-            let ay = p.y + Math.sin(ang) * rr;
-            let fall = Math.max(0, 1 - wt) * 75;
-            let tilt = (1 - Math.min(1, wt)) * 0.5;       // tilted, straightens on landing
-            ctx.globalAlpha = wt > 1 ? Math.max(0, 1.2 - wt) : 1;
-            ctx.save();
-            ctx.translate(ax, ay - fall);
-            ctx.rotate(tilt);
-            ctx.strokeStyle = "#6b4423"; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(0, 8); ctx.stroke();
-            ctx.fillStyle = "#d9d9d9";
-            ctx.beginPath(); ctx.moveTo(0, 11); ctx.lineTo(-3, 6); ctx.lineTo(3, 6); ctx.closePath(); ctx.fill();
-            ctx.strokeStyle = "#eaeaea"; ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(-3, -11); ctx.moveTo(0, -8); ctx.lineTo(3, -11); ctx.stroke();
-            ctx.restore();
+        // Three SHORT discrete waves with empty gaps between them — reads as
+        // "wave, wave, wave", not a continuous rainfall.
+        const maxLife = 28;
+        const elapsed = maxLife - p.life;          // 0..28
+        const windows = [[0, 6], [10, 16], [20, 26]]; // wave time windows (ticks)
+        const perWave = 7;
+        for (let w = 0; w < windows.length; w++) {
+            let [s, e] = windows[w];
+            if (elapsed < s || elapsed > e) continue; // nothing between waves
+            let wt = (elapsed - s) / (e - s);          // 0..1 within this wave
+            let fall = (1 - wt) * 55;
+            ctx.globalAlpha = wt > 0.8 ? Math.max(0, (1 - wt) / 0.2) : 1; // fade as they land
+            for (let i = 0; i < perWave; i++) {
+                let ang = i * 2.399963 + w * 1.3;
+                let rr = Math.sqrt((i + 0.5) / perWave) * p.rad * 0.88;
+                let ax = p.x + Math.cos(ang) * rr;
+                let ay = p.y + Math.sin(ang) * rr;
+                ctx.save();
+                ctx.translate(ax, ay - fall);
+                ctx.strokeStyle = "#6b4423"; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(0, 8); ctx.stroke();
+                ctx.fillStyle = "#d9d9d9";
+                ctx.beginPath(); ctx.moveTo(0, 11); ctx.lineTo(-3, 6); ctx.lineTo(3, 6); ctx.closePath(); ctx.fill();
+                ctx.strokeStyle = "#eaeaea"; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(-3, -11); ctx.moveTo(0, -8); ctx.lineTo(3, -11); ctx.stroke();
+                ctx.restore();
+            }
         }
         ctx.globalAlpha = 1;
         ctx.lineWidth = 1;
     }
 
+    // Sparky / Zappies charge-up: nothing → sparkle → flicker → constant beam.
+    drawCharge(e) {
+        let thr = e.c.n === "Sparky" ? 180 : 72;
+        let frac = Math.min(1, e.chargeT / thr);
+        if (frac < 0.25) return; // not yet charged enough — nothing
+        let cx = e.x, cy = e.y, R = e.rad + 4;
+        let seed = Math.floor(Date.now() / 50);
+        if (frac >= 0.85) {
+            // fully charged: constant bright electric corona
+            ctx.strokeStyle = "#aef0ff"; ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+            ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.5;
+            for (let i = 0; i < 6; i++) {
+                let a = i * Math.PI / 3 + seed * 0.3;
+                ctx.beginPath();
+                ctx.moveTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+                ctx.lineTo(cx + Math.cos(a) * (R + 7), cy + Math.sin(a) * (R + 7));
+                ctx.stroke();
+            }
+        } else if (frac >= 0.5) {
+            // flicker: ring blinks on and off
+            if (seed % 2 === 0) {
+                ctx.strokeStyle = "rgba(150,220,255,0.85)"; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+            }
+        } else {
+            // sparkle: a few short sparks
+            ctx.strokeStyle = "rgba(180,230,255,0.9)"; ctx.lineWidth = 1.5;
+            for (let i = 0; i < 3; i++) {
+                let a = (seed * 1.7 + i * 2.1) % (Math.PI * 2);
+                ctx.beginPath();
+                ctx.moveTo(cx + Math.cos(a) * R * 0.6, cy + Math.sin(a) * R * 0.6);
+                ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+                ctx.stroke();
+            }
+        }
+        ctx.lineWidth = 1;
+    }
+
+    // Zap: a jagged light-blue lightning bolt strikes down from the sky.
+    drawZapStrike(p) {
+        if (p.life > 5) {
+            ctx.save();
+            ctx.lineCap = "round";
+            const segs = 8;
+            const pts = [];
+            for (let i = 0; i <= segs; i++) {
+                let yy = (p.y / segs) * i;
+                let jit = (i === 0 || i === segs) ? 0 : Math.sin(i * 9.3 + Math.floor(Date.now() / 55)) * 13;
+                pts.push([p.x + jit, yy]);
+            }
+            ctx.strokeStyle = "#7fdcff"; ctx.lineWidth = 4;
+            ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
+            ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.4;
+            ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
+            ctx.restore();
+        } else {
+            let a = Math.max(0, p.life / 5);
+            ctx.globalAlpha = 0.5 * a + 0.12;
+            ctx.fillStyle = "#cdf3ff";
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+        ctx.lineWidth = 1;
+    }
+
     // Placed spell that drops a symbol from the sky, then flashes on impact.
     drawSpellDrop(p) {
+        if (p.dropKind === "zap") { this.drawZapStrike(p); return; }
         const impact = 6;
         const maxL = p.dropMax || 30;
         if (p.life > impact) {
-            // descending symbol + a growing target shadow
+            // descending symbol + a growing target shadow (perfect circle)
             let t = (maxL - p.life) / (maxL - impact); // 0..1
             ctx.fillStyle = "rgba(0,0,0,0.18)";
-            ctx.beginPath(); ctx.ellipse(p.x, p.y, 5 + 9 * t, (5 + 9 * t) * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(p.x, p.y, 5 + 9 * t, 0, Math.PI * 2); ctx.fill();
             ctx.save();
             ctx.translate(p.x, p.y - (1 - t) * 95);
             this.drawSpellSymbol(p.dropKind, 1);

@@ -54,6 +54,7 @@ export default class Proj {
         this.isSpellDrop = false;
         this.dropKind = null;
         this.dropMax = 0;
+        this.crownMult = 1.0; // spells deal reduced damage to crown towers
 
         this.stunDuration = 30;
         this.chainTargets = null;
@@ -63,6 +64,20 @@ export default class Proj {
     asChain(a, b) {
         this.chainTargets = [a, b];
         this.life = 10;
+        return this;
+    }
+
+    // Electro chain that propagates target-to-target over time (visible in real
+    // time) instead of resolving instantly.
+    asElectroChain(first, dmg) {
+        this.electroChain = true;
+        this.chainHit = [];
+        this.chainCurrent = first;
+        this.chainDmg = dmg;
+        this.chainStep = 0;
+        this.chainMax = 9;
+        this.chainTargets = first ? [first] : [];
+        this.life = 80;
         return this;
     }
 
@@ -79,7 +94,7 @@ export default class Proj {
     asStun(duration = 30) { this.shouldStun = true; this.stunDuration = duration; return this; }
     asCurse() { this.isCurse = true; return this; }
     asRolling() { this.isRolling = true; this.life = 60; return this; }
-    asArrows() { this.isArrows = true; this.life = 36; return this; } // 3 staggered waves
+    asArrows() { this.isArrows = true; this.life = 28; return this; } // 3 quick staggered waves
     // Placed spell that falls from the sky as a symbol, then resolves on impact.
     asSpellDrop(kind, col, life = 30) { this.isSpellDrop = true; this.dropKind = kind; this.flashCol = col; this.life = life; this.dropMax = life; return this; }
     asIceNova() { this.isIceNova = true; this.life = 5; return this; }
@@ -99,18 +114,28 @@ export default class Proj {
         return this;
     }
 
+    // Damage to apply to one entity — reduced against crown towers (spells only;
+    // crownMult is 1.0 for normal projectiles).
+    hitDmg(e) {
+        return (e instanceof Tower) ? this.dmg * this.crownMult : this.dmg;
+    }
+
     // AoE damage + effects applied when an arcing spell lands.
     burstSpell(g) {
         if (this.barrelGoblins) {
             const gob = g.getCard("Goblins");
-            g.ents.push(new Troop(this.tm, this.tx, this.ty, gob));
-            g.ents.push(new Troop(this.tm, this.tx - 12, this.ty + 12, gob));
-            g.ents.push(new Troop(this.tm, this.tx + 12, this.ty + 12, gob));
+            // Spread them out a bit so they don't spawn on top of each other, and
+            // give them no deploy cooldown (they act immediately).
+            for (const [ox, oy] of [[0, -14], [-16, 9], [16, 9]]) {
+                let t = new Troop(this.tm, this.tx + ox, this.ty + oy, gob);
+                t.deployTime = 0;
+                g.ents.push(t);
+            }
             return;
         }
         for (let e of g.ents) {
             if (e.tm !== this.tm && Math.hypot(this.tx - e.x, this.ty - e.y) < this.rad + e.rad) {
-                e.hp -= this.dmg;
+                e.hp -= this.hitDmg(e);
                 if (this.shouldStun) e.st = this.stunDuration;
                 if (this.isRoot) e.rt = 84;
                 if (this.isFreeze) e.fr = 240;
@@ -133,6 +158,22 @@ export default class Proj {
     }
 
     upd(g) {
+        if (this.electroChain) {
+            this.life--;
+            if (--this.chainStep <= 0 && this.chainHit.length < this.chainMax && this.chainCurrent && this.chainCurrent.hp > 0) {
+                this.chainStep = 4; // jump to the next target every 4 ticks
+                let c = this.chainCurrent;
+                if (!this.chainHit.includes(c)) { c.hp -= this.chainDmg; c.st = 6; this.chainHit.push(c); }
+                let next = null, nMin = 85; // shorter chain reach
+                for (let e of g.ents) {
+                    if (e.tm !== this.tm && e.hp > 0 && !this.chainHit.includes(e) && c.dist(e) < nMin) { nMin = c.dist(e); next = e; }
+                }
+                this.chainCurrent = next;
+                if (next) this.chainTargets.push(next); else this.life = Math.min(this.life, 8);
+            }
+            if (this.chainHit.length >= this.chainMax) this.life = Math.min(this.life, 8);
+            return;
+        }
         if (this.chainTargets || this.barbBreak || this.isIceNova) {
             this.life--;
             return;
@@ -157,7 +198,7 @@ export default class Proj {
             if (this.life % 48 === 0) { // damage tick ~0.8s, ~10 ticks over 8s
                 for (let e of g.ents) {
                     if (e.tm !== this.tm && Math.hypot(this.x - e.x, this.y - e.y) < this.rad) {
-                        e.hp -= this.dmg;
+                        e.hp -= this.hitDmg(e);
                     }
                 }
             }
@@ -170,6 +211,20 @@ export default class Proj {
                 let angle = Math.random() * Math.PI * 2;
                 let dist = Math.sqrt(Math.random()) * (this.rad);
                 g.ents.push(new Troop(this.tm, this.x + Math.cos(angle) * dist, this.y + Math.sin(angle) * dist, g.getCard("Skeletons")));
+            }
+            return;
+        }
+
+        // Arrows: 3 discrete waves, each dealing damage on impact (life 22/12/2,
+        // matching the wave windows in drawArrowsVolley). One wave kills a skeleton.
+        if (this.isArrows) {
+            this.life--;
+            if (this.life === 22 || this.life === 12 || this.life === 2) {
+                for (let e of g.ents) {
+                    if (e.tm !== this.tm && Math.hypot(this.x - e.x, this.y - e.y) < this.rad + e.rad) {
+                        e.hp -= this.hitDmg(e);
+                    }
+                }
             }
             return;
         }
@@ -215,9 +270,17 @@ export default class Proj {
             if (this.life === 5) {
                 for (let e of g.ents) {
                     if (e.tm !== this.tm && Math.hypot(this.x - e.x, this.y - e.y) < this.rad + e.rad) {
-                        e.hp -= this.dmg;
+                        e.hp -= this.hitDmg(e);
                         if (this.shouldStun) e.st = this.stunDuration;
                         if (this.isRoot) e.rt = 84;
+                        // Vines roots, marks the unit (green outline) and pulls any
+                        // flying unit down to the ground for the duration.
+                        if (this.isVines) {
+                            e.vinedTime = 84;
+                            if (e.fly && e.constructor.name === "Troop") {
+                                e.fly = false; e.wasFlying = true; e.groundedTime = 84;
+                            }
+                        }
                         if (this.isFreeze) e.fr = 240;
                     }
                 }
@@ -266,7 +329,7 @@ export default class Proj {
                     }
 
                     if (hit) {
-                        e.hp -= this.dmg;
+                        e.hp -= this.hitDmg(e);
                         this.hitEntities.push(e);
                         if (!this.barbBarrelLog && e.mass <= 300 && !(e instanceof Tower) && !(e instanceof Building)) {
                             if (e instanceof Troop) {
@@ -284,7 +347,9 @@ export default class Proj {
                 this.life = 0;
                 if (this.barbBarrelLog) {
                     let barb = g.getCard("Barbarians");
-                    g.ents.push(new Troop(this.tm, this.x, this.y, barb));
+                    let t = new Troop(this.tm, this.x, this.y, barb);
+                    t.deployTime = 0; // no deploy cooldown
+                    g.ents.push(t);
                 }
             }
             return;

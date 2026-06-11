@@ -8,6 +8,7 @@ export default class EnemyAI {
         this.p = g.p2;
         this.aiTick = 0;
         this.actCd = 0; // ticks until the AI may act again
+        this.reactTimer = 0; // human-like reaction delay before each decision
     }
 
     generateDeck() {
@@ -90,6 +91,10 @@ export default class EnemyAI {
         this.aiTick++;
         if (this.aiTick < 120) return;            // brief opening pause
         if (this.actCd > 0) { this.actCd--; return; }
+        // Human-like reaction time (~0.1-0.3s): don't instantly counter a card the
+        // moment it's played — re-evaluate at most every 6-18 ticks.
+        if (this.reactTimer > 0) { this.reactTimer--; return; }
+        this.reactTimer = 6 + Math.floor(this.g.random() * 13);
 
         const mode = this.computeMode();
         const threats = this.getThreats();
@@ -123,6 +128,13 @@ export default class EnemyAI {
     }
 
     affordable() { return this.p.h.filter(c => c.c <= this.p.elx); }
+
+    // True if (x,y) is close enough to the player's STILL-ASLEEP king tower that a
+    // spell there would wake it. The AI avoids that (an early king is bad for it).
+    nearAsleepKing(x, y, dist) {
+        const k = this.g.t1K;
+        return k && k.hp > 0 && !k.actv && Math.hypot(k.x - x, k.y - y) < dist;
+    }
 
     defend(threats, mode) {
         const threat = threats[0];
@@ -160,11 +172,12 @@ export default class EnemyAI {
     }
 
     castValueSpell(mode) {
-        // Damage spell on a tight cluster of player troops.
+        // Damage spell on a tight cluster of player troops — but never if it would
+        // splash the player's still-asleep king tower (waking it helps the player).
         const dmg = this.affordable().find(c => ["Fireball", "Arrows", "Poison"].includes(c.n));
         if (dmg) {
             const cl = this.cluster(dmg.n === "Poison" ? 95 : 70);
-            if (cl && cl.count >= 3) return this.playAI(dmg, cl.x, cl.y);
+            if (cl && cl.count >= 3 && !this.nearAsleepKing(cl.x, cl.y, 95)) return this.playAI(dmg, cl.x, cl.y);
         }
         // When ahead, chip the weaker standing player tower with a spell win-con
         // (Graveyard / Goblin Barrel onto a princess tower).
@@ -265,8 +278,13 @@ export default class EnemyAI {
 
     playAI(c, x, y) {
         if (c.c > this.p.elx) return false;
-        // Validate placement (spells / Goblin Barrel can go anywhere).
-        if (c.t !== 2 && c.n !== "Goblin Barrel" && !this.g.isValid(y, x, c, 1)) return false;
+        // Snap to the same 30px tile grid the player uses.
+        x = Math.floor(x / 30) * 30 + 15;
+        y = Math.floor(y / 30) * 30 + 15;
+        // Same placement limits as the player. Troops/buildings and the rolling
+        // spells (Log / Barb Barrel) must pass isValid; other spells go anywhere.
+        const needsValid = c.t !== 2 || ["The Log", "Barbarian Barrel"].includes(c.n);
+        if (needsValid && c.n !== "Goblin Barrel" && !this.g.isValid(y, x, c, 1)) return false;
         this.p.elx -= c.c;
         this.g.addU(1, c, x, y);
 
