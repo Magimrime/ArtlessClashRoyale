@@ -82,6 +82,7 @@ export default class GameEngine {
             new Card("Zap", 2, 0, 192, 0, 0, 2, 0, 0, 0, false, true),
             new Card("Skeletons", 1, 81, 81, 0.75, 8, 0, 100, 60, 150, false, false),
             new Card("Musketeer", 4, 720, 218, 0.5, 158, 0, 100, 60, 150, false, true),
+            new Card("Three Musketeers", 9, 883, 204, 0.5, 158, 0, 100, 72, 150, false, true),
             new Card("Cannon", 3, 824, 212, 0, 143, 3, 1800, 54, 165, false, false),
             new Card("Mega Knight", 7, 3993, 268, 0.5, 14, 0, 100, 102, 150, false, false),
             new Card("P.E.K.K.A", 7, 3760, 816, 0.375, 14, 0, 100, 108, 150, false, false),
@@ -139,6 +140,10 @@ export default class GameEngine {
         this.allCards.forEach(c => { c.tags = this.getCardTags(c); });
 
         this.tokens = [
+            // Season-77 rework: Three Musketeers deploy ELITE Musketeers — tankier
+            // (883 vs 720 hp), slower-firing (1.2s vs 1.0s), slightly weaker shots
+            // (204 vs 218), plus a 314-damage bayonet MELEE vs close ground targets.
+            new Card("Elite Musketeer", 0, 883, 204, 0.5, 158, 0, 100, 72, 150, false, true),
             new Card("Golemite", 0, 1040, 49, 0.375, 8, 0, 100, 150, 150, false, false),
             new Card("Lava Pup", 0, 216, 90, 0.5, 26, 0, 100, 102, 150, true, true),
             new Card("Elixir Golemite", 0, 763, 127, 0.5, 8, 0, 100, 66, 150, false, false),
@@ -182,7 +187,8 @@ export default class GameEngine {
 
         // High single-target DPS: melts tanks and win conditions.
         if (has(["Mini PEKKA", "P.E.K.K.A", "Musketeer", "Inferno Dragon",
-            "Sparky", "Prince", "Elite Barbarians", "Mega Minion", "Wizard"]))
+            "Sparky", "Prince", "Elite Barbarians", "Mega Minion", "Wizard",
+            "Three Musketeers", "Elite Musketeer"]))
             tags.push("DamageDealer");
 
         // Direct-damage / effect spells the AI can throw at a threat.
@@ -496,6 +502,11 @@ export default class GameEngine {
         this.myDeck.forEach(c => {
             if (!this.unlockedCards.includes(c)) this.unlockedCards.push(c);
         });
+
+        // Three Musketeers ships unlocked for existing saves, so it's choosable
+        // everywhere (deck builder + sandbox), not stuck in the locked pool.
+        let tm3 = this.getCard("Three Musketeers");
+        if (tm3 && !this.unlockedCards.includes(tm3)) this.unlockedCards.push(tm3);
     }
 
     deleteProgress() {
@@ -1122,6 +1133,19 @@ export default class GameEngine {
                 this.ents.push(new Troop(tm, x - 10, y, c));
                 this.ents.push(new Troop(tm, x + 10, y, c));
                 this.ents.push(new Troop(tm, x + 30, y, c));
+            }
+        } else if (c.n === "Three Musketeers") {
+            // Deploys 3 ELITE Musketeers (ranged + bayonet melee). Centre placement
+            // splits them 1 / 2 between the lanes, like the real card.
+            const em = this.getCard("Elite Musketeer");
+            if (this.isMidSplit(x)) {
+                this.ents.push(new Troop(tm, this.W / 2 - 22, y, em));
+                this.ents.push(new Troop(tm, this.W / 2 + 20, y - 8, em));
+                this.ents.push(new Troop(tm, this.W / 2 + 38, y + 12, em));
+            } else {
+                this.ents.push(new Troop(tm, x - 26, y, em));
+                this.ents.push(new Troop(tm, x + 26, y, em));
+                this.ents.push(new Troop(tm, x, y + 18, em));
             }
         } else if (c.n === "Royal Recruits") {
             let offsets = [-150, -90, -30, 30, 90, 150];

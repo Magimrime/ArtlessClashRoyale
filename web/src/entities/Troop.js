@@ -394,6 +394,11 @@ export default class Troop extends Entity {
             } else if (this.c.n === "Electro Giant") {
                 this.lk.hp -= this.c.d;   // melee hit
                 this.electroShock(g);     // + electric shock to everything in the aura
+            } else if (this.c.n === "Elite Musketeer" && !this.lk.fly &&
+                this.dist(this.lk) <= 48 + myHitbox + targetHitbox) {
+                // Bayonet: a ground target inside 1.6 tiles (48px) takes a 314-damage
+                // melee jab instead of a shot (Season-77 Three Musketeers rework).
+                this.lk.hp -= 314;
             } else if (this.c.rn > 30) {
                 let p = new Proj(this.x, srcY, this.lk.x, this.lk.y, this.lk, 8, false, 4, this.c.d, this.tm, false);
                 if (["Wizard", "Witch", "Baby Dragon"].includes(this.c.n)) {

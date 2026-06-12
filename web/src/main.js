@@ -1923,7 +1923,7 @@ class Main {
         const C = {
             "Knight": "#9aa6b2", "Archers": "#c98fb0", "Giant": "#e0a458",
             "Mini PEKKA": "#5566a0", "Skeletons": "#e6e3d3", "Skeleton Army": "#e6e3d3",
-            "Musketeer": "#7c8fc7", "Mega Knight": "#6b5b8a", "P.E.K.K.A": "#4b4f86",
+            "Musketeer": "#7c8fc7", "Elite Musketeer": "#5d74c4", "Mega Knight": "#6b5b8a", "P.E.K.K.A": "#4b4f86",
             "Barbarians": "#d8a24e", "Fire Spirit": "#ff7a3c", "Ice Spirit": "#9ddcef",
             "Electro Spirit": "#4f9bff", "Heal Spirit": "#76d98a", "Minions": "#356b6b",
             "Goblins": "#79b44a", "Spear Goblins": "#8cc04f", "Bats": "#6a4a78",
