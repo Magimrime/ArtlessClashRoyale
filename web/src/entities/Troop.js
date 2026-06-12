@@ -576,11 +576,9 @@ export default class Troop extends Entity {
     }
 
     die(g) {
-        // Spirits burst on death too (a spirit killed just before contact still
-        // does its splash). Wall Breakers do NOT — they only explode on contact.
-        if (this.c.n.includes("Spirit") && !this.exploded) {
-            this.explodeSpirit(g, this.currentTarget);
-        }
+        // Spirits do NOT burst on death — their splash only happens when they
+        // actually jump onto a target (the hop landing). A spirit shot down on
+        // the way just dies. (Wall Breakers likewise only explode on contact.)
         if (this.c.n === "Golem") {
             this.spawnDeathTroops(g, g.getCard("Golemite") || { n: "Golemite", hp: 1039, ms: 25, fl: false, ar: false }, 2, 10);
             let p = new Proj(this.x, this.y, this.x, this.y, null, 0, false, 60, 320, this.tm, false);
