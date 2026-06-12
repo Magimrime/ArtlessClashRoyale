@@ -1560,7 +1560,7 @@ class Main {
             ctx.textAlign = "center";
             ctx.shadowColor = "black";
             ctx.shadowBlur = 2;
-            ctx.fillText(name, x, barY - (e.shield > 0 ? 9 : 4));
+            ctx.fillText(name, x, e._barY - (e.shield > 0 ? 9 : 4));
             ctx.shadowBlur = 0;
             ctx.shadowColor = "transparent";
         }

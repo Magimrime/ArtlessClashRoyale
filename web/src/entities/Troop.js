@@ -311,6 +311,10 @@ export default class Troop extends Entity {
             let isChargedSpecial = ["Zappies", "Sparky"].includes(this.c.n) && this.chargeT >= (this.c.n === "Zappies" ? 72 : 180);
             if (this.cd-- > 0 && !isChargedSpecial) return;
 
+            // Flying units (Baby Dragon, Minions, …) shoot from their VISUAL body,
+            // which floats 22px above the ground shadow — not from the shadow.
+            let srcY = this.y - (this.fly ? 22 : 0);
+
             if (["Zappies", "Sparky"].includes(this.c.n)) {
                 let threshold = this.c.n === "Zappies" ? 72 : 180;
                 if (this.chargeT < threshold) return;
@@ -352,14 +356,19 @@ export default class Troop extends Entity {
                 g.projs.push(new Proj(this.x, this.y, tx, ty, null, 2.33, false, 18, this.c.d, this.tm, false).asRolling());
             } else if (this.c.n === "Mother Witch") {
                 g.projs.push(new Proj(this.x, this.y, this.lk.x, this.lk.y, this.lk, 12, false, 4, this.c.d, this.tm, false).asCurse());
-            } else if (["Minions", "Mega Minion", "Minion Horde"].includes(this.c.n)) {
-                // Minions lob a short-range projectile (a dark dart) rather than melee.
-                g.projs.push(new Proj(this.x, this.y, this.lk.x, this.lk.y, this.lk, 9, false, 4, this.c.d, this.tm, false));
+            } else if (this.c.n === "Mega Minion") {
+                // Mega Minion hurls a heavier dark dart from range (fired from its
+                // floating body, not the shadow).
+                g.projs.push(new Proj(this.x, srcY, this.lk.x, this.lk.y, this.lk, 6, false, 6, this.c.d, this.tm, false));
+            } else if (["Minions", "Minion Horde"].includes(this.c.n)) {
+                // Minions lob a short-range dart (a dark projectile, not too fast)
+                // fired from the floating body, not the shadow.
+                g.projs.push(new Proj(this.x, srcY, this.lk.x, this.lk.y, this.lk, 6, false, 4, this.c.d, this.tm, false));
             } else if (this.c.n === "Electro Giant") {
                 this.lk.hp -= this.c.d;   // melee hit
                 this.electroShock(g);     // + electric shock to everything in the aura
             } else if (this.c.rn > 30) {
-                let p = new Proj(this.x, this.y, this.lk.x, this.lk.y, this.lk, 8, false, 4, this.c.d, this.tm, false);
+                let p = new Proj(this.x, srcY, this.lk.x, this.lk.y, this.lk, 8, false, 4, this.c.d, this.tm, false);
                 if (["Wizard", "Witch", "Baby Dragon"].includes(this.c.n)) {
                     p.delayedSplash = true;
                     p.spl = false;

@@ -90,7 +90,7 @@ export default class GameEngine {
             new Card("Wizard", 5, 720, 281, 0.5, 143, 0, 100, 84, 150, false, true),
             new Card("Witch", 5, 838, 134, 0.5, 143, 0, 100, 66, 150, false, true),
             new Card("Graveyard", 5, 0, 0, 0, 0, 2, 0, 0, 0, false, true),
-            new Card("Mega Minion", 3, 837, 311, 0.5, 26, 0, 100, 90, 150, true, true),
+            new Card("Mega Minion", 3, 837, 311, 0.5, 48, 0, 100, 90, 150, true, true),
             new Card("Minion Horde", 5, 230, 117, 0.75, 26, 0, 100, 60, 150, true, true),
             new Card("Baby Dragon", 4, 1152, 160, 0.75, 83, 0, 100, 90, 150, true, true),
             new Card("Inferno Dragon", 4, 1294, 10, 0.5, 83, 0, 100, 24, 150, true, true),
