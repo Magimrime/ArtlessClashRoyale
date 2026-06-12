@@ -1753,6 +1753,7 @@ class Main {
         } else {
             color = this.getUnitColor(name);
             if (e.isClone) color = "#bce8ff"; // light tint; translucency comes from globalAlpha below
+            if (e.c && e.c.isFake) color = "#c4e3a6"; // fake (decoy) goblins: pale, washed-out green
         }
 
         // Freeze/Slow status tints temporarily override the identity color.
@@ -1765,6 +1766,7 @@ class Main {
         // indicator is drawn separately, once per card — see drawDeploys).
         ctx.globalAlpha = (e instanceof Troop && e.deployTime > 0) ? 0.75 : 1;
         if (e.isClone) ctx.globalAlpha *= 0.5; // cloned troops are translucent
+        if (e.c && e.c.isFake) ctx.globalAlpha *= 0.8; // fakes read slightly ghostly
         ctx.fillStyle = color;
         ctx.strokeStyle = "rgba(0,0,0,0.3)"; // soft outline, not harsh black
         ctx.lineWidth = 1.5;

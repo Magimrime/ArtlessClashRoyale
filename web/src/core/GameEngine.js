@@ -23,7 +23,7 @@ export default class GameEngine {
 
         // Evolutions: which cards CAN evolve and how many normal plays charge the
         // evo. evoSel / enemyEvoSel hold the (≤2) card names chosen as evos per deck.
-        this.EVO_REQ = { "Barbarians": 1, "Archers": 2, "Inferno Dragon": 2, "Royal Recruits": 1 };
+        this.EVO_REQ = { "Barbarians": 1, "Archers": 2, "Inferno Dragon": 2, "Royal Recruits": 1, "Goblin Barrel": 2 };
         this.evoSel = [];
         this.enemyEvoSel = [];
 
@@ -923,6 +923,15 @@ export default class GameEngine {
             p.asSpellArc(150, "barrel");
             p.barrelGoblins = true;
             this.projs.push(p);
+            // EVO: a second, FAKE barrel mirrored across the vertical axis. Its
+            // goblins look real but deal 70% less damage and attack 30% slower.
+            if (c.isEvo) {
+                let p2 = new Proj(kt.x, kt.y, this.W - x, y, null, 2.4, false, 30, 0, tm, false);
+                p2.asSpellArc(150, "barrel");
+                p2.barrelGoblins = true;
+                p2.fakeGoblins = true;
+                this.projs.push(p2);
+            }
         } else if (c.n === "Royale Delivery") {
             let shape = this.getSpellRadius(c);
             let rad = shape && shape.type === 'circle' ? shape.val : 60;

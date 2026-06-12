@@ -128,7 +128,16 @@ export default class Proj {
     // AoE damage + effects applied when an arcing spell lands.
     burstSpell(g) {
         if (this.barrelGoblins) {
-            const gob = g.getCard("Goblins");
+            let gob = g.getCard("Goblins");
+            // Evo Goblin Barrel decoy: the fake barrel pops FAKE goblins — they look
+            // identical but deal 70% less damage and attack 30% slower.
+            if (this.fakeGoblins) {
+                let f = Object.assign(Object.create(Object.getPrototypeOf(gob)), gob);
+                f.d = Math.max(1, Math.round(gob.d * 0.3));
+                f.rt = Math.round(gob.rt / 0.7);
+                f.isFake = true; // rendered lighter / washed-out
+                gob = f;
+            }
             // Spread them out a bit so they don't spawn on top of each other, and
             // give them no deploy cooldown (they act immediately).
             for (const [ox, oy] of [[0, -14], [-16, 9], [16, 9]]) {
