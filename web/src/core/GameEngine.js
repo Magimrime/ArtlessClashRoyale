@@ -66,7 +66,7 @@ export default class GameEngine {
         // effect value (Crate and Vines have no real counterpart).
         this.allCards = [
             new Card("Knight", 3, 1766, 202, 0.5, 14, 0, 100, 72, 150, false, false),
-            new Card("Archers", 3, 304, 95, 0.5, 128, 0, 100, 54, 150, false, true),
+            new Card("Archers", 3, 304, 87, 0.5, 128, 0, 100, 54, 150, false, true),
             new Card("Giant", 5, 4091, 254, 0.375, 14, 1, 100, 90, 150, false, false),
             new Card("Fireball", 4, 0, 689, 0, 0, 2, 0, 0, 0, false, true),
             new Card("Rocket", 6, 0, 1484, 0, 0, 2, 0, 0, 0, false, true),
