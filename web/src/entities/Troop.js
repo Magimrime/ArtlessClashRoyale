@@ -330,7 +330,10 @@ export default class Troop extends Entity {
             if (this.rt > 0 && !this.fly) return;
 
             let isChargedSpecial = ["Zappies", "Sparky"].includes(this.c.n) && this.chargeT >= (this.c.n === "Zappies" ? 72 : 180);
-            if (this.cd-- > 0 && !isChargedSpecial) return;
+            // A primed dash (Prince / Dark Prince / Evo Royal Recruits) strikes the
+            // INSTANT it connects — no first-hit reload after the charge.
+            let dashHit = this.isCharging && ["Prince", "Dark Prince", "Royal Recruits"].includes(this.c.n);
+            if (this.cd-- > 0 && !isChargedSpecial && !dashHit) return;
 
             // Flying units (Baby Dragon, Minions, …) shoot from their VISUAL body,
             // which floats 22px above the ground shadow — not from the shadow.
@@ -552,8 +555,8 @@ export default class Troop extends Entity {
             }
 
             if (!this.atk) {
-                // Evo Royal Recruits dash even faster than a Prince (2.2x vs 2.0x).
-                let chargeSpd = this.isCharging ? (this.c.n === "Royal Recruits" ? 2.2 : 2.0) : 1.0;
+                // Dash speed: 2x for the Princes and Evo Royal Recruits alike.
+                let chargeSpd = this.isCharging ? 2.0 : 1.0;
                 this.x += dx * this.c.s * chargeSpd * speedMult;
                 this.y += dy * this.c.s * chargeSpd * speedMult;
             }
