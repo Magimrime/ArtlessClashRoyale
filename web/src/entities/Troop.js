@@ -324,7 +324,7 @@ export default class Troop extends Entity {
             }
             this.atk = false;
         } else if (this.lk && this.lk.hp > 0 &&
-            this.dist(this.lk) <= this.attackReach(g, myHitbox, targetHitbox)) {
+            this.effReach(g, this.lk) <= this.attackReach(g, myHitbox, targetHitbox) + (this.atk ? 12 : 0)) {
             this.atk = true;
             if (this.c.n === "Inferno Dragon") this.infernoTick++; // ramp EVERY tick while locked on
             if (this.rt > 0 && !this.fly) return;
@@ -562,11 +562,12 @@ export default class Troop extends Entity {
             }
 
             // Princes charge/dash — and so do EVO Royal Recruits. A unit being knocked
-            // back can't build up its charge.
+            // back can't build up its charge, and the dash needs a real RUN-UP
+            // (60px of walking) before it kicks in.
             if ((this.c.n === "Prince" || this.c.n === "Dark Prince" ||
                 (this.c.n === "Royal Recruits" && this.c.isEvo)) && this.kbTime <= 0) {
                 this.distWalked += Math.hypot(dx * this.c.s, dy * this.c.s);
-                if (this.distWalked > 20) this.isCharging = true;
+                if (this.distWalked > 60) this.isCharging = true;
             }
         }
     }
@@ -757,6 +758,18 @@ export default class Troop extends Entity {
             beam.life = 6; // appears and vanishes quickly
             g.projs.push(beam);
         }
+    }
+
+    // Effective distance to the target for the in-reach test. Towers/buildings are
+    // SQUARE: for melee, use Chebyshev distance (max axis), which equals the box
+    // half-width anywhere on its perimeter — so a troop pressed against a CORNER
+    // counts as touching and attacks instead of ramming the box forever.
+    effReach(g, lk) {
+        const cn = lk.constructor.name;
+        if ((cn === "Tower" || cn === "Building") && this.c.rn <= 30) {
+            return Math.max(Math.abs(lk.x - this.x), Math.abs(lk.y - this.y));
+        }
+        return this.dist(lk);
     }
 
     // Distance at which this troop can attack its current target. Melee units (short
