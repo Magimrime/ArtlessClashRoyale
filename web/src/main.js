@@ -828,11 +828,11 @@ class Main {
         }
 
         // Render Game during COUNTDOWN (CNT) or PLAY
-        if (this.state === State.PLAY || this.state === State.CNT) {
+        if (this.state === State.PLAY || this.state === State.CNT || this.state === State.OVER) {
             // The tile grid is always visible during play.
             this.drawGrid();
 
-            if (this.eng.sel && (this.eng.sel.t !== 2 || ["The Log", "Barbarian Barrel"].includes(this.eng.sel.n))) {
+            if ((this.state === State.PLAY || this.state === State.CNT) && this.eng.sel && (this.eng.sel.t !== 2 || ["The Log", "Barbarian Barrel"].includes(this.eng.sel.n))) {
                 // Invalid-placement tint
                 ctx.fillStyle = "rgba(255, 0, 0, 0.28)";
                 ctx.fillRect(0, 0, W, 200); // behind enemy towers/king
@@ -1005,26 +1005,35 @@ class Main {
                     frac = Math.max(0, Math.min(1, frac));
                     ctx.fillStyle = "rgba(0,0,0,0.3)";
                     ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(4, p.rad * 0.75 * frac), 0, Math.PI * 2); ctx.fill();
-                    // A reinforced cardboard box showing only TWO faces: a gray metal
-                    // TOP (a trapezoid receding back) and a cardboard FRONT with gray
-                    // metal edging. No side face.
+                    // A plain cardboard box showing TWO faces: a cardboard TOP (trapezoid
+                    // receding back) with a single seam line running through it, and a
+                    // cardboard FRONT carrying a small rotated post-it / shipping label.
                     let cw = 42, hw = cw / 2, ch = 42, hy = ch / 2, dep = 9, fy = -hy + dep, inset = 6;
                     let ccy = p.y - (1 - frac) * 150;
                     ctx.save(); ctx.translate(p.x, ccy);
-                    // gray metal TOP face (trapezoid receding straight back)
-                    ctx.fillStyle = "#b6bbc0";
+                    // cardboard TOP face (trapezoid receding straight back), a touch lighter
+                    ctx.fillStyle = "#d8ad6a";
                     ctx.beginPath();
                     ctx.moveTo(-hw, fy); ctx.lineTo(-hw + inset, -hy); ctx.lineTo(hw - inset, -hy); ctx.lineTo(hw, fy);
                     ctx.closePath(); ctx.fill();
+                    // seam line going through the top (front edge → back edge, down the middle)
+                    ctx.strokeStyle = "rgba(90,60,25,0.7)"; ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.moveTo(0, fy); ctx.lineTo(0, -hy); ctx.stroke();
                     // cardboard FRONT face
                     ctx.fillStyle = "#c79a5e"; ctx.fillRect(-hw, fy, cw, ch - dep);
-                    // simple gray metal reinforcement on all four front edges
-                    let m = 5;
-                    ctx.fillStyle = "#9aa0a6";
-                    ctx.fillRect(-hw, fy, cw, m); ctx.fillRect(-hw, hy - m, cw, m);
-                    ctx.fillRect(-hw, fy, m, ch - dep); ctx.fillRect(hw - m, fy, m, ch - dep);
-                    // one light highlight so the metal reads as slightly raised
-                    ctx.fillStyle = "#c6cace"; ctx.fillRect(-hw, fy, cw, 1.5); ctx.fillRect(-hw, fy, 1.5, ch - dep);
+                    // small rotated post-it / shipping label on the front
+                    ctx.save();
+                    ctx.translate(hw * 0.12, fy + (ch - dep) * 0.52);
+                    ctx.rotate(-0.22);
+                    ctx.fillStyle = "#f0e3a4"; // light yellowish note
+                    ctx.fillRect(-9, -10, 18, 20);
+                    ctx.strokeStyle = "rgba(120,100,40,0.55)"; ctx.lineWidth = 1; ctx.strokeRect(-9, -10, 18, 20);
+                    // faint writing lines so it reads as a label
+                    ctx.beginPath();
+                    ctx.moveTo(-6, -3); ctx.lineTo(6, -3); ctx.moveTo(-6, 2); ctx.lineTo(6, 2); ctx.moveTo(-6, 7); ctx.lineTo(3, 7);
+                    ctx.stroke();
+                    ctx.restore();
+                    // box outline
                     ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = 1.5; ctx.strokeRect(-hw, fy, cw, ch - dep);
                     ctx.lineWidth = 1;
                     ctx.restore();
@@ -1034,7 +1043,7 @@ class Main {
                 } else if (p.redArea) {
                     ctx.fillStyle = "rgba(255, 0, 0, 0.6)";
                 } else if (p.brownArea) {
-                    ctx.fillStyle = "#8b4513"; // solid impact colour
+                    ctx.fillStyle = p.impactCol || "#8b4513"; // solid impact colour
                 } else if (p.poison) {
                     ctx.fillStyle = "rgba(0, 128, 0, 0.4)";
                     ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.fill();
@@ -1242,7 +1251,7 @@ class Main {
             }
 
             // Gameplay UI
-            if (this.state === State.PLAY || this.state === State.CNT) {
+            if (this.state === State.PLAY || this.state === State.CNT || this.state === State.OVER) {
                 // HUD backdrop panel — starts exactly at the play-field bottom (810,
                 // tile 27) so the bottom area lines up with the 18×32 grid.
                 ctx.fillStyle = "rgba(18,26,22,0.82)";
@@ -1354,8 +1363,13 @@ class Main {
         } // End PLAY|CNT block
 
         if (this.state === State.OVER) {
-            ctx.fillStyle = "rgba(0,0,0,0.6)";
+            // The frozen battlefield + cards stay fully visible underneath; only a
+            // light dim + a centered result panel sit on top as the overlay.
+            ctx.fillStyle = "rgba(0,0,0,0.3)";
             ctx.fillRect(0, 0, W, H);
+            let pw = 300, ph = 190, px = W / 2 - pw / 2, py = H / 2 - 105;
+            ctx.fillStyle = "rgba(18,26,22,0.9)";
+            this.drawRoundRect(px, py, pw, ph, 18, true, false);
             let msg = this.eng.win === 0 ? "You Win!" : "You Lose!";
             let color = this.eng.win === 0 ? "#32CD32" : "#FF6347";
             this.drawCenteredString(msg, W / 2, H / 2 - 50, "bold 50px 'Baloo 2', 'Segoe UI', sans-serif", color);

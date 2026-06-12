@@ -1098,15 +1098,21 @@ export default class GameEngine {
                             else u.y += (dy < 0 ? -1 : 1) * Math.min(penY, 3.5);
                         }
                     } else {
-                        // FRIENDLY units use a small circle so they slip past their own
-                        // structures (the capped push lets them squeeze through).
-                        let req = t.rad * 0.8 + uHb;
-                        let dx = u.x - t.x, dy = u.y - t.y, dist = Math.hypot(dx, dy);
-                        if (dist < req) {
-                            if (dist === 0) { let an = this.random() * Math.PI * 2; dx = Math.cos(an); dy = Math.sin(an); dist = 1; }
-                            let push = Math.min(req - dist, 3.5);
-                            u.x += (dx / dist) * push;
-                            u.y += (dy / dist) * push;
+                        // FRIENDLY units collide with the tower's visual too (so they
+                        // never overlap their own towers), but as a ROUNDED box, a touch
+                        // larger and with rounded sides so they slide smoothly around it.
+                        let H = t.rad * 0.92 + uHb, cr = t.rad * 0.4;
+                        let dx = u.x - t.x, dy = u.y - t.y;
+                        let qx = Math.abs(dx) - H + cr, qy = Math.abs(dy) - H + cr;
+                        let mx = Math.max(qx, 0), my = Math.max(qy, 0), outLen = Math.hypot(mx, my);
+                        let sdf = Math.min(Math.max(qx, qy), 0) + outLen - cr;
+                        if (sdf < 0) {
+                            let nx, ny;
+                            if (outLen > 1e-4) { nx = Math.sign(dx) * mx / outLen; ny = Math.sign(dy) * my / outLen; }
+                            else if (qx > qy) { nx = Math.sign(dx) || 1; ny = 0; }
+                            else { nx = 0; ny = Math.sign(dy) || 1; }
+                            let push = Math.min(-sdf, 3.5);
+                            u.x += nx * push; u.y += ny * push;
                         }
                     }
                     continue;

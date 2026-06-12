@@ -230,7 +230,7 @@ export default class Proj {
                 g.ents.push(new Troop(this.tm, this.x, this.y, g.getCard("Royal Recruits")));
                 if (g.addDeploy) g.addDeploy(this.x, this.y, this.tm);
                 let f = new Proj(this.x, this.y, this.x, this.y, null, 0, false, this.rad, 0, this.tm, false);
-                f.brownArea = true; f.life = 11;
+                f.brownArea = true; f.life = 11; f.impactCol = "#c79a5e"; // match the cardboard package
                 g.projs.push(f);
             }
             return;

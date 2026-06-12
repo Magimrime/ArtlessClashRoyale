@@ -129,12 +129,14 @@ export default class Troop extends Entity {
         if (this.fr > 0) {
             this.infernoTick = 0;
             this.chargeT = 0;
+            this.isCharging = false; this.distWalked = 0; // a freeze stops a Prince's charge
             this.atk = false; // a freeze breaks the lock (it can re-target after)
             return;
         }
         if (this.st-- > 0) {
             this.infernoTick = 0;
             this.chargeT = 0;
+            this.isCharging = false; this.distWalked = 0; // a stun stops a Prince's charge
             this.atk = false; // a stun breaks the lock
             return;
         }
@@ -147,6 +149,7 @@ export default class Troop extends Entity {
             this.x += this.kbX * f;
             this.y += this.kbY * f;
             this.kbTime--;
+            this.isCharging = false; this.distWalked = 0; // a knockback stops a Prince's charge
         }
 
         if (this.curseTime > 0) this.curseTime--;
@@ -405,12 +408,19 @@ export default class Troop extends Entity {
                 let laneX = (this.x < W / 2) ? W / 4 : W * 3 / 4;
                 let pY = (this.tm === 0) ? 645 : 165;                 // own princess-tower y
                 let side = (this.x >= laneX) ? 1 : -1;                // approach side
-                let touchOff = 32 + g.getHitboxRadius(this);          // touch the (larger) princess edge
+                // Clear of the princess's (rounded) friendly hitbox so the loop point is
+                // reachable — the troop curves AROUND the side, never into the tower.
+                let off = 41 + g.getHitboxRadius(this);
                 let bx = Math.max(laneX - 22, Math.min(laneX + 22, this.x)); // CLOSEST point on the bridge
-                let past = (this.tm === 0) ? (this.y <= pY - 8) : (this.y >= pY + 8);
-                if (!past) {
-                    // Still behind: go touch the own princess tower (on the approach side).
-                    tx = laneX + side * touchOff; ty = (this.tm === 0) ? pY - 8 : pY + 8;
+                let dyToP = (this.tm === 0) ? (this.y - pY) : (pY - this.y); // +behind/below, -in front
+                let past = dyToP <= -10;
+                if (dyToP > 10) {
+                    // BEHIND/BELOW the princess: come up its near face on our approach
+                    // side, staying outside the hitbox (loop step 1 → 2).
+                    tx = laneX + side * off; ty = pY + ((this.tm === 0) ? 1 : -1) * (dyToP > off ? off * 0.5 : 6);
+                } else if (!past) {
+                    // BESIDE the princess: slide forward to its FRONT (toward the bridge).
+                    tx = laneX + side * off; ty = pY + ((this.tm === 0) ? -1 : 1) * off * 0.7;
                 } else if ((this.tm === 0 && this.y > RIV_Y + 14) || (this.tm === 1 && this.y < RIV_Y - 14)) {
                     tx = bx; ty = (this.tm === 0) ? RIV_Y + 14 : RIV_Y - 14; // → closest bridge point
                 } else {
@@ -423,6 +433,30 @@ export default class Troop extends Entity {
                 if (cn === "Tower" || cn === "Building") {
                     tx = this.currentTarget.x;
                     ty = this.currentTarget.y + ((this.tm === 0) ? 1 : -1) * this.currentTarget.rad * 0.7;
+                }
+                // A FRIENDLY building/tower (not our target) across the path: steer
+                // around its side (handled by the collision otherwise).
+                if (!this.fly) {
+                    let obs = this.getBlockingObstacle(g, this.x, this.y, tx, ty);
+                    if (obs && obs !== this.currentTarget) {
+                        let off = obs.rad * 0.92 + g.getHitboxRadius(this) + 8;
+                        let s = (this.x >= obs.x) ? 1 : -1;
+                        tx = obs.x + s * off; ty = obs.y;
+                    }
+                }
+            }
+
+            // A troop right behind our own (wide) KING can't push through it — guide it
+            // out to the nearer flank until it clears the king's width, then the normal
+            // lane logic takes back over.
+            if (!this.fly && !this.atk && (this.y < RIV_Y) !== (this.currentTarget.y < RIV_Y)) {
+                let kx = W / 2, ky = (this.tm === 0) ? 735 : 75;
+                let kHalf = 50 * 0.92 + g.getHitboxRadius(this);
+                let behind = (this.tm === 0) ? (this.y > ky - 10) : (this.y < ky + 10);
+                if (behind && Math.abs(this.x - kx) < kHalf) {
+                    let kside = (this.x >= kx) ? 1 : -1;
+                    tx = kx + kside * (kHalf + 12);
+                    ty = this.y + ((this.tm === 0) ? -1 : 1) * 18; // ease up the flank
                 }
             }
             this.path = [{ x: tx, y: ty }]; // debug path shows only the next step
@@ -482,8 +516,9 @@ export default class Troop extends Entity {
                 this.y += dy * this.c.s * (this.isCharging ? 2.0 : 1.0) * speedMult;
             }
 
-            // Only the Princes charge/dash — the Knight does not.
-            if (this.c.n === "Prince" || this.c.n === "Dark Prince") {
+            // Only the Princes charge/dash — the Knight does not. A Prince being
+            // knocked back can't build up its charge.
+            if ((this.c.n === "Prince" || this.c.n === "Dark Prince") && this.kbTime <= 0) {
                 this.distWalked += Math.hypot(dx * this.c.s, dy * this.c.s);
                 if (this.distWalked > 20) this.isCharging = true;
             }
