@@ -234,7 +234,7 @@ export default class Troop extends Entity {
         this.findTarget(g);
 
         // Jumpers (Hog, Prince, ...) leap the river instead of using a bridge.
-        if (!this.fly && !this.jp && this.currentTarget &&
+        if (!this.fly && !this.jp && this.currentTarget && !g.sandboxNoRiver &&
             ["Hog Rider", "Royal Hogs", "Prince", "Dark Prince"].includes(this.c.n)) {
             if (((this.y < RIV_Y) !== (this.currentTarget.y < RIV_Y)) && Math.abs(this.y - RIV_Y) < 40) {
                 let onBridge = (this.x >= W / 4 - 30 && this.x <= W / 4 + 30) || (this.x >= W * 3 / 4 - 30 && this.x <= W * 3 / 4 + 30);
@@ -414,7 +414,7 @@ export default class Troop extends Entity {
             // (in order) to its own princess-tower lane, then the bridge entrance,
             // then the far bank — and only AFTER crossing does it path to the enemy
             // tower (which it approaches from the front, since it stays on the lane x).
-            if (!this.fly && (this.y < RIV_Y) !== (this.currentTarget.y < RIV_Y)) {
+            if (!this.fly && !g.sandboxNoRiver && (this.y < RIV_Y) !== (this.currentTarget.y < RIV_Y)) {
                 let laneX = (this.x < W / 2) ? W / 4 : W * 3 / 4;
                 let pY = (this.tm === 0) ? 645 : 165;                 // own princess-tower y
                 let side = (this.x >= laneX) ? 1 : -1;                // approach side
@@ -459,7 +459,7 @@ export default class Troop extends Entity {
             // A troop right behind our own (wide) KING can't push through it — guide it
             // out to the nearer flank until it clears the king's width, then the normal
             // lane logic takes back over.
-            if (!this.fly && !this.atk && (this.y < RIV_Y) !== (this.currentTarget.y < RIV_Y)) {
+            if (!this.fly && !this.atk && !g.sandboxNoRiver && (this.y < RIV_Y) !== (this.currentTarget.y < RIV_Y)) {
                 let kx = W / 2, ky = (this.tm === 0) ? 735 : 75;
                 let kHalf = 50 * 0.92 + g.getHitboxRadius(this);
                 let behind = (this.tm === 0) ? (this.y > ky - 10) : (this.y < ky + 10);
@@ -762,10 +762,12 @@ export default class Troop extends Entity {
             if (d < minDist) { minDist = d; distraction = e; }
         }
 
-        // 2. Lane tower (default objective).
+        // 2. Lane tower (default objective). Null-safe: sandbox maps may have only
+        // king towers (and a destroyed sandbox king is gone for good).
         let primary;
-        if (this.tm === 0) primary = (g.t2L.hp > 0 && this.x < W / 2) ? g.t2L : (g.t2R.hp > 0 && this.x >= W / 2) ? g.t2R : g.t2K;
-        else primary = (g.t1L.hp > 0 && this.x < W / 2) ? g.t1L : (g.t1R.hp > 0 && this.x >= W / 2) ? g.t1R : g.t1K;
+        if (this.tm === 0) primary = (g.t2L && g.t2L.hp > 0 && this.x < W / 2) ? g.t2L : (g.t2R && g.t2R.hp > 0 && this.x >= W / 2) ? g.t2R : g.t2K;
+        else primary = (g.t1L && g.t1L.hp > 0 && this.x < W / 2) ? g.t1L : (g.t1R && g.t1R.hp > 0 && this.x >= W / 2) ? g.t1R : g.t1K;
+        if (primary && primary.hp <= 0) primary = null;
 
         // 3. Decide with hysteresis: keep the current distraction unless it dies /
         // leaves sight, or a notably closer one appears (avoids flip-flopping).

@@ -22,6 +22,7 @@ export default class Tower extends Entity {
     }
 
     act(g) {
+        if (this.noTurret) return; // sandbox Heist: bare tower, can't shoot
         if (this.fr > 0) return;
         if (this.st-- > 0) return;
         if (!this.actv) return; // King tower stays asleep until hit or a princess falls

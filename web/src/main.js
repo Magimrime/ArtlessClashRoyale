@@ -50,7 +50,8 @@ const State = {
     ENEMY_DECK: 'ENEMY_DECK',
     MP_MENU: 'MP_MENU',
     MP_HOST: 'MP_HOST',
-    MP_JOIN: 'MP_JOIN'
+    MP_JOIN: 'MP_JOIN',
+    SANDBOX: 'SANDBOX'
 };
 
 class Main {
@@ -91,6 +92,17 @@ class Main {
         this.codeInputs = []; // Rects for 5 digits (for join)
         this.enteredCode = "";
 
+        // Sandbox mode UI
+        this.sandboxBtn = { x: 0, y: 0, w: 120, h: 50 };       // title screen
+        this.sbDeckBtn = { x: 0, y: 0, w: 120, h: 46 };        // bottom-left
+        this.sbMapBtn = { x: 0, y: 0, w: 120, h: 46 };
+        this.sbPauseBtn = { x: 0, y: 0, w: 120, h: 46 };
+        this.sbBackBtn = { x: 0, y: 0, w: 120, h: 46 };
+        this.sandboxPaused = false;
+        this.sandboxDeckOpen = false;
+        this.sbMaps = ['default', 'tower', 'open', 'heist'];
+        this.sbMapNames = { default: 'Default', tower: 'Tower', open: 'Open', heist: 'Heist' };
+
         this.cardRects = [];
         this.nextCardRect = { x: W - 80, y: H - 110, w: 68, h: 90 }; // recomputed with the card row below
         this.cardOffsets = [0, 0, 0, 0]; // For hover animation
@@ -102,6 +114,12 @@ class Main {
         this.playBtn = { x: W / 2 - 60, y: H / 2 + 40 - 150, w: 120, h: 50 };
         this.deckBtn = { x: W / 2 - 60, y: H / 2 + 100 - 150, w: 120, h: 50 };
         this.mpBtn = { x: W / 2 - 60, y: H / 2 + 160 - 150, w: 120, h: 50 };
+        this.sandboxBtn = { x: W / 2 - 60, y: H / 2 + 220 - 150, w: 120, h: 50 };
+        // Sandbox bottom bar: 4 buttons spanning the HUD strip, DECK at the far left.
+        this.sbDeckBtn = { x: 12, y: H - 118, w: 120, h: 46 };
+        this.sbMapBtn = { x: 144, y: H - 118, w: 120, h: 46 };
+        this.sbPauseBtn = { x: 276, y: H - 118, w: 120, h: 46 };
+        this.sbBackBtn = { x: 408, y: H - 118, w: 120, h: 46 };
         this.exitBtn = { x: W / 2 - 60, y: H / 2 + 40 - 120 + 100, w: 120, h: 50 };
         this.backBtn = { x: W / 2 - 60, y: H - 120, w: 120, h: 50 };
         this.continueBtn = { x: W / 2 - 60, y: H - 120, w: 120, h: 50 };
@@ -292,6 +310,12 @@ class Main {
                 this.enteredCode = "";
                 this.mp.checkHealth(); // Probe whether a game server is reachable
                 this.state = State.MP_MENU;
+            } else if (this.contains(this.sandboxBtn, x, y)) {
+                this.eng.setMultiplayer(false);
+                this.eng.setupSandbox('default');
+                this.sandboxPaused = false;
+                this.sandboxDeckOpen = false;
+                this.state = State.SANDBOX;
             } else if (!this.eng.cheatPressed && x > W - 53 && y < 26) {
                 this.eng.cheatPressed = true;
                 this.eng.saveProgress();
@@ -421,6 +445,35 @@ class Main {
                         this.eng.saveProgress();
                     }
                 }
+            }
+        } else if (this.state === State.SANDBOX) {
+            if (this.sandboxDeckOpen) {
+                // Card picker overlay: tap a deck card to arm it, anywhere else closes.
+                let rects = this.sandboxDeckRects();
+                for (let i = 0; i < rects.length; i++) {
+                    if (this.contains(rects[i], x, y)) {
+                        this.eng.sel = this.eng.myDeck[i];
+                        break;
+                    }
+                }
+                this.sandboxDeckOpen = false;
+            } else if (this.contains(this.sbDeckBtn, x, y)) {
+                this.sandboxDeckOpen = true;
+            } else if (this.contains(this.sbMapBtn, x, y)) {
+                // Cycle Default → Tower → Open → Heist (rebuilds the arena).
+                let i = this.sbMaps.indexOf(this.eng.sandboxMap);
+                this.eng.setupSandbox(this.sbMaps[(i + 1) % this.sbMaps.length]);
+            } else if (this.contains(this.sbPauseBtn, x, y)) {
+                this.sandboxPaused = !this.sandboxPaused;
+            } else if (this.contains(this.sbBackBtn, x, y)) {
+                this.eng.sandbox = false;
+                this.eng.sel = null;
+                this.state = State.TITLE;
+            } else if (y < H - 150 && this.eng.sel) {
+                // Place on the field; the side decides the team. The card stays armed
+                // so you can stamp several copies.
+                let gm = this.snapToGrid(x, y);
+                this.eng.sandboxPlace(this.eng.sel, gm.x, gm.y);
             }
         } else if (this.state === State.PLAY) {
             if (y > H - 150) {
@@ -566,6 +619,8 @@ class Main {
                 if (this.eng.over) {
                     this.state = State.OVER;
                 }
+            } else if (this.state === State.SANDBOX && !this.sandboxPaused) {
+                this.eng.upd(); // sandbox runs freely; pausing freezes the sim only
             }
 
             this.accumulator -= this.step;
@@ -595,7 +650,8 @@ class Main {
     applyInterp(alpha) {
         this._interpActive = false;
         if (this.eng.isMultiplayer) return; // lockstep syncs positions; don't smear corrections
-        if (this.state !== State.PLAY && this.state !== State.CNT) return;
+        if (this.state !== State.PLAY && this.state !== State.CNT &&
+            !(this.state === State.SANDBOX && !this.sandboxPaused)) return;
         if (!(alpha > 0)) return;
         this._interpActive = true;
         for (const e of this.eng.ents) {
@@ -662,6 +718,7 @@ class Main {
             }
             this.drawBtn(this.deckBtn, "DECK", "#FFA500");
             this.drawBtn(this.mpBtn, "MULTIPLAYER", "#3296ff");
+            this.drawBtn(this.sandboxBtn, "SANDBOX", "#b65cd6");
 
             this.drawCenteredString(`Cards Unlocked: ${this.eng.unlockedCards.length} / ${this.eng.allCards.length}`, W / 2, H - 270, "600 15px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.82)");
             this.drawCenteredString(`Wins ${this.eng.gamesWon}   ·   Matches ${this.eng.gamesPlayed}`, W / 2, H - 246, "600 15px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.82)");
@@ -859,17 +916,20 @@ class Main {
             return;
         }
 
-        // River — solid water, exactly one tile tall.
-        ctx.fillStyle = "#3a8fd0";
-        ctx.fillRect(0, RIV_Y - 15, W, 30);
-        // Bridges — solid wood, no plank lines.
-        ctx.fillStyle = "#9c6b3a";
-        for (const bx of [W / 4, W * 3 / 4]) {
-            ctx.fillRect(bx - 26, RIV_Y - 20, 52, 40);
+        // River — solid water, exactly one tile tall. The sandbox "Open" map has no
+        // river or bridges (one uninterrupted field).
+        if (!(this.state === State.SANDBOX && this.eng.sandboxNoRiver)) {
+            ctx.fillStyle = "#3a8fd0";
+            ctx.fillRect(0, RIV_Y - 15, W, 30);
+            // Bridges — solid wood, no plank lines.
+            ctx.fillStyle = "#9c6b3a";
+            for (const bx of [W / 4, W * 3 / 4]) {
+                ctx.fillRect(bx - 26, RIV_Y - 20, 52, 40);
+            }
         }
 
-        // Render Game during COUNTDOWN (CNT) or PLAY
-        if (this.state === State.PLAY || this.state === State.CNT || this.state === State.OVER) {
+        // Render Game during COUNTDOWN (CNT), PLAY, OVER, or SANDBOX
+        if (this.state === State.PLAY || this.state === State.CNT || this.state === State.OVER || this.state === State.SANDBOX) {
             // The tile grid is always visible during play.
             this.drawGrid();
 
@@ -888,10 +948,10 @@ class Main {
             // (shadows/effects -> ground units -> projectiles -> flying units).
 
             // HOVER PREVIEW (Ghost Unit & Range)
-            if ((this.state === State.PLAY || this.state === State.CNT) && this.eng.sel && this.mouse.y < H - 150) {
+            if ((this.state === State.PLAY || this.state === State.CNT || this.state === State.SANDBOX) && this.eng.sel && this.mouse.y < H - 150) {
                 let c = this.eng.sel;
                 let spellShape = this.eng.getSpellRadius(c);
-                let canAfford = this.eng.p1.elx >= c.c;
+                let canAfford = this.eng.sandbox || this.eng.p1.elx >= c.c; // sandbox: no elixir
                 // Spells snap to the same tile grid as troops.
                 let gm = this.snapToGrid(this.mouse.x, this.mouse.y);
 
@@ -1418,6 +1478,46 @@ class Main {
 
         } // End PLAY|CNT block
 
+        if (this.state === State.SANDBOX) {
+            // Bottom bar replaces the card/elixir HUD — same panel style, same strip
+            // (the play field above keeps its exact 18×27 tile grid).
+            ctx.fillStyle = "rgba(18,26,22,0.82)";
+            this.drawRoundRect(-12, H - 150, W + 24, 162, 16, true, false);
+
+            // Hint row: how sides map to teams + currently armed card.
+            let hint = "Top half = RED team  ·  Bottom half = BLUE team";
+            if (this.eng.sel) hint = `Placing: ${this.eng.sel.n}   ·   ${hint}`;
+            this.drawCenteredString(hint, W / 2, H - 130, "600 12px 'Baloo 2', 'Segoe UI', sans-serif", "#d9e8d9");
+
+            this.drawBtn(this.sbDeckBtn, "DECK", "#FFA500");
+            this.drawBtn(this.sbMapBtn, `MAP: ${this.sbMapNames[this.eng.sandboxMap] || '?'}`, "#3296ff");
+            this.drawBtn(this.sbPauseBtn, this.sandboxPaused ? "PLAY" : "PAUSE", this.sandboxPaused ? "#39c44e" : "#e0b13c");
+            this.drawBtn(this.sbBackBtn, "BACK", "#FF6347");
+
+            // Frozen-sim banner so a pause is obvious at a glance.
+            if (this.sandboxPaused) {
+                ctx.fillStyle = "rgba(0,0,0,0.45)";
+                this.drawRoundRect(W / 2 - 70, 10, 140, 34, 10, true, false);
+                this.drawCenteredString("PAUSED", W / 2, 33, "bold 18px 'Baloo 2', 'Segoe UI', sans-serif", "#ffd24d");
+            }
+
+            // Card picker overlay: the 8 deck cards, tap one to arm it.
+            if (this.sandboxDeckOpen) {
+                ctx.fillStyle = "rgba(0,0,0,0.62)";
+                ctx.fillRect(0, 0, W, H);
+                this.drawCenteredString("Pick a card", W / 2, H / 2 - 152, "bold 26px 'Baloo 2', 'Segoe UI', sans-serif", "#ffffff");
+                let rects = this.sandboxDeckRects();
+                for (let i = 0; i < rects.length; i++) {
+                    let r = rects[i], c = this.eng.myDeck[i];
+                    this.drawDeckCard(r.x, r.y, r.w, r.h, c, this.eng.sel === c);
+                }
+                if (!this.eng.myDeck.length) {
+                    this.drawCenteredString("Your deck is empty — build one first!", W / 2, H / 2, "600 16px 'Baloo 2', 'Segoe UI', sans-serif", "#ffd24d");
+                }
+                this.drawCenteredString("tap anywhere else to close", W / 2, H / 2 + 132, "600 12px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.7)");
+            }
+        }
+
         if (this.state === State.OVER) {
             // The frozen battlefield + cards stay fully visible underneath; only a
             // light dim + a centered result panel sit on top as the overlay.
@@ -1526,7 +1626,9 @@ class Main {
                 ctx.fillStyle = "#26282c";
                 ctx.beginPath(); ctx.arc(cx, cy, tr * 0.44, 0, Math.PI * 2); ctx.fill();
             };
-            if (!e.kg) {
+            if (e.noTurret) {
+                // Heist king: bare roof — no spell vent, no shooter, no box.
+            } else if (!e.kg) {
                 turret(x, y, r * 0.5, true); // princess cannon — barrel, aims
             } else {
                 // King: big spell vent (no barrel) pushed BACK; the aiming shooter
@@ -1674,6 +1776,17 @@ class Main {
         for (let gy = 0; gy < H - 150; gy += 60) ctx.fillRect(0, gy, W, 30);
         ctx.fillStyle = "rgba(20,45,75,0.06)";
         ctx.fillRect(0, 0, W, RIV_Y - 15);
+    }
+
+    // Sandbox card-picker layout: the (≤8) deck cards in a centred 4×2 grid.
+    sandboxDeckRects() {
+        const cw = 110, ch = 90, gap = (W - 4 * cw) / 5;
+        let rects = [];
+        for (let i = 0; i < this.eng.myDeck.length && i < 8; i++) {
+            let col = i % 4, row = Math.floor(i / 4);
+            rects.push({ x: gap + col * (cw + gap), y: H / 2 - 120 + row * (ch + 20), w: cw, h: ch });
+        }
+        return rects;
     }
 
     // Troops/buildings deploy on a 30px tile grid (like the real game).

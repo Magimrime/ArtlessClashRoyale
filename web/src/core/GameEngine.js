@@ -48,6 +48,11 @@ export default class GameEngine {
 
         this.doubleElixirAnim = 0;
         this.sel = null;
+        // Sandbox mode: free placement, no elixir/AI/game-over. sandboxNoRiver removes
+        // the river+bridge crossing (the "Open" map).
+        this.sandbox = false;
+        this.sandboxMap = 'default';
+        this.sandboxNoRiver = false;
         this.cheated = false;
         this.gamesPlayed = 0;
         this.gamesWon = 0;
@@ -186,6 +191,57 @@ export default class GameEngine {
         if (c.t === 3) tags.push("Building");
 
         return tags;
+    }
+
+    // Sandbox: a free-play arena with no opponent, elixir, or win condition. Maps
+    // (every map has the two king towers):
+    //   'default' — river + bridges + kings
+    //   'tower'   — river + bridges + kings + princess towers
+    //   'open'    — no river / bridges, kings only
+    //   'heist'   — river + bridges + kings that have NO turret (can't shoot)
+    setupSandbox(map) {
+        this.sandbox = true;
+        this.sandboxMap = map || 'default';
+        this.sandboxNoRiver = (this.sandboxMap === 'open');
+        this.p1 = new Player(0);
+        this.p2 = new Player(1);
+        this.ents = [];
+        this.projs = [];
+        this.deploys = [];
+        this.sel = null;
+        this.over = false;
+        this.tiebreaker = false;
+        this.isDoubleElixir = false;
+        this.aiTick = 0;
+        this.gameStart = Date.now();
+        this.nextEntityId = 1;
+        this.enemyAI = null;
+        this.t1L = this.t1R = this.t2L = this.t2R = null;
+        this.t1K = new Tower(0, this.W / 2, 735, true); this.ents.push(this.t1K);
+        this.t2K = new Tower(1, this.W / 2, 75, true); this.ents.push(this.t2K);
+        // Kings are awake from the start (no activation rules in sandbox)…
+        this.t1K.actv = true; this.t2K.actv = true;
+        if (this.sandboxMap === 'heist') {
+            // …except Heist: bare kings with no turret — they can't shoot at all.
+            this.t1K.noTurret = true; this.t2K.noTurret = true;
+            this.t1K.actv = false; this.t2K.actv = false;
+        }
+        if (this.sandboxMap === 'tower') {
+            this.t1L = new Tower(0, this.W / 4, 645, false); this.ents.push(this.t1L);
+            this.t1R = new Tower(0, this.W * 3 / 4, 645, false); this.ents.push(this.t1R);
+            this.t2L = new Tower(1, this.W / 4, 165, false); this.ents.push(this.t2L);
+            this.t2R = new Tower(1, this.W * 3 / 4, 165, false); this.ents.push(this.t2R);
+        }
+    }
+
+    // Sandbox placement: free, no elixir / validity rules. The SIDE you drop on
+    // decides the team — bottom half spawns blue (team 0), top half red (team 1).
+    sandboxPlace(c, x, y) {
+        if (!this.sandbox || !c) return false;
+        if (!this.isValid(y, x, c, 0)) return false;
+        let tm = (y < this.RIV_Y) ? 1 : 0;
+        this.addU(tm, c, x, y);
+        return true;
     }
 
     isEvoCapable(name) { return Object.prototype.hasOwnProperty.call(this.EVO_REQ, name); }
@@ -483,6 +539,19 @@ export default class GameEngine {
     }
 
     isValid(y, x, c, tm) {
+        // Sandbox: place anywhere on the field (either side), only not on a structure.
+        if (this.sandbox) {
+            if (y < 0 || y > 810) return false;
+            if (!this.sandboxNoRiver && c.t !== 2 && y > this.RIV_Y - 25 && y < this.RIV_Y + 25 && c.t === 3) return false;
+            for (let e of this.ents) {
+                let isStruct = e.constructor.name === "Building" || e.constructor.name === "Tower";
+                if (isStruct && e.hp > 0) {
+                    let gap = this.getHitboxRadius(e) + this.getVisualRadius(c) * (c.t === 3 ? 0.9 : 0.45);
+                    if (Math.hypot(e.x - x, e.y - y) < gap) return false;
+                }
+            }
+            return true;
+        }
         if (c.n === "The Log" || c.n === "Barbarian Barrel" || c.n === "Royale Delivery") {
             // Log/BarbBarrel must be placed on player's side (roughly) unless tower down
             // P1 (tm=0) plays on bottom (y > RIV_Y), P2 (tm=1) plays on top (y < RIV_Y)
@@ -1076,22 +1145,24 @@ export default class GameEngine {
             p.ly = p.y;
         }
 
-        let elapsed = Date.now() - this.gameStart;
-        let remaining = 180000 - elapsed; // 3 minutes
-        if (remaining <= 60000 && !this.isDoubleElixir) { // 1 minute left
-            this.isDoubleElixir = true;
-            this.doubleElixirAnim = 300;
-        }
-        if (remaining <= 0) {
-            remaining = 0;
-            this.tiebreaker = true;
-        }
+        if (!this.sandbox) {
+            let elapsed = Date.now() - this.gameStart;
+            let remaining = 180000 - elapsed; // 3 minutes
+            if (remaining <= 60000 && !this.isDoubleElixir) { // 1 minute left
+                this.isDoubleElixir = true;
+                this.doubleElixirAnim = 300;
+            }
+            if (remaining <= 0) {
+                remaining = 0;
+                this.tiebreaker = true;
+            }
 
-        if (this.doubleElixirAnim > 0) this.doubleElixirAnim--;
+            if (this.doubleElixirAnim > 0) this.doubleElixirAnim--;
 
-        if (this.t1K.hp <= 0 || this.t2K.hp <= 0) {
-            this.endGame(this.t1K.hp <= 0 ? 1 : 0);
-            return;
+            if (this.t1K.hp <= 0 || this.t2K.hp <= 0) {
+                this.endGame(this.t1K.hp <= 0 ? 1 : 0);
+                return;
+            }
         }
 
         if (this.tiebreaker) {
@@ -1115,23 +1186,27 @@ export default class GameEngine {
             }
         }
 
-        let rate = this.isDoubleElixir ? 0.02 : 0.01;
-        this.p1.elx = Math.min(10, this.p1.elx + rate);
-        if (this.isMultiplayer) {
-            this.p2.elx = Math.min(10, this.p2.elx + rate); // Identical rate for multiplayer lockstep
-        } else {
-            this.p2.elx = Math.min(10, this.p2.elx + rate * 0.85); // 15% slower than player for AI
+        if (!this.sandbox) {
+            let rate = this.isDoubleElixir ? 0.02 : 0.01;
+            this.p1.elx = Math.min(10, this.p1.elx + rate);
+            if (this.isMultiplayer) {
+                this.p2.elx = Math.min(10, this.p2.elx + rate); // Identical rate for multiplayer lockstep
+            } else {
+                this.p2.elx = Math.min(10, this.p2.elx + rate * 0.85); // 15% slower than player for AI
+            }
         }
 
         this.aiTick++;
 
-        let pk1 = this.t1K.actv, pk2 = this.t2K.actv;
-        this.t1K.actv = (this.t1K.hp < this.t1K.mhp) || (this.t1L.hp <= 0) || (this.t1R.hp <= 0);
-        this.t2K.actv = (this.t2K.hp < this.t2K.mhp) || (this.t2L.hp <= 0) || (this.t2R.hp <= 0);
-        // On the activation flip, play the "shooter rises from its box" animation (45
-        // ticks); otherwise tick it down while it runs.
-        if (this.t1K.actv && !pk1) this.t1K.activateAnim = 45; else if (this.t1K.activateAnim > 0) this.t1K.activateAnim--;
-        if (this.t2K.actv && !pk2) this.t2K.activateAnim = 45; else if (this.t2K.activateAnim > 0) this.t2K.activateAnim--;
+        if (!this.sandbox) {
+            let pk1 = this.t1K.actv, pk2 = this.t2K.actv;
+            this.t1K.actv = (this.t1K.hp < this.t1K.mhp) || (this.t1L.hp <= 0) || (this.t1R.hp <= 0);
+            this.t2K.actv = (this.t2K.hp < this.t2K.mhp) || (this.t2L.hp <= 0) || (this.t2R.hp <= 0);
+            // On the activation flip, play the "shooter rises from its box" animation (45
+            // ticks); otherwise tick it down while it runs.
+            if (this.t1K.actv && !pk1) this.t1K.activateAnim = 45; else if (this.t1K.activateAnim > 0) this.t1K.activateAnim--;
+            if (this.t2K.actv && !pk2) this.t2K.activateAnim = 45; else if (this.t2K.activateAnim > 0) this.t2K.activateAnim--;
+        }
 
         if (this.enemyAI && !this.isMultiplayer) this.enemyAI.update();
 
@@ -1226,7 +1301,7 @@ export default class GameEngine {
                 let visualR = e.rad;
                 e.x = Math.max(visualR, Math.min(this.W - visualR, e.x));
                 e.y = Math.max(visualR, Math.min(810 - visualR, e.y));
-                if (e.y + visualR > this.RIV_Y - 15 && e.y - visualR < this.RIV_Y + 15 && !e.fly) {
+                if (!this.sandboxNoRiver && e.y + visualR > this.RIV_Y - 15 && e.y - visualR < this.RIV_Y + 15 && !e.fly) {
                     let onBridge = (e.x >= this.W / 4 - 30 && e.x <= this.W / 4 + 30) || (e.x >= this.W * 3 / 4 - 30 && e.x <= this.W * 3 / 4 + 30);
                     if (!onBridge) {
                         e.y = e.y < this.RIV_Y ? this.RIV_Y - 15 - visualR : this.RIV_Y + 15 + visualR;
