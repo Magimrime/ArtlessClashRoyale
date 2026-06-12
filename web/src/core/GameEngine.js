@@ -60,7 +60,7 @@ export default class GameEngine {
         // effect value (Crate and Vines have no real counterpart).
         this.allCards = [
             new Card("Knight", 3, 1766, 202, 0.5, 14, 0, 100, 72, 150, false, false),
-            new Card("Archers", 3, 304, 107, 0.5, 128, 0, 100, 54, 150, false, true),
+            new Card("Archers", 3, 304, 95, 0.5, 128, 0, 100, 54, 150, false, true),
             new Card("Giant", 5, 4091, 254, 0.375, 14, 1, 100, 90, 150, false, false),
             new Card("Fireball", 4, 0, 689, 0, 0, 2, 0, 0, 0, false, true),
             new Card("Rocket", 6, 0, 1484, 0, 0, 2, 0, 0, 0, false, true),
@@ -832,7 +832,12 @@ export default class GameEngine {
                 else { p.life = 26; } // any other placed spell still gets a short wind-up
                 this.projs.push(p);
             }
-        } else if (["Archers", "Spear Goblins", "Wall Breakers"].includes(c.n)) {
+        } else if (c.n === "Archers") {
+            // Two archers almost touching — just outside the collision radius so they
+            // don't immediately snap apart, leaving a tiny visible gap.
+            this.ents.push(new Troop(tm, x - 8, y, c));
+            this.ents.push(new Troop(tm, x + 8, y, c));
+        } else if (["Spear Goblins", "Wall Breakers"].includes(c.n)) {
             this.ents.push(new Troop(tm, x - 15, y, c));
             this.ents.push(new Troop(tm, x + 15, y, c));
             if (c.n.includes("Spear")) this.ents.push(new Troop(tm, x, y + 15, c));
