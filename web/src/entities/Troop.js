@@ -695,7 +695,11 @@ export default class Troop extends Entity {
         let auraR = (this.rad + 12) * 2.0, shocked = [];
         for (let e of g.ents) {
             if (e.tm !== this.tm && e.hp > 0 && e.constructor.name !== "Tower" && this.dist(e) < auraR + g.getHitboxRadius(e)) {
-                e.hp -= 60; e.st = Math.max(e.st, 30); shocked.push(e); // ~0.5s stun
+                e.hp -= 60; shocked.push(e);
+                // Stun, but never CHAIN-stun the same unit into a permanent lock: a
+                // given unit can be aura-stunned at most once per ~75 ticks, so it
+                // always gets a window to move/attack between stuns (no "stuck").
+                if (g.aiTick >= (e._egStunReady || 0)) { e.st = Math.max(e.st, 30); e._egStunReady = g.aiTick + 75; }
             }
         }
         if (shocked.length) {

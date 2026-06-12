@@ -1217,6 +1217,9 @@ class Main {
             // Deploy-time clocks (one per card, above the units)
             this.drawDeploys();
 
+            // Health bars sit above every unit/tower/flyer (only spells go over them).
+            this.drawHealthBars();
+
             // Every OTHER spell (arcs, Goblin Barrel, arrows, Zap / Freeze drops, the
             // delivery crate, area spells) renders ABOVE EVERYTHING.
             for (let p of this.eng.projs) if (this.isSpellProj(p) && !p.isLog) { drawGroundProj(p); this.drawProj(p); }
@@ -1539,28 +1542,15 @@ class Main {
         }
 
 
-        // Health bar — its COLOR is the only friend/foe indicator
-        // (blue = yours, red = enemy). Always shown for units so the team is
-        // readable even at full HP; towers show it only when damaged.
-        let teamCol = isFriend ? "#2f8bff" : "#ff4d4d";
-        let barW = (e instanceof Tower) ? 42 : Math.max(24, radius * 1.9);
-        let barY = y - radius - 9;
-
-        if (e.shield > 0) {
-            // Guard against a missing/zero maxShield (would make the bar infinite).
-            let shPct = e.maxShield > 0 ? Math.max(0, Math.min(1, e.shield / e.maxShield)) : 1;
-            ctx.fillStyle = "rgba(0,0,0,0.5)";
-            ctx.fillRect(x - barW / 2 - 1, barY - 6, barW + 2, 5);
-            ctx.fillStyle = "#d9b3ff";
-            ctx.fillRect(x - barW / 2, barY - 5, barW * shPct, 3);
-        }
-        if (!(e instanceof Tower) || e.hp < e.mhp) {
-            let hpPct = Math.max(0, Math.min(1, e.hp / e.mhp));
-            ctx.fillStyle = "rgba(0,0,0,0.55)";
-            ctx.fillRect(x - barW / 2 - 1, barY - 1, barW + 2, 6);
-            ctx.fillStyle = teamCol;
-            ctx.fillRect(x - barW / 2, barY, barW * hpPct, 4);
-        }
+        // Health bar — its COLOR is the only friend/foe indicator (blue = yours,
+        // red = enemy). The bar GEOMETRY is computed here because it needs this
+        // sprite's flying/jump offsets, but the bars are DRAWN later in a dedicated
+        // pass so they sit above every unit/tower (only spells draw over them).
+        // See drawHealthBars().
+        e._barX = x;
+        e._barY = y - radius - 9;
+        e._barW = (e instanceof Tower) ? 42 : Math.max(24, radius * 1.9);
+        e._barFriend = isFriend;
 
         // Unit name
         if (name && name.length > 0) {
@@ -1937,6 +1927,31 @@ class Main {
             ctx.fillStyle = "#ffd24d"; ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
         }
         ctx.restore();
+    }
+
+    // Health/shield bars for every unit and damaged tower, drawn in one pass that
+    // sits ABOVE all units, towers, and flying troops — only spells render over
+    // them. Geometry was stashed on each entity by drawEntityBody this same frame.
+    drawHealthBars() {
+        for (let e of this.eng.ents) {
+            if (e._barY === undefined) continue;
+            let x = e._barX, barY = e._barY, barW = e._barW;
+            if (e.shield > 0) {
+                // Guard against a missing/zero maxShield (would make the bar infinite).
+                let shPct = e.maxShield > 0 ? Math.max(0, Math.min(1, e.shield / e.maxShield)) : 1;
+                ctx.fillStyle = "rgba(0,0,0,0.5)";
+                ctx.fillRect(x - barW / 2 - 1, barY - 6, barW + 2, 5);
+                ctx.fillStyle = "#d9b3ff";
+                ctx.fillRect(x - barW / 2, barY - 5, barW * shPct, 3);
+            }
+            if (!(e instanceof Tower) || e.hp < e.mhp) {
+                let hpPct = Math.max(0, Math.min(1, e.hp / e.mhp));
+                ctx.fillStyle = "rgba(0,0,0,0.55)";
+                ctx.fillRect(x - barW / 2 - 1, barY - 1, barW + 2, 6);
+                ctx.fillStyle = e._barFriend ? "#2f8bff" : "#ff4d4d";
+                ctx.fillRect(x - barW / 2, barY, barW * hpPct, 4);
+            }
+        }
     }
 
     // One clock-wipe per card played, coloured by team (blue=player, red=enemy).

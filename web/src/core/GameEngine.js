@@ -72,7 +72,7 @@ export default class GameEngine {
             new Card("Mega Knight", 7, 3993, 268, 0.5, 14, 0, 100, 102, 150, false, false),
             new Card("P.E.K.K.A", 7, 3760, 816, 0.375, 14, 0, 100, 108, 150, false, false),
             new Card("Skeleton Army", 3, 81, 81, 0.75, 8, 0, 100, 60, 150, false, false),
-            new Card("Barbarians", 5, 670, 192, 0.5, 8, 0, 100, 78, 150, false, false),
+            new Card("Barbarians", 5, 715, 192, 0.5, 8, 0, 100, 78, 150, false, false),
             new Card("Goblin Barrel", 3, 0, 0, 0, 0, 2, 0, 0, 0, false, false),
             new Card("Royale Delivery", 3, 0, 250, 0, 0, 2, 0, 0, 0, false, false),
             new Card("Vines", 2, 0, 44, 0, 0, 2, 0, 0, 0, false, true),
@@ -864,10 +864,10 @@ export default class GameEngine {
             for (let i = 0; i < 5; i++)
                 this.ents.push(new Troop(tm, x + this.random() * 40 - 20, y + this.random() * 40 - 20, c));
         } else if (c.n === "Barbarians") {
-            this.ents.push(new Troop(tm, x - 12, y - 12, c));
-            this.ents.push(new Troop(tm, x + 12, y - 12, c));
-            this.ents.push(new Troop(tm, x - 12, y + 12, c));
-            this.ents.push(new Troop(tm, x + 12, y + 12, c));
+            // Five barbarians in a tight knot (so a Fireball catches them all — and
+            // they all just barely survive it).
+            for (const [dx, dy] of [[-20, -11], [20, -11], [0, 0], [-20, 13], [20, 13]])
+                this.ents.push(new Troop(tm, x + dx, y + dy, c));
         } else if (c.n === "Elite Barbarians") {
             this.ents.push(new Troop(tm, x - 10, y, c));
             this.ents.push(new Troop(tm, x + 10, y, c));
@@ -1178,6 +1178,11 @@ export default class GameEngine {
                 i--;
             }
         }
+
+        // Persist each unit's actual per-tick movement so the AI (which runs BEFORE
+        // act() each tick) can lead its spells. lx/ly were snapshotted pre-act, so
+        // (x - lx) is this tick's real velocity; it's read on the following tick.
+        for (let e of this.ents) { e.vx = e.x - e.lx; e.vy = e.y - e.ly; }
 
         for (let i = 0; i < this.projs.length; i++) {
             let p = this.projs[i];

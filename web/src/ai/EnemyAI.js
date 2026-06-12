@@ -33,6 +33,7 @@ export default class EnemyAI {
         if (!count(c => c.t === 1 || tag(c, "WinCon"))) pick(c => c.t === 1 || tag(c, "WinCon")); // win condition
         if (!count(c => tag(c, "Tank"))) pick(c => c.t === 0 && tag(c, "Tank"));        // 1 tank
         if (!count(c => tag(c, "DamageDealer"))) pick(c => c.t === 0 && tag(c, "DamageDealer"), c => c.fl); // dps (prefer flying)
+        if (!count(c => tag(c, "AOE"))) pick(c => c.t === 0 && tag(c, "AOE")); // 1 splash (Wizard/Witch/Baby Dragon/Mega Knight/...)
         if (!count(c => tag(c, "Swarm"))) pick(c => c.t === 0 && tag(c, "Swarm"), c => c.fl); // swarm (prefer flying)
         while (count(c => c.fl) < 2 && deck.length < 8) { let b = deck.length; pick(c => c.fl); if (deck.length === b) break; } // 2 flying
         while (deck.length < 8) { let b = deck.length; pick(() => true); if (deck.length === b) break; } // fill
@@ -172,9 +173,13 @@ export default class EnemyAI {
         for (const a of troops) {
             const near = troops.filter(b => Math.hypot(a.x - b.x, a.y - b.y) < rad);
             if (!best || near.length > best.count) {
-                let vx = 0, vy = 0;
-                for (const b of near) { vx += (b.x - (b.lx ?? b.x)); vy += (b.y - (b.ly ?? b.y)); }
-                best = { x: a.x, y: a.y, count: near.length, vx: vx / near.length, vy: vy / near.length };
+                // Aim at the CENTROID of the knot (not one edge troop) so the blast
+                // is centred on the group, and average the real per-tick velocity
+                // (g.vx/vy, persisted each tick) to lead a moving group.
+                let cx = 0, cy = 0, vx = 0, vy = 0;
+                for (const b of near) { cx += b.x; cy += b.y; vx += (b.vx || 0); vy += (b.vy || 0); }
+                const n = near.length;
+                best = { x: cx / n, y: cy / n, count: n, vx: vx / n, vy: vy / n };
             }
         }
         return best;
@@ -185,14 +190,24 @@ export default class EnemyAI {
         // splash the player's still-asleep king tower (waking it helps the player).
         const dmg = this.affordable().find(c => ["Fireball", "Arrows", "Poison"].includes(c.n));
         if (dmg) {
-            const cl = this.cluster(dmg.n === "Poison" ? 95 : 70);
+            // Cluster within the spell's OWN blast radius so the whole knot fits.
+            const shape = this.g.getSpellRadius(dmg);
+            const sr = (shape && shape.val) ? shape.val : 70;
+            const cl = this.cluster(sr);
             if (cl && cl.count >= 3) {
-                // Lead the cast: predict where the cluster will be when the spell
-                // actually lands (slow arcs like Fireball/Rocket take time to fly).
+                // Lead by the spell's ACTUAL travel time so it lands where the group
+                // will be. Fireball arcs from the king tower at speed 4.5; Arrows/
+                // Poison drop near-instantly onto the target tile.
                 const kt = this.g.t2K;
-                let delay = 8; // instant-drop spells (Arrows/Poison) have a short wind-up
-                if (dmg.n === "Fireball") delay = Math.hypot(kt.x - cl.x, kt.y - cl.y) / 6 + 6;
-                let px = cl.x + cl.vx * delay, py = cl.y + cl.vy * delay;
+                let delay = 10;
+                if (dmg.n === "Fireball") delay = Math.hypot(kt.x - cl.x, kt.y - cl.y) / 4.5 + 6;
+                // Cap the lead at the blast radius: even with a noisy velocity the
+                // centroid stays inside the blast, so the cast can never miss the
+                // whole group (it may clip 1-2 stragglers, never everything).
+                const cap = sr * 0.9;
+                let lx = Math.max(-cap, Math.min(cap, cl.vx * delay));
+                let ly = Math.max(-cap, Math.min(cap, cl.vy * delay));
+                let px = cl.x + lx, py = cl.y + ly;
                 if (!this.nearAsleepKing(px, py, 95)) return this.playAI(dmg, px, py);
             }
         }
