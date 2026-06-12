@@ -369,6 +369,11 @@ export default class GameEngine {
     }
 
     reset(enemyDeck) {
+        // Singleplayer: pick a fresh random seed each game so the opening hand
+        // order varies. Multiplayer keeps the host-supplied seed (set before
+        // reset) so both clients stay in lockstep.
+        if (!this.isMultiplayer) this.seed = (Math.random() * 2147483647) >>> 0;
+
         this.p1 = new Player(0);
         this.p2 = new Player(1);
         this.ents = [];
@@ -609,14 +614,15 @@ export default class GameEngine {
     getSpellRadius(c) {
         // Clash Royale radii (30px / tile), 20% smaller, rounded to integers.
         if (c.n === "Arrows") return { type: 'circle', val: 91 };
-        if (c.n === "Poison") return { type: 'circle', val: 79 };
-        if (c.n === "Graveyard") return { type: 'circle', val: 75 };
+        if (c.n === "Poison") return { type: 'circle', val: 95 };
+        if (c.n === "Graveyard") return { type: 'circle', val: 92 };
         if (c.n === "Freeze") return { type: 'circle', val: 67 };
         if (c.n === "Vines") return { type: 'circle', val: 59 };
         if (c.n === "Zap") return { type: 'circle', val: 55 };
-        if (c.n === "Fireball") return { type: 'circle', val: 62 }; // slightly bigger
+        if (c.n === "Fireball") return { type: 'circle', val: 55 }; // slightly bigger
         if (c.n === "Giant Snowball") return { type: 'circle', val: 55 };
-        if (c.n === "Royale Delivery" || c.n === "Rocket") return { type: 'circle', val: 43 };
+        if (c.n === "Royale Delivery") return { type: 'circle', val: 58 };
+        if (c.n === "Rocket") return { type: 'circle', val: 43 };
         if (c.n === "The Log") return { type: 'rect', w: 83, h: 16 };
         if (c.n === "Barbarian Barrel") return { type: 'rect', w: 46, h: 16 };
         if (c.n === "Goblin Barrel") return { type: 'circle', val: 31 };

@@ -764,9 +764,8 @@ class Main {
         }
 
         if (this.state === State.ENEMY_DECK) {
-            // (Unchanged enemy deck render)
-            ctx.fillStyle = "#282828";
-            ctx.fillRect(0, 0, W, H);
+            // Mirrors the player's "Build Your Deck" screen exactly.
+            this.paintBg("#23362a");
             let cols = 3;
             let margin = 20;
             let cardW = (W - (cols + 1) * margin) / cols;
@@ -780,19 +779,23 @@ class Main {
                 let cx = margin + col * (cardW + margin);
                 let cy = 100 + row * (cardH + margin) - this.scrollY;
                 if (cy > H || cy + cardH < 0) continue;
-
-                ctx.fillStyle = selected ? "#00c800" : "#646464";
-                ctx.fillRect(cx, cy, cardW, cardH);
-                ctx.strokeStyle = "black";
-                ctx.strokeRect(cx, cy, cardW, cardH);
-                this.drawCenteredString(c.n, cx + cardW / 2, cy + cardH / 2, "bold 11px 'Baloo 2', 'Segoe UI', sans-serif", "white");
-                this.drawElixirCost(cx - 5, cy - 5, c.c);
+                this.drawDeckCard(cx, cy, cardW, cardH, c, selected);
             }
 
-            ctx.fillStyle = "#282828";
-            ctx.fillRect(0, 0, W, 90);
-            this.drawCenteredString(`Enemy Deck (${this.eng.enemyDeckSelection.length}/8)`, W / 2, 50, "bold 30px 'Baloo 2', 'Segoe UI', sans-serif", "white");
-            this.drawBtn(this.backBtn, "BACK", "red");
+            // Header panel
+            ctx.fillStyle = "rgba(10,18,12,0.94)";
+            ctx.fillRect(0, 0, W, 92);
+            ctx.strokeStyle = "rgba(255,255,255,0.12)"; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(0, 92); ctx.lineTo(W, 92); ctx.stroke();
+
+            let valid = this.eng.enemyDeckSelection.length === 8;
+            this.drawCenteredString("Build Enemy Deck", W / 2, 38, "bold 26px 'Baloo 2', 'Segoe UI', sans-serif", "#eaffea");
+            this.drawCenteredString(`${this.eng.enemyDeckSelection.length} / 8`, W / 2 - 70, 70, "bold 16px 'Baloo 2', 'Segoe UI', sans-serif", valid ? "#7CFC6A" : "#ffd24d");
+            let sum = this.eng.enemyDeckSelection.reduce((a, b) => a + b.c, 0);
+            let avg = this.eng.enemyDeckSelection.length ? (sum / this.eng.enemyDeckSelection.length).toFixed(1) : "0.0";
+            this.drawCenteredString(`Avg Elixir ${avg}`, W / 2 + 60, 70, "bold 15px 'Baloo 2', 'Segoe UI', sans-serif", "#e08cff");
+
+            this.drawBtn(this.backBtn, "BACK", "#FF6347");
             return;
         }
 
@@ -1927,10 +1930,11 @@ class Main {
             ctx.beginPath(); ctx.moveTo(0, 0.5); ctx.lineTo(-1.5, 3); ctx.lineTo(1.5, 3); ctx.closePath(); ctx.fill();
             ctx.lineWidth = 1;
         } else {
-            // fireball (slightly bigger)
-            ctx.fillStyle = "rgba(255,120,30,0.55)"; ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = "#ff7a1e"; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = "#ffd24d"; ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
+            // fireball — a big, chunky flaming ball
+            ctx.fillStyle = "rgba(255,120,30,0.5)"; ctx.beginPath(); ctx.arc(0, 0, 23, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "rgba(255,140,40,0.85)"; ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#ff7a1e"; ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#ffd24d"; ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
         }
         ctx.restore();
     }
