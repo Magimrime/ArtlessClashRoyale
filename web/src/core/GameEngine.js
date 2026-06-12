@@ -21,6 +21,12 @@ export default class GameEngine {
         this.myDeck = [];
         this.enemyDeckSelection = [];
 
+        // Evolutions: which cards CAN evolve and how many normal plays charge the
+        // evo. evoSel / enemyEvoSel hold the (≤2) card names chosen as evos per deck.
+        this.EVO_REQ = { "Barbarians": 1, "Archers": 2, "Inferno Dragon": 2, "Royal Recruits": 1 };
+        this.evoSel = [];
+        this.enemyEvoSel = [];
+
         this.ents = [];
         this.projs = [];
         this.deploys = []; // deploy-time clock indicators (one per card played)
@@ -182,6 +188,28 @@ export default class GameEngine {
         return tags;
     }
 
+    isEvoCapable(name) { return Object.prototype.hasOwnProperty.call(this.EVO_REQ, name); }
+
+    // Build the EVOLVED version of a card: a copy of the card with buffed stats and
+    // an isEvo flag (special behaviours like the Royal Recruits dash and the Inferno
+    // Dragon ramp read this.c.isEvo in Troop). The base card is never mutated.
+    makeEvoCard(c) {
+        let e = Object.assign(Object.create(Object.getPrototypeOf(c)), c);
+        e.isEvo = true;
+        switch (c.n) {
+            case "Barbarians":     // +5% dmg, +20% hit speed, +3% hp, +10% speed
+                e.d = Math.round(c.d * 1.05); e.rt = Math.max(1, Math.round(c.rt * 0.8));
+                e.hp = Math.round(c.hp * 1.03); e.s = c.s * 1.1; break;
+            case "Archers":        // +20% range, +15% dmg, +8% fire speed
+                e.rn = Math.round(c.rn * 1.2); e.d = Math.round(c.d * 1.15); e.rt = Math.max(1, Math.round(c.rt * 0.92)); break;
+            case "Inferno Dragon": // base dmg 30, +15% charge & +10% attack speed (charge divisor handled in Troop)
+                e.d = 30; e.rt = Math.max(1, Math.round(c.rt * 0.9)); break;
+            case "Royal Recruits": // +10% hp, gains a dash (handled in Troop)
+                e.hp = Math.round(c.hp * 1.1); break;
+        }
+        return e;
+    }
+
     setMultiplayer(enabled) {
         this.isMultiplayer = enabled;
     }
@@ -285,7 +313,9 @@ export default class GameEngine {
             debugView: this.debugView,
             debugEnemyElixir: this.debugEnemyElixir,
             enemyDeckSelection: this.enemyDeckSelection.map(c => c.n),
-            unlockedCards: this.unlockedCards.map(c => c.n)
+            unlockedCards: this.unlockedCards.map(c => c.n),
+            evoSel: this.evoSel,
+            enemyEvoSel: this.enemyEvoSel
         };
         const json = JSON.stringify(data, null, 4);
         localStorage.setItem('clash_royale_save', json);
@@ -345,6 +375,10 @@ export default class GameEngine {
             });
         }
 
+        // Evolution selections (only keep ones that are actually evo-capable, ≤2).
+        this.evoSel = (data.evoSel || []).filter(n => this.isEvoCapable(n)).slice(0, 2);
+        this.enemyEvoSel = (data.enemyEvoSel || []).filter(n => this.isEvoCapable(n)).slice(0, 2);
+
         this.unlockedCards = [];
         if (data.unlockedCards) {
             data.unlockedCards.forEach(n => {
@@ -396,6 +430,8 @@ export default class GameEngine {
         }
         this.p1.h = [];
         for (let i = 0; i < 4; i++) this.p1.h.push(this.p1.pile.shift());
+        // Player's chosen evolutions (≤2), each starting uncharged.
+        this.p1.evos = new Set((this.evoSel || []).slice(0, 2));
 
         this.enemyAI = new EnemyAI(this);
 
@@ -419,6 +455,14 @@ export default class GameEngine {
             // 2 flying / win-con). Sets p2.pile + p2.h and the AI cycles via playAI.
             this.enemyAI.generateDeck();
         }
+
+        // AI evolutions: use the manual enemy selection if given, otherwise auto-pick
+        // up to 2 evo-capable cards from the AI's actual deck.
+        let p2deck = [...this.p2.h, ...this.p2.pile];
+        let aiEvos = (this.enemyEvoSel && this.enemyEvoSel.length)
+            ? this.enemyEvoSel.filter(n => p2deck.some(c => c.n === n))
+            : p2deck.filter(c => this.isEvoCapable(c.n)).map(c => c.n);
+        this.p2.evos = new Set([...new Set(aiEvos)].slice(0, 2));
 
         // All towers sit on 30px tile centres (y = 15 + 30k). Kings at 735/75 leave
         // exactly one placeable tile behind them (player tile [780-810], enemy tile
@@ -670,6 +714,15 @@ export default class GameEngine {
         // Deduct Elixir
         p.elx -= cost;
 
+        // Evolution charge: normal plays of an evo card charge it; once charged the
+        // play spawns the EVOLVED unit and the charge resets to 0.
+        let useEvo = false;
+        if (!isMirror && p.evos && p.evos.has(cardToPlay.n)) {
+            const req = this.EVO_REQ[cardToPlay.n] || 1;
+            if ((p.evoProgress[cardToPlay.n] || 0) >= req) { useEvo = true; p.evoProgress[cardToPlay.n] = 0; }
+            else { p.evoProgress[cardToPlay.n] = (p.evoProgress[cardToPlay.n] || 0) + 1; }
+        }
+
         // Apply Mirror Boost (5% HP/Dmg)
         if (isMirror) {
             let boostedCard = Object.assign(Object.create(Object.getPrototypeOf(cardToPlay)), cardToPlay);
@@ -677,7 +730,7 @@ export default class GameEngine {
             boostedCard.d = Math.floor(cardToPlay.d * 1.05);
             this.addU(team, boostedCard, x, y);
         } else {
-            this.addU(team, cardToPlay, x, y);
+            this.addU(team, cardToPlay, x, y, useEvo);
         }
 
         // Update Last Plays
@@ -726,7 +779,9 @@ export default class GameEngine {
         this.deploys.push({ x, y, tm, t: dur, max: dur, fly });
     }
 
-    addU(tm, c, x, y) {
+    addU(tm, c, x, y, isEvo = false) {
+        // Evolved cards spawn buffed units (all copies of a multi-unit card too).
+        if (isEvo) c = this.makeEvoCard(c);
         // Troop / building cards show a deploy clock here; spells that spawn troops
         // (Goblin Barrel, Royale Delivery) add theirs where the troops appear.
         if (c.t !== 2) this.addDeploy(x, y, tm, 55, c.fl);

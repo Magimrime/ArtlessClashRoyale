@@ -341,7 +341,7 @@ export default class Troop extends Entity {
                     this.kbY = Math.sin(angle) * speed;
                 }
             } else if (this.c.n === "Inferno Dragon") {
-                let stage = Math.floor(this.infernoTick / 58); // buffed: ramps faster so it can solo a tower
+                let stage = Math.floor(this.infernoTick / (this.c.isEvo ? 49 : 58)); // evo charges 15% faster
                 let mult = this.getInfernoMultiplier(stage);
                 this.lk.hp -= this.c.d * mult;
             } else if (this.c.n === "Royal Giant") {
@@ -385,6 +385,7 @@ export default class Troop extends Entity {
                     if (this.c.n === "Prince" || this.c.n === "Dark Prince") dmg = Math.floor(dmg * 0.3);
                     if (this.isCharging) {
                         if (this.c.n === "Knight") dmg = Math.floor(dmg * 1.5);
+                        else if (this.c.n === "Royal Recruits") dmg = Math.floor(dmg * 1.2); // evo dash: +20% first hit
                         else dmg *= 2;
                         this.isCharging = false;
                         this.distWalked = 0;
@@ -521,13 +522,16 @@ export default class Troop extends Entity {
             }
 
             if (!this.atk) {
-                this.x += dx * this.c.s * (this.isCharging ? 2.0 : 1.0) * speedMult;
-                this.y += dy * this.c.s * (this.isCharging ? 2.0 : 1.0) * speedMult;
+                // Evo Royal Recruits dash 10% slower than a Prince (1.8x vs 2.0x).
+                let chargeSpd = this.isCharging ? (this.c.n === "Royal Recruits" ? 1.8 : 2.0) : 1.0;
+                this.x += dx * this.c.s * chargeSpd * speedMult;
+                this.y += dy * this.c.s * chargeSpd * speedMult;
             }
 
-            // Only the Princes charge/dash — the Knight does not. A Prince being
-            // knocked back can't build up its charge.
-            if ((this.c.n === "Prince" || this.c.n === "Dark Prince") && this.kbTime <= 0) {
+            // Princes charge/dash — and so do EVO Royal Recruits. A unit being knocked
+            // back can't build up its charge.
+            if ((this.c.n === "Prince" || this.c.n === "Dark Prince" ||
+                (this.c.n === "Royal Recruits" && this.c.isEvo)) && this.kbTime <= 0) {
                 this.distWalked += Math.hypot(dx * this.c.s, dy * this.c.s);
                 if (this.distWalked > 20) this.isCharging = true;
             }

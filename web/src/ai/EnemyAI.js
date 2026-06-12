@@ -368,7 +368,15 @@ export default class EnemyAI {
         const needsValid = c.t !== 2 || ["The Log", "Barbarian Barrel", "Royale Delivery"].includes(c.n);
         if (needsValid && c.n !== "Goblin Barrel" && !this.g.isValid(y, x, c, 1)) return false;
         this.p.elx -= c.c;
-        this.g.addU(1, c, x, y);
+        // Evolution charge (mirrors GameEngine.playCard): charge on normal plays,
+        // then spawn the evolved unit and reset.
+        let useEvo = false;
+        if (this.p.evos && this.p.evos.has(c.n)) {
+            const req = this.g.EVO_REQ[c.n] || 1;
+            if ((this.p.evoProgress[c.n] || 0) >= req) { useEvo = true; this.p.evoProgress[c.n] = 0; }
+            else { this.p.evoProgress[c.n] = (this.p.evoProgress[c.n] || 0) + 1; }
+        }
+        this.g.addU(1, c, x, y, useEvo);
 
         let idx = this.p.h.indexOf(c);
         if (idx > -1) {

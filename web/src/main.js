@@ -348,11 +348,25 @@ class Main {
                     let cy = 100 + row * (cardH + margin) - this.scrollY;
                     if (cy > H || cy + cardH < 0) continue;
 
-                    if (this.contains({ x: cx, y: cy, w: cardW, h: cardH }, x, y)) {
-                        let c = this.eng.unlockedCards[i];
+                    let c = this.eng.unlockedCards[i];
+                    // Tap the purple gem on any evo-capable card to toggle its evo (max 2).
+                    // Enabling an evo auto-adds the card to the deck if there's room.
+                    if (this.eng.isEvoCapable(c.n) && this.evoBadgeHit(cx, cy, cardW, cardH, x, y)) {
+                        let ei = this.eng.evoSel.indexOf(c.n);
+                        if (ei > -1) this.eng.evoSel.splice(ei, 1);
+                        else if (this.eng.evoSel.length < 2) {
+                            if (!this.eng.myDeck.includes(c) && this.eng.myDeck.length < 8) this.eng.myDeck.push(c);
+                            if (this.eng.myDeck.includes(c)) this.eng.evoSel.push(c.n);
+                        }
+                        this.eng.saveProgress();
+                    } else if (this.contains({ x: cx, y: cy, w: cardW, h: cardH }, x, y)) {
                         let idx = this.eng.myDeck.indexOf(c);
-                        if (idx > -1) this.eng.myDeck.splice(idx, 1);
-                        else if (this.eng.myDeck.length < 8) this.eng.myDeck.push(c);
+                        if (idx > -1) {
+                            this.eng.myDeck.splice(idx, 1);
+                            // Removing a card from the deck also drops its evo selection.
+                            let ei = this.eng.evoSel.indexOf(c.n);
+                            if (ei > -1) this.eng.evoSel.splice(ei, 1);
+                        } else if (this.eng.myDeck.length < 8) this.eng.myDeck.push(c);
                         this.eng.saveProgress();
                     }
                 }
@@ -389,11 +403,21 @@ class Main {
                     let cy = 100 + row * (cardH + margin) - this.scrollY;
                     if (cy > H || cy + cardH < 0) continue;
 
-                    if (this.contains({ x: cx, y: cy, w: cardW, h: cardH }, x, y)) {
-                        let c = this.eng.allCards[i];
+                    if (this.eng.isEvoCapable(c.n) && this.evoBadgeHit(cx, cy, cardW, cardH, x, y)) {
+                        let ei = this.eng.enemyEvoSel.indexOf(c.n);
+                        if (ei > -1) this.eng.enemyEvoSel.splice(ei, 1);
+                        else if (this.eng.enemyEvoSel.length < 2) {
+                            if (!this.eng.enemyDeckSelection.includes(c) && this.eng.enemyDeckSelection.length < 8) this.eng.enemyDeckSelection.push(c);
+                            if (this.eng.enemyDeckSelection.includes(c)) this.eng.enemyEvoSel.push(c.n);
+                        }
+                        this.eng.saveProgress();
+                    } else if (this.contains({ x: cx, y: cy, w: cardW, h: cardH }, x, y)) {
                         let idx = this.eng.enemyDeckSelection.indexOf(c);
-                        if (idx > -1) this.eng.enemyDeckSelection.splice(idx, 1);
-                        else if (this.eng.enemyDeckSelection.length < 8) this.eng.enemyDeckSelection.push(c);
+                        if (idx > -1) {
+                            this.eng.enemyDeckSelection.splice(idx, 1);
+                            let ei = this.eng.enemyEvoSel.indexOf(c.n);
+                            if (ei > -1) this.eng.enemyEvoSel.splice(ei, 1);
+                        } else if (this.eng.enemyDeckSelection.length < 8) this.eng.enemyDeckSelection.push(c);
                         this.eng.saveProgress();
                     }
                 }
@@ -734,6 +758,13 @@ class Main {
                 let cy = 100 + row * (cardH + margin) - this.scrollY;
                 if (cy > H || cy + cardH < 0) continue;
                 this.drawDeckCard(cx, cy, cardW, cardH, c, selected);
+                // Evo gem on EVERY evo-capable card so you can see (and tap) it. Selected
+                // evos glow + get a purple frame; the rest show a dim "available" gem.
+                if (this.eng.isEvoCapable(c.n)) {
+                    let isE = this.eng.evoSel.includes(c.n), req = this.eng.EVO_REQ[c.n];
+                    if (isE) { ctx.strokeStyle = "#b13bff"; ctx.lineWidth = 2.5; this.drawRoundRect(cx, cy, cardW, cardH, 10, false, false); ctx.stroke(); ctx.lineWidth = 1; }
+                    this.drawEvoPips(cx + cardW / 2, cy + cardH - 8, req, isE ? req : 0, isE);
+                }
             }
 
             // Header panel
@@ -744,6 +775,7 @@ class Main {
 
             let valid = this.eng.myDeck.length === 8;
             this.drawCenteredString("Build Your Deck", W / 2, 38, "bold 26px 'Baloo 2', 'Segoe UI', sans-serif", "#eaffea");
+            this.drawCenteredString(`Evos ${this.eng.evoSel.length}/2  ·  tap the purple gem to toggle`, W / 2, 86, "600 11px 'Baloo 2', 'Segoe UI', sans-serif", "#d9a8ff");
             this.drawCenteredString(`${this.eng.myDeck.length} / 8`, W / 2 - 70, 70, "bold 16px 'Baloo 2', 'Segoe UI', sans-serif", valid ? "#7CFC6A" : "#ffd24d");
             let sum = this.eng.myDeck.reduce((a, b) => a + b.c, 0);
             let avg = this.eng.myDeck.length ? (sum / this.eng.myDeck.length).toFixed(1) : "0.0";
@@ -780,6 +812,11 @@ class Main {
                 let cy = 100 + row * (cardH + margin) - this.scrollY;
                 if (cy > H || cy + cardH < 0) continue;
                 this.drawDeckCard(cx, cy, cardW, cardH, c, selected);
+                if (this.eng.isEvoCapable(c.n)) {
+                    let isE = this.eng.enemyEvoSel.includes(c.n), req = this.eng.EVO_REQ[c.n];
+                    if (isE) { ctx.strokeStyle = "#b13bff"; ctx.lineWidth = 2.5; this.drawRoundRect(cx, cy, cardW, cardH, 10, false, false); ctx.stroke(); ctx.lineWidth = 1; }
+                    this.drawEvoPips(cx + cardW / 2, cy + cardH - 8, req, isE ? req : 0, isE);
+                }
             }
 
             // Header panel
@@ -790,6 +827,7 @@ class Main {
 
             let valid = this.eng.enemyDeckSelection.length === 8;
             this.drawCenteredString("Build Enemy Deck", W / 2, 38, "bold 26px 'Baloo 2', 'Segoe UI', sans-serif", "#eaffea");
+            this.drawCenteredString(`Evos ${this.eng.enemyEvoSel.length}/2  ·  tap the purple gem`, W / 2, 86, "600 11px 'Baloo 2', 'Segoe UI', sans-serif", "#d9a8ff");
             this.drawCenteredString(`${this.eng.enemyDeckSelection.length} / 8`, W / 2 - 70, 70, "bold 16px 'Baloo 2', 'Segoe UI', sans-serif", valid ? "#7CFC6A" : "#ffd24d");
             let sum = this.eng.enemyDeckSelection.reduce((a, b) => a + b.c, 0);
             let avg = this.eng.enemyDeckSelection.length ? (sum / this.eng.enemyDeckSelection.length).toFixed(1) : "0.0";
@@ -1312,6 +1350,18 @@ class Main {
                         }
                         this.drawCenteredString(c.n, r.x + r.w / 2, paintY + r.h / 2 + 4, "700 10px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
                         this.drawElixirCost(r.x + 15, paintY + 15, c.c);
+                        // Evolution indicator: purple diamonds fill as the card cycles;
+                        // once charged (progress >= req) they glow. Playing the evo resets.
+                        if (this.eng.p1.evos && this.eng.p1.evos.has(c.n)) {
+                            let req = this.eng.EVO_REQ[c.n];
+                            let prog = this.eng.p1.evoProgress[c.n] || 0;
+                            let charged = prog >= req;
+                            if (charged) {
+                                ctx.strokeStyle = "#c45cff"; ctx.lineWidth = 2;
+                                this.drawRoundRect(r.x, paintY, r.w, r.h, 5, false, false); ctx.stroke(); ctx.lineWidth = 1;
+                            }
+                            this.drawEvoPips(r.x + r.w / 2, paintY + r.h - 7, req, charged ? req : prog, charged);
+                        }
                     }
                 }
 
@@ -1523,6 +1573,11 @@ class Main {
         ctx.globalAlpha = 1;
         ctx.lineWidth = 1;
 
+        // Evolution marker: evolved troops carry a small round purple gem on the body.
+        if (e instanceof Troop && e.c && e.c.isEvo) {
+            this.drawEvoGem(x, y, Math.min(7, Math.max(4, radius * 0.45)), true);
+        }
+
         // Vined: a simple green ring that gently pulses (no movement) + a few
         // small static tendrils.
         if (e instanceof Troop && e.vinedTime > 0) {
@@ -1649,13 +1704,14 @@ class Main {
         const r = this.unitRadius(c);
         const at = (dx, dy) => ({ dx, dy, r });
         const n = c.n;
-        if (["Archers", "Wall Breakers"].includes(n)) return [at(-15, 0), at(15, 0)];
+        if (n === "Archers") return [at(-8, 0), at(8, 0)];               // almost touching
+        if (n === "Wall Breakers") return [at(-15, 0), at(15, 0)];
         if (n === "Spear Goblins") return [at(-15, 0), at(15, 0), at(0, 15)];
         if (["Skeletons", "Goblins", "Minions"].includes(n)) return [at(0, -10), at(-10, 10), at(10, 10)];
         if (n === "Minion Horde") return [at(-22, -12), at(0, -16), at(22, -12), at(-14, 12), at(14, 12), at(0, 4)];
         if (n === "Skeleton Army") { let a = []; for (let i = 0; i < 15; i++) { let ang = i * 2.39996, rr = Math.sqrt((i + 0.5) / 15) * 48; a.push(at(Math.cos(ang) * rr, Math.sin(ang) * rr)); } return a; }
         if (n === "Bats") return [at(-18, -8), at(0, -14), at(18, -8), at(-10, 10), at(10, 10)];
-        if (n === "Barbarians") return [at(-12, -12), at(12, -12), at(-12, 12), at(12, 12)];
+        if (n === "Barbarians") return [at(-20, -11), at(20, -11), at(0, 0), at(-20, 13), at(20, 13)]; // 5 barbs
         if (n === "Elite Barbarians") return [at(-10, 0), at(10, 0)];
         if (n === "Zappies") return [at(-10, 0), at(10, 0), at(0, 10)];
         if (n === "Royal Hogs") return [at(-30, 0), at(-10, 0), at(10, 0), at(30, 0)];
@@ -1672,6 +1728,50 @@ class Main {
 
     // A deck-builder card tile: elixir-tinted body, unit-color swatch, name,
     // elixir badge, and a gold ring + check when it's in the deck.
+    // Purple evolution indicator: `req` larger DIAMOND gems (the cycle count).
+    // `filled` gems are lit; when `glow` they have a halo (charged / selected).
+    // Used on deck cards and the in-game hand.
+    drawEvoPips(centerX, cy, req, filled, glow) {
+        const s = 7, gap = s * 2 + 4; // diamond half-size + spacing
+        let startX = centerX - (req - 1) * gap / 2;
+        ctx.save();
+        for (let i = 0; i < req; i++) {
+            let px = startX + i * gap, on = i < filled;
+            if (on && glow) { ctx.shadowColor = "#e08bff"; ctx.shadowBlur = 10; }
+            ctx.fillStyle = on ? "#c45cff" : "rgba(120,80,160,0.5)";
+            ctx.beginPath();
+            ctx.moveTo(px, cy - s); ctx.lineTo(px + s, cy); ctx.lineTo(px, cy + s); ctx.lineTo(px - s, cy); ctx.closePath();
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = on ? "#ffffff" : "rgba(255,255,255,0.55)"; ctx.lineWidth = 1.3;
+            ctx.stroke();
+            // a little facet highlight so it reads as a gem
+            if (on) { ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px - s * 0.4, cy - s * 0.2); ctx.lineTo(px, cy - s * 0.7); ctx.stroke(); }
+        }
+        ctx.restore();
+    }
+
+    // A round purple evo gem (shown in the centre of an evo card while it's selected
+    // for placement). Glows when the evo is charged.
+    drawEvoGem(gx, gy, radius, glow) {
+        ctx.save();
+        if (glow) { ctx.shadowColor = "#e08bff"; ctx.shadowBlur = 14; }
+        ctx.fillStyle = glow ? "#c45cff" : "rgba(150,90,200,0.75)";
+        ctx.beginPath(); ctx.arc(gx, gy, radius, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(gx, gy, radius, 0, Math.PI * 2); ctx.stroke();
+        // facet highlight
+        ctx.fillStyle = "rgba(255,255,255,0.55)";
+        ctx.beginPath(); ctx.arc(gx - radius * 0.3, gy - radius * 0.3, radius * 0.28, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+    }
+
+    // The bottom-strip hit region where the evo gems live on a deck card.
+    evoBadgeHit(cx, cy, w, h, px, py) {
+        return px >= cx + w / 2 - 22 && px <= cx + w / 2 + 22 && py >= cy + h - 20 && py <= cy + h + 3;
+    }
+
     drawDeckCard(cx, cy, w, h, c, selected) {
         ctx.fillStyle = "#ffffff"; // white card, no gradient, no outline
         this.drawRoundRect(cx, cy, w, h, 10, true, false);

@@ -5,5 +5,7 @@ export default class Player {
         this.h = []; // hand
         this.pile = []; // draw pile
         this.lastPlayedCard = null;
+        this.evos = new Set();   // card names selected as evolutions in this deck
+        this.evoProgress = {};   // name -> normal plays charged toward the evo
     }
 }
