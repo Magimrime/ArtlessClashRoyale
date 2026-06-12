@@ -1024,7 +1024,7 @@ class Main {
             // The tile grid is always visible during play.
             this.drawGrid();
 
-            if ((this.state === State.PLAY || this.state === State.CNT) && this.eng.sel && (this.eng.sel.t !== 2 || ["The Log", "Barbarian Barrel"].includes(this.eng.sel.n))) {
+            if ((this.state === State.PLAY || this.state === State.CNT) && this.eng.sel && (this.eng.sel.t !== 2 || ["The Log", "Barbarian Barrel", "Royale Delivery"].includes(this.eng.sel.n))) {
                 // Invalid-placement tint
                 ctx.fillStyle = "rgba(255, 0, 0, 0.28)";
                 ctx.fillRect(0, 0, W, 200); // behind enemy towers/king
@@ -1035,8 +1035,11 @@ class Main {
                 if (this.eng.sel.t !== 2) this.drawHoverCell(this.eng.sel);
             } // Close Invalid Area Logic
 
-            // Sandbox with a CHOSEN side (and rules on): tint the forbidden half red.
+            // Sandbox with a CHOSEN side (and rules on): tint the forbidden half red —
+            // but NOT for spells that may be cast anywhere (only the ground-restricted
+            // Log / Barb Barrel / Royale Delivery keep the tint).
             if (this.state === State.SANDBOX && this.eng.sel && !this.eng.sandboxNoRules &&
+                (this.eng.sel.t !== 2 || ["The Log", "Barbarian Barrel", "Royale Delivery"].includes(this.eng.sel.n)) &&
                 (this.eng.sandboxSide === 0 || this.eng.sandboxSide === 1)) {
                 const RY = this.eng.RIV_Y || RIV_Y;
                 ctx.fillStyle = "rgba(255, 0, 0, 0.28)";

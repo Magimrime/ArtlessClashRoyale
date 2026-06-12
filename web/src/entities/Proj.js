@@ -135,7 +135,8 @@ export default class Proj {
                 let f = Object.assign(Object.create(Object.getPrototypeOf(gob)), gob);
                 f.d = Math.max(1, Math.round(gob.d * 0.3));
                 f.rt = Math.round(gob.rt / 0.7);
-                f.isFake = true; // rendered lighter / washed-out
+                f.s = gob.s * 0.7;       // 30% slower movement too
+                f.isFake = true;          // rendered lighter / washed-out
                 gob = f;
             }
             // Spread them out a bit so they don't spawn on top of each other, and
