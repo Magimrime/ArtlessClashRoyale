@@ -809,9 +809,10 @@ export default class GameEngine {
             // Crown-tower damage multiplier (real CR: spells chip towers).
             const crown = (c.n === "Rocket") ? 0.25 : 0.3;
             if (c.n === "Arrows") {
-                // 3-wave volley; each wave deals 85 (one wave kills a skeleton, all
-                // three kill goblins/minions). Not launched from the tower.
-                let p = new Proj(x, y, x, y, null, 0, true, rad, 85, tm, false).asArrows();
+                // 3-wave volley; each wave deals 105 (one wave kills a skeleton, all
+                // three kill goblins/minions and now ARCHERS too — 3×105=315 > 304).
+                // A single wave still won't kill a minion (230). Not launched from the tower.
+                let p = new Proj(x, y, x, y, null, 0, true, rad, 105, tm, false).asArrows();
                 p.crownMult = crown;
                 this.projs.push(p);
             } else if (ARC[c.n]) {

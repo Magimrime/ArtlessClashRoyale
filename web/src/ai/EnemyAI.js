@@ -82,8 +82,10 @@ export default class EnemyAI {
         if (threats.length > 0 && this.significantThreat(threats) && this.p.elx >= 2 && this.defend(threats, mode)) { this.actCd = 24; return; }
         // 2) Spend spells on value (clusters) or chip the weak tower when ahead.
         if (this.castValueSpell(mode)) { this.actCd = 30; return; }
-        // 3) Offense, gated by mode/elixir.
-        if (this.p.elx >= (mode === 'pressure' ? 6 : 9) && this.buildPush(mode === 'pressure')) { this.actCd = 40; return; }
+        // 3) Offense: keep loading SUPPORT behind a live heavy tank (Giant / Golem /
+        //    Lava Hound) so it never walks in alone, then start fresh pushes.
+        if (this.feedPush()) { this.actCd = 22; return; }
+        if (this.p.elx >= (mode === 'pressure' ? 6 : 9) && this.startPush(mode)) { this.actCd = 40; return; }
         // 4) Only dump a card to avoid LEAKING near-full elixir (otherwise save it).
         if (this.p.elx >= 9.3 && this.forcePlay()) { this.actCd = 18; return; }
     }
@@ -226,16 +228,55 @@ export default class EnemyAI {
         return false;
     }
 
-    buildPush(aggressive) {
+    // Giant / Royal Giant / Electro Giant / Golem / Elixir Golem / Lava Hound —
+    // the heavy win-condition tanks you build a push BEHIND.
+    isBeatdownTank(c) { return /Giant|Golem|Lava/.test(c.n); }
+
+    // Best card to put behind a tank: a ranged DPS / splash / flyer that the tank
+    // screens (never another heavy tank).
+    bestSupport() {
+        let cand = this.p.h.filter(c => c.t === 0 && c.c <= this.p.elx && !this.isBeatdownTank(c));
+        if (!cand.length) return null;
+        let pref = cand.filter(c => c.tags.includes("DamageDealer") || c.tags.includes("AOE") || c.rn > 50 || c.fl);
+        return (pref.length ? pref : cand)[0];
+    }
+
+    // If one of our heavy tanks is on the field, keep feeding SUPPORT behind it so it
+    // never pushes in alone — this is what turns a lone Golem into a real beatdown.
+    feedPush() {
+        const g = this.g;
+        let tank = g.ents.find(e => e.tm === 1 && e instanceof Troop && e.hp > 0 && this.isBeatdownTank(e.c));
+        if (!tank) return false;
+        // Don't over-commit if a genuine counter-push is incoming — defend first.
+        const threats = this.getThreats();
+        if (threats.length && this.significantThreat(threats)) return false;
+        const support = this.bestSupport();
+        if (!support) return false;
+        // Place behind the tank (toward our king = smaller y), in its lane, clamped to
+        // our own side so it spawns safely and walks down screened by the tank.
+        let sx = tank.x;
+        let sy = Math.max(25, Math.min(g.RIV_Y - 40, tank.y - 45));
+        return this.playAI(support, sx, sy);
+    }
+
+    // Start a fresh push. A heavy tank leads: at the BRIDGE for a committed big push
+    // (when ahead or flush with elixir), otherwise built slowly from the back. Either
+    // way feedPush() then loads support behind it over the next few seconds.
+    startPush(mode) {
         const g = this.g;
         const lane = (g.t1L.hp <= 0) ? 0 : (g.t1R.hp <= 0) ? 1 : (Math.random() > 0.5 ? 0 : 1);
         const laneX = lane === 0 ? 130 : 410;
-        const tank = this.p.h.find(c => c.tags.includes("Tank") && c.c <= this.p.elx);
-        if (tank) return this.playAI(tank, laneX, 30);
+        const tank = this.p.h.find(c => this.isBeatdownTank(c) && c.c <= this.p.elx);
+        if (tank) {
+            let bigPush = (mode === 'pressure') || this.p.elx >= 9;
+            let ty = bigPush ? (g.RIV_Y - 55) : 30; // bridge vs. back
+            return this.playAI(tank, laneX, ty);
+        }
+        // Non-beatdown decks: lead with a win condition / ranged support instead.
         const win = this.p.h.find(c => c.tags.includes("WinCon") && c.t !== 2 && c.c <= this.p.elx);
         if (win) return this.playAI(win, laneX, this.g.RIV_Y - 70);
         const support = this.p.h.find(c => c.t === 0 && (c.rn > 60 || c.tags.includes("AOE")) && c.c <= this.p.elx);
-        if (aggressive && support) return this.playAI(support, laneX, 60);
+        if (mode === 'pressure' && support) return this.playAI(support, laneX, 60);
         return false;
     }
 
