@@ -200,8 +200,8 @@ export default class GameEngine {
             case "Barbarians":     // +5% dmg, +20% hit speed, +3% hp, +10% speed
                 e.d = Math.round(c.d * 1.05); e.rt = Math.max(1, Math.round(c.rt * 0.8));
                 e.hp = Math.round(c.hp * 1.03); e.s = c.s * 1.1; break;
-            case "Archers":        // +20% range, +15% dmg, +8% fire speed
-                e.rn = Math.round(c.rn * 1.2); e.d = Math.round(c.d * 1.15); e.rt = Math.max(1, Math.round(c.rt * 0.92)); break;
+            case "Archers":        // +~10% range (was +20%, nerfed 8%), +15% dmg, +8% fire speed
+                e.rn = Math.round(c.rn * 1.104); e.d = Math.round(c.d * 1.15); e.rt = Math.max(1, Math.round(c.rt * 0.92)); break;
             case "Inferno Dragon": // base dmg 30, +15% charge & +10% attack speed (charge divisor handled in Troop)
                 e.d = 30; e.rt = Math.max(1, Math.round(c.rt * 0.9)); break;
             case "Royal Recruits": // +10% hp, gains a dash (handled in Troop)
