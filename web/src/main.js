@@ -1859,6 +1859,16 @@ class Main {
             this.drawEvoGem(x, y, Math.min(7, Math.max(4, radius * 0.45)), true);
         }
 
+        // Mega Knight wind-up: a contracting golden ring telegraphs the jump
+        // during its pre-jump crouch.
+        if (e instanceof Troop && e.preJump > 0 && e.c.n === "Mega Knight") {
+            let t = e.preJump / 45; // 1 → 0 as the jump nears
+            ctx.strokeStyle = `rgba(255,210,80,${0.35 + 0.55 * (1 - t)})`;
+            ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.arc(x, y, radius + 4 + 16 * t, 0, Math.PI * 2); ctx.stroke();
+            ctx.lineWidth = 1;
+        }
+
         // Vined: a simple green ring that gently pulses (no movement) + a few
         // small static tendrils.
         if (e instanceof Troop && e.vinedTime > 0) {
@@ -2216,13 +2226,44 @@ class Main {
     // the area spells) — these render above ground troops but below the towers.
     isSpellProj(p) {
         return !!(p.isSpellArc || p.isArrows || p.isSpellDrop || p.isLog || p.isDelivery ||
-            p.poison || p.graveyard || p.brownArea || p.isClone || p.isVines || p.chainTargets || p.shockBeams);
+            p.poison || p.graveyard || p.brownArea || p.isClone || p.isVines || p.chainTargets || p.shockBeams || p.isShockwave);
     }
 
     drawProj(p) {
         if (p.isArrows) { this.drawArrowsVolley(p); return; }
         if (p.isSpellArc) { this.drawSpellArc(p); return; }
         if (p.isSpellDrop) { this.drawSpellDrop(p); return; }
+        if (p.isShockwave) {
+            // Ground-slam shockwave: an expanding dust ring with a bright leading
+            // edge and a fading inner haze (Mega Knight spawn / jump landing).
+            let prog = 1 - p.life / (p.shockMax || 18);
+            let r = Math.max(6, p.rad * prog);
+            let fade = 1 - prog;
+            ctx.save();
+            // inner haze
+            ctx.globalAlpha = 0.28 * fade;
+            ctx.fillStyle = "#cbb9a2";
+            ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+            // dust ring (thick, fading)
+            ctx.globalAlpha = 0.75 * fade;
+            ctx.strokeStyle = "#b9a98e"; ctx.lineWidth = 7 * fade + 2;
+            ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
+            // bright leading edge
+            ctx.globalAlpha = 0.9 * fade;
+            ctx.strokeStyle = "#f3ead8"; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(p.x, p.y, r + 2, 0, Math.PI * 2); ctx.stroke();
+            // a few flying dust chips around the ring
+            ctx.fillStyle = "#d9cbb2";
+            for (let i = 0; i < 8; i++) {
+                let a = i * Math.PI / 4 + prog * 0.6;
+                let dr = r + 4 + prog * 6;
+                ctx.globalAlpha = 0.7 * fade;
+                ctx.beginPath(); ctx.arc(p.x + Math.cos(a) * dr, p.y + Math.sin(a) * dr, 2.2 * fade + 0.6, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.restore();
+            ctx.globalAlpha = 1; ctx.lineWidth = 1;
+            return;
+        }
 
         // Only the rolling LOG renders here (top layer) — it rolls over units. Every
         // other projectile (bullets, boulders, the Royal Giant cannonball, area

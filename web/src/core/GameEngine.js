@@ -1071,6 +1071,8 @@ export default class GameEngine {
             for (let e of this.ents)
                 if (e.tm !== tm && !e.fly && Math.hypot(e.x - x, e.y - y) < 100)
                     e.hp -= 340; // spawn-in area damage (real L11)
+            // Spawn-slam shockwave visual.
+            this.projs.push(new Proj(x, y, x, y, null, 0, false, 100, 0, tm, false).asShockwave());
         } else if (c.t === 3) {
             this.ents.push(new Building(tm, x, y, c));
         } else if (c.n === "Royal Hogs") {

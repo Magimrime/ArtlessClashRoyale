@@ -100,6 +100,9 @@ export default class Proj {
     // Placed spell that falls from the sky as a symbol, then resolves on impact.
     asSpellDrop(kind, col, life = 30) { this.isSpellDrop = true; this.dropKind = kind; this.flashCol = col; this.life = life; this.dropMax = life; return this; }
     asIceNova() { this.isIceNova = true; this.life = 5; return this; }
+    // Ground-slam shockwave (Mega Knight spawn / jump landing): pure visual —
+    // an expanding dust ring; rad is the blast radius it grows to.
+    asShockwave() { this.isShockwave = true; this.life = 18; this.shockMax = 18; return this; }
 
     asLog() { this.isLog = true; this.asRolling(); this.life = 110; return this; }
     asBarbBarrelLog() { this.isLog = true; this.barbBarrelLog = true; this.asRolling(); return this; }
@@ -176,7 +179,7 @@ export default class Proj {
             if (this.chainHit.length >= this.chainMax) this.life = Math.min(this.life, 8);
             return;
         }
-        if (this.chainTargets || this.barbBreak || this.isIceNova || this.shockBeams) {
+        if (this.chainTargets || this.barbBreak || this.isIceNova || this.shockBeams || this.isShockwave) {
             this.life--; // brief visual-only flashes count down and vanish
             return;
         }

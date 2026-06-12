@@ -222,6 +222,8 @@ export default class Troop extends Entity {
                         for (let e of g.ents)
                             if (e.tm !== this.tm && !e.fly && this.dist(e) < 60)
                                 e.hp -= 340; // jump-land area damage (real L11)
+                        // Landing shockwave visual.
+                        g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 60, 0, this.tm, false).asShockwave());
                     }
                 } else {
                     this.x += (dx / d) * jumpSpeed;
@@ -292,8 +294,9 @@ export default class Troop extends Entity {
 
         if (!this.jp && this.preJump === 0 && this.c.n === "Mega Knight" && this.lk && this.lk.hp > 0) {
             let d = this.dist(this.lk);
-            if (d > 75 && d < 85) {
-                this.preJump = 30;
+            // Jumps from 20% further out, with a crouched wind-up (~0.75s) first.
+            if (d > 90 && d < 102) {
+                this.preJump = 45;
                 this.jt = this.lk;
                 this.jd = d;
                 return;
