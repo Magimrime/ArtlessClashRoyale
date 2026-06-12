@@ -92,14 +92,27 @@ class Main {
         this.codeInputs = []; // Rects for 5 digits (for join)
         this.enteredCode = "";
 
-        // Sandbox mode UI
+        // Sandbox mode UI — two button rows in the bottom strip plus popups.
         this.sandboxBtn = { x: 0, y: 0, w: 120, h: 50 };       // title screen
-        this.sbDeckBtn = { x: 0, y: 0, w: 120, h: 46 };        // bottom-left
-        this.sbMapBtn = { x: 0, y: 0, w: 120, h: 46 };
-        this.sbPauseBtn = { x: 0, y: 0, w: 120, h: 46 };
-        this.sbBackBtn = { x: 0, y: 0, w: 120, h: 46 };
+        this.sbDeckBtn = { x: 0, y: 0, w: 160, h: 40 };        // row 1
+        this.sbSideBtn = { x: 0, y: 0, w: 160, h: 40 };
+        this.sbMapBtn = { x: 0, y: 0, w: 160, h: 40 };
+        this.sbToolsBtn = { x: 0, y: 0, w: 100, h: 40 };       // row 2
+        this.sbWorldBtn = { x: 0, y: 0, w: 100, h: 40 };
+        this.sbSpeedBtn = { x: 0, y: 0, w: 100, h: 40 };
+        this.sbPauseBtn = { x: 0, y: 0, w: 100, h: 40 };
+        this.sbBackBtn = { x: 0, y: 0, w: 100, h: 40 };
         this.sandboxPaused = false;
-        this.sandboxDeckOpen = false;
+        this.sandboxDeckOpen = false;   // full-screen all-cards picker
+        this.sandboxMapOpen = false;    // map chooser popup
+        this.sandboxToolsOpen = false;  // tools popup (eraser, clear)
+        this.sandboxWorldOpen = false;  // world-edit popup
+        this.sandboxEvoSel = false;     // armed card was picked via its evo crystal
+        this.sandboxEraser = false;     // tool: tap a troop to delete it
+        this.sandboxTowerArm = null;    // world edit: 'king' | 'princess' tower stamp
+        this.sandboxSpeed = 1;          // 0.5–3x sim speed
+        this.sbSpeedSteps = [0.5, 1, 1.5, 2, 3];
+        this.sbSpeedAcc = 0;
         this.sbMaps = ['default', 'tower', 'open', 'heist'];
         this.sbMapNames = { default: 'Default', tower: 'Tower', open: 'Open', heist: 'Heist' };
 
@@ -115,11 +128,16 @@ class Main {
         this.deckBtn = { x: W / 2 - 60, y: H / 2 + 100 - 150, w: 120, h: 50 };
         this.mpBtn = { x: W / 2 - 60, y: H / 2 + 160 - 150, w: 120, h: 50 };
         this.sandboxBtn = { x: W / 2 - 60, y: H / 2 + 220 - 150, w: 120, h: 50 };
-        // Sandbox bottom bar: 4 buttons spanning the HUD strip, DECK at the far left.
-        this.sbDeckBtn = { x: 12, y: H - 118, w: 120, h: 46 };
-        this.sbMapBtn = { x: 144, y: H - 118, w: 120, h: 46 };
-        this.sbPauseBtn = { x: 276, y: H - 118, w: 120, h: 46 };
-        this.sbBackBtn = { x: 408, y: H - 118, w: 120, h: 46 };
+        // Sandbox bottom bar: row 1 (4 wide buttons) + row 2 (5 narrow buttons),
+        // all inside the H-150 HUD strip so the field grid is untouched.
+        this.sbDeckBtn = { x: 12, y: H - 140, w: 120, h: 40 };
+        this.sbSideBtn = { x: 144, y: H - 140, w: 120, h: 40 };
+        this.sbMapBtn = { x: 276, y: H - 140, w: 120, h: 40 };
+        this.sbToolsBtn = { x: 408, y: H - 140, w: 120, h: 40 };
+        this.sbWorldBtn = { x: 12, y: H - 94, w: 120, h: 40 };
+        this.sbSpeedBtn = { x: 144, y: H - 94, w: 120, h: 40 };
+        this.sbPauseBtn = { x: 276, y: H - 94, w: 120, h: 40 };
+        this.sbBackBtn = { x: 408, y: H - 94, w: 120, h: 40 };
         this.exitBtn = { x: W / 2 - 60, y: H / 2 + 40 - 120 + 100, w: 120, h: 50 };
         this.backBtn = { x: W / 2 - 60, y: H - 120, w: 120, h: 50 };
         this.continueBtn = { x: W / 2 - 60, y: H - 120, w: 120, h: 50 };
@@ -171,7 +189,8 @@ class Main {
             this.mouse = { x: mx, y: my };
         });
         canvas.addEventListener('wheel', (e) => {
-            if (this.state === State.DECK || this.state === State.ENEMY_DECK) {
+            let sbPicker = this.state === State.SANDBOX && this.sandboxDeckOpen;
+            if (this.state === State.DECK || this.state === State.ENEMY_DECK || sbPicker) {
                 this.scrollY += Math.sign(e.deltaY) * 20;
                 let listSize = (this.state === State.DECK) ? this.eng.unlockedCards.length : this.eng.allCards.length;
                 let maxScroll = Math.max(0, (Math.floor(listSize / 3) + 2) * 80 + 150 - H);
@@ -448,32 +467,96 @@ class Main {
             }
         } else if (this.state === State.SANDBOX) {
             if (this.sandboxDeckOpen) {
-                // Card picker overlay: tap a deck card to arm it, anywhere else closes.
-                let rects = this.sandboxDeckRects();
-                for (let i = 0; i < rects.length; i++) {
-                    if (this.contains(rects[i], x, y)) {
-                        this.eng.sel = this.eng.myDeck[i];
+                // Full-screen ALL-cards picker (same grid as the deck builder).
+                if (this.contains(this.backBtn, x, y)) { this.sandboxDeckOpen = false; return; }
+                let cols = 3, margin = 20, cardW = (W - 4 * margin) / 3, cardH = 60;
+                for (let i = 0; i < this.eng.allCards.length; i++) {
+                    let row = Math.floor(i / cols), col = i % cols;
+                    let cx = margin + col * (cardW + margin), cy = 100 + row * (cardH + margin) - this.scrollY;
+                    if (cy > H || cy + cardH < 0) continue;
+                    let c = this.eng.allCards[i];
+                    // Tapping the evo CRYSTAL arms the evolved version; the card body
+                    // arms the normal one. The picker STAYS open (close with BACK).
+                    if (this.eng.isEvoCapable(c.n) && this.evoBadgeHit(cx, cy, cardW, cardH, x, y)) {
+                        this.eng.sel = c;
+                        this.sandboxEvoSel = true;
+                        this.sandboxEraser = false; this.sandboxTowerArm = null;
+                        break;
+                    }
+                    if (this.contains({ x: cx, y: cy, w: cardW, h: cardH }, x, y)) {
+                        this.eng.sel = c;
+                        this.sandboxEvoSel = false;
+                        this.sandboxEraser = false; this.sandboxTowerArm = null;
                         break;
                     }
                 }
-                this.sandboxDeckOpen = false;
-            } else if (this.contains(this.sbDeckBtn, x, y)) {
-                this.sandboxDeckOpen = true;
-            } else if (this.contains(this.sbMapBtn, x, y)) {
-                // Cycle Default → Tower → Open → Heist (rebuilds the arena).
-                let i = this.sbMaps.indexOf(this.eng.sandboxMap);
-                this.eng.setupSandbox(this.sbMaps[(i + 1) % this.sbMaps.length]);
-            } else if (this.contains(this.sbPauseBtn, x, y)) {
-                this.sandboxPaused = !this.sandboxPaused;
-            } else if (this.contains(this.sbBackBtn, x, y)) {
+                return;
+            }
+            if (this.sandboxMapOpen) {
+                for (const o of this.sandboxMapRects()) {
+                    if (this.contains(o, x, y)) { this.eng.setupSandbox(o.map); break; }
+                }
+                this.sandboxMapOpen = false;
+                return;
+            }
+            if (this.sandboxToolsOpen) {
+                for (const o of this.sandboxToolRects()) {
+                    if (!this.contains(o, x, y)) continue;
+                    if (o.id === 'eraser') {
+                        this.sandboxEraser = !this.sandboxEraser;
+                        if (this.sandboxEraser) { this.eng.sel = null; this.sandboxTowerArm = null; }
+                    } else if (o.id === 'clear') {
+                        this.eng.sandboxClearTroops();
+                    }
+                    break;
+                }
+                this.sandboxToolsOpen = false;
+                return;
+            }
+            if (this.sandboxWorldOpen) {
+                let hit = false;
+                for (const o of this.sandboxWorldRects()) {
+                    if (!this.contains(o, x, y)) continue;
+                    hit = true;
+                    if (o.id === 'rules') this.eng.sandboxNoRules = !this.eng.sandboxNoRules;
+                    else if (o.id === 'rivUp') this.eng.RIV_Y = Math.max(135, this.eng.RIV_Y - 30);
+                    else if (o.id === 'rivDn') this.eng.RIV_Y = Math.min(675, this.eng.RIV_Y + 30);
+                    else if (o.id === 'brIn') { if (this.eng.bridgeXs[1] - this.eng.bridgeXs[0] > 120) { this.eng.bridgeXs[0] += 30; this.eng.bridgeXs[1] -= 30; } }
+                    else if (o.id === 'brOut') { if (this.eng.bridgeXs[0] > 45) { this.eng.bridgeXs[0] -= 30; this.eng.bridgeXs[1] += 30; } }
+                    else if (o.id === 'king' || o.id === 'princess') {
+                        this.sandboxTowerArm = o.id; this.eng.sel = null; this.sandboxEraser = false;
+                        this.sandboxWorldOpen = false;
+                    }
+                    else if (o.id === 'close') this.sandboxWorldOpen = false;
+                    break; // river/bridge/rules taps keep the popup open for repeats
+                }
+                if (!hit) this.sandboxWorldOpen = false;
+                return;
+            }
+            if (this.contains(this.sbDeckBtn, x, y)) { this.sandboxDeckOpen = true; this.scrollY = 0; }
+            else if (this.contains(this.sbSideBtn, x, y)) {
+                // BLUE ↔ RED. Your side fixes the team you summon for AND applies
+                // that side's normal placement restrictions.
+                this.eng.sandboxSide = this.eng.sandboxSide === 0 ? 1 : 0;
+            }
+            else if (this.contains(this.sbMapBtn, x, y)) this.sandboxMapOpen = true;
+            else if (this.contains(this.sbToolsBtn, x, y)) this.sandboxToolsOpen = true;
+            else if (this.contains(this.sbWorldBtn, x, y)) this.sandboxWorldOpen = true;
+            else if (this.contains(this.sbSpeedBtn, x, y)) {
+                let i = this.sbSpeedSteps.indexOf(this.sandboxSpeed);
+                this.sandboxSpeed = this.sbSpeedSteps[(i + 1) % this.sbSpeedSteps.length];
+            }
+            else if (this.contains(this.sbPauseBtn, x, y)) this.sandboxPaused = !this.sandboxPaused;
+            else if (this.contains(this.sbBackBtn, x, y)) {
                 this.eng.sandbox = false;
                 this.eng.sel = null;
                 this.state = State.TITLE;
-            } else if (y < H - 150 && this.eng.sel) {
-                // Place on the field; the side decides the team. The card stays armed
-                // so you can stamp several copies.
+            }
+            else if (y < H - 150) {
                 let gm = this.snapToGrid(x, y);
-                this.eng.sandboxPlace(this.eng.sel, gm.x, gm.y);
+                if (this.sandboxEraser) this.eng.sandboxErase(x, y);
+                else if (this.sandboxTowerArm) this.eng.sandboxPlaceTower(this.sandboxTowerArm, gm.x, gm.y);
+                else if (this.eng.sel) this.eng.sandboxPlace(this.eng.sel, gm.x, gm.y, this.sandboxEvoSel);
             }
         } else if (this.state === State.PLAY) {
             if (y > H - 150) {
@@ -620,7 +703,13 @@ class Main {
                     this.state = State.OVER;
                 }
             } else if (this.state === State.SANDBOX && !this.sandboxPaused) {
-                this.eng.upd(); // sandbox runs freely; pausing freezes the sim only
+                // Speed control: accumulate fractional ticks so 0.5x runs every other
+                // step and 3x runs three sim ticks per step.
+                this.sbSpeedAcc += this.sandboxSpeed;
+                while (this.sbSpeedAcc >= 1) {
+                    this.eng.upd();
+                    this.sbSpeedAcc -= 1;
+                }
             }
 
             this.accumulator -= this.step;
@@ -919,12 +1008,14 @@ class Main {
         // River — solid water, exactly one tile tall. The sandbox "Open" map has no
         // river or bridges (one uninterrupted field).
         if (!(this.state === State.SANDBOX && this.eng.sandboxNoRiver)) {
+            // Live positions — the sandbox world editor can move the river/bridges.
+            const RY = this.eng.RIV_Y || RIV_Y;
             ctx.fillStyle = "#3a8fd0";
-            ctx.fillRect(0, RIV_Y - 15, W, 30);
+            ctx.fillRect(0, RY - 15, W, 30);
             // Bridges — solid wood, no plank lines.
             ctx.fillStyle = "#9c6b3a";
-            for (const bx of [W / 4, W * 3 / 4]) {
-                ctx.fillRect(bx - 26, RIV_Y - 20, 52, 40);
+            for (const bx of (this.eng.bridgeXs || [W / 4, W * 3 / 4])) {
+                ctx.fillRect(bx - 26, RY - 20, 52, 40);
             }
         }
 
@@ -943,6 +1034,15 @@ class Main {
                 // Hovered-cell highlight for troops/buildings
                 if (this.eng.sel.t !== 2) this.drawHoverCell(this.eng.sel);
             } // Close Invalid Area Logic
+
+            // Sandbox with a CHOSEN side (and rules on): tint the forbidden half red.
+            if (this.state === State.SANDBOX && this.eng.sel && !this.eng.sandboxNoRules &&
+                (this.eng.sandboxSide === 0 || this.eng.sandboxSide === 1)) {
+                const RY = this.eng.RIV_Y || RIV_Y;
+                ctx.fillStyle = "rgba(255, 0, 0, 0.28)";
+                if (this.eng.sandboxSide === 0) ctx.fillRect(0, 0, W, RY - 15);
+                else ctx.fillRect(0, RY + 15, W, 810 - RY - 15);
+            }
 
             // Entity bodies are drawn below in layered passes
             // (shadows/effects -> ground units -> projectiles -> flying units).
@@ -1484,15 +1584,26 @@ class Main {
             ctx.fillStyle = "rgba(18,26,22,0.82)";
             this.drawRoundRect(-12, H - 150, W + 24, 162, 16, true, false);
 
-            // Hint row: how sides map to teams + currently armed card.
-            let hint = "Top half = RED team  ·  Bottom half = BLUE team";
-            if (this.eng.sel) hint = `Placing: ${this.eng.sel.n}   ·   ${hint}`;
-            this.drawCenteredString(hint, W / 2, H - 130, "600 12px 'Baloo 2', 'Segoe UI', sans-serif", "#d9e8d9");
-
+            // Row 1: card picker, side, map, tools.
             this.drawBtn(this.sbDeckBtn, "DECK", "#FFA500");
-            this.drawBtn(this.sbMapBtn, `MAP: ${this.sbMapNames[this.eng.sandboxMap] || '?'}`, "#3296ff");
+            let blue = this.eng.sandboxSide === 0;
+            this.drawBtn(this.sbSideBtn, blue ? "SIDE: BLUE" : "SIDE: RED", blue ? "#3296ff" : "#ff5a5a");
+            this.drawBtn(this.sbMapBtn, `MAP: ${this.sbMapNames[this.eng.sandboxMap] || '?'}`, "#39c44e");
+            this.drawBtn(this.sbToolsBtn, this.sandboxEraser ? "TOOLS ✶" : "TOOLS", this.sandboxEraser ? "#e84d8a" : "#8a8f5a");
+
+            // Row 2: world edit, speed, pause, back.
+            this.drawBtn(this.sbWorldBtn, "WORLD", "#3aa17e");
+            this.drawBtn(this.sbSpeedBtn, `${this.sandboxSpeed}x`, "#e0b13c");
             this.drawBtn(this.sbPauseBtn, this.sandboxPaused ? "PLAY" : "PAUSE", this.sandboxPaused ? "#39c44e" : "#e0b13c");
             this.drawBtn(this.sbBackBtn, "BACK", "#FF6347");
+
+            // Hint line: what a field tap will do right now.
+            let hint;
+            if (this.sandboxEraser) hint = "Eraser: tap a troop to delete it";
+            else if (this.sandboxTowerArm) hint = `Placing: ${this.sandboxTowerArm === 'king' ? 'King' : 'Princess'} Tower`;
+            else if (this.eng.sel) hint = `Placing: ${this.eng.sel.n}${this.sandboxEvoSel && this.eng.isEvoCapable(this.eng.sel.n) ? " (EVO)" : ""}`;
+            else hint = "DECK to pick a card · tap a card's crystal for its EVO";
+            this.drawCenteredString(hint, W / 2, H - 36, "600 12px 'Baloo 2', 'Segoe UI', sans-serif", "#d9e8d9");
 
             // Frozen-sim banner so a pause is obvious at a glance.
             if (this.sandboxPaused) {
@@ -1501,20 +1612,85 @@ class Main {
                 this.drawCenteredString("PAUSED", W / 2, 33, "bold 18px 'Baloo 2', 'Segoe UI', sans-serif", "#ffd24d");
             }
 
-            // Card picker overlay: the 8 deck cards, tap one to arm it.
-            if (this.sandboxDeckOpen) {
+            // Eraser / tower-stamp cursor on the field.
+            if (this.mouse.y < H - 150 && !this.sandboxDeckOpen && !this.sandboxMapOpen && !this.sandboxToolsOpen && !this.sandboxWorldOpen) {
+                if (this.sandboxEraser) {
+                    ctx.strokeStyle = "#ff5a5a"; ctx.lineWidth = 2.5;
+                    ctx.beginPath(); ctx.arc(this.mouse.x, this.mouse.y, 14, 0, Math.PI * 2); ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(this.mouse.x - 8, this.mouse.y - 8); ctx.lineTo(this.mouse.x + 8, this.mouse.y + 8);
+                    ctx.moveTo(this.mouse.x + 8, this.mouse.y - 8); ctx.lineTo(this.mouse.x - 8, this.mouse.y + 8);
+                    ctx.stroke(); ctx.lineWidth = 1;
+                } else if (this.sandboxTowerArm) {
+                    let gm = this.snapToGrid(this.mouse.x, this.mouse.y);
+                    let r = (this.sandboxTowerArm === 'king' ? 50 : 36) * 0.88;
+                    ctx.globalAlpha = 0.5;
+                    ctx.fillStyle = "#b65cd6";
+                    this.drawRoundRect(gm.x - r, gm.y - r, r * 2, r * 2, 8, true, false);
+                    ctx.globalAlpha = 1;
+                }
+            }
+
+            // ---- Popups (drawn over the bar) ----
+            // The title is anchored a clear margin ABOVE the first button so the
+            // two never collide.
+            const popupBg = (title, firstBtnY) => {
                 ctx.fillStyle = "rgba(0,0,0,0.62)";
                 ctx.fillRect(0, 0, W, H);
-                this.drawCenteredString("Pick a card", W / 2, H / 2 - 152, "bold 26px 'Baloo 2', 'Segoe UI', sans-serif", "#ffffff");
-                let rects = this.sandboxDeckRects();
-                for (let i = 0; i < rects.length; i++) {
-                    let r = rects[i], c = this.eng.myDeck[i];
-                    this.drawDeckCard(r.x, r.y, r.w, r.h, c, this.eng.sel === c);
+                this.drawCenteredString(title, W / 2, firstBtnY - 28, "bold 26px 'Baloo 2', 'Segoe UI', sans-serif", "#ffffff");
+            };
+            if (this.sandboxMapOpen) {
+                let rects = this.sandboxMapRects();
+                popupBg("Choose a Map", rects[0].y);
+                for (const o of rects) {
+                    let active = o.map === this.eng.sandboxMap;
+                    this.drawBtn(o, o.label + (active ? "  ✓" : ""), active ? "#39c44e" : "#3296ff");
                 }
-                if (!this.eng.myDeck.length) {
-                    this.drawCenteredString("Your deck is empty — build one first!", W / 2, H / 2, "600 16px 'Baloo 2', 'Segoe UI', sans-serif", "#ffd24d");
+            } else if (this.sandboxToolsOpen) {
+                let rects = this.sandboxToolRects();
+                popupBg("Tools", rects[0].y);
+                for (const o of rects) this.drawBtn(o, o.label, o.color);
+            } else if (this.sandboxWorldOpen) {
+                let rects = this.sandboxWorldRects();
+                popupBg("World Edit", rects[0].y - 26); // leave room for the info line
+                for (const o of rects) this.drawBtn(o, o.label, o.color);
+                this.drawCenteredString(`River y: ${this.eng.RIV_Y} · Bridges: ${Math.round(this.eng.bridgeXs[0])} / ${Math.round(this.eng.bridgeXs[1])}`,
+                    W / 2, rects[0].y - 16, "600 12px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.75)");
+            }
+
+            // ---- Full-screen ALL-cards picker (mirrors the deck-builder look) ----
+            if (this.sandboxDeckOpen) {
+                this.paintBg("#23362a");
+                let cols = 3, margin = 20, cardW = (W - 4 * margin) / 3, cardH = 60;
+                for (let i = 0; i < this.eng.allCards.length; i++) {
+                    let c = this.eng.allCards[i];
+                    let row = Math.floor(i / cols), col = i % cols;
+                    let cx = margin + col * (cardW + margin);
+                    let cy = 100 + row * (cardH + margin) - this.scrollY;
+                    if (cy > H || cy + cardH < 0) continue;
+                    this.drawDeckCard(cx, cy, cardW, cardH, c, this.eng.sel === c);
+                    // Evo crystal on every evo-capable card: tap it to summon the EVO.
+                    if (this.eng.isEvoCapable(c.n)) {
+                        let armed = this.eng.sel === c && this.sandboxEvoSel;
+                        let req = this.eng.EVO_REQ[c.n];
+                        if (armed) { ctx.strokeStyle = "#b13bff"; ctx.lineWidth = 2.5; this.drawRoundRect(cx, cy, cardW, cardH, 10, false, false); ctx.stroke(); ctx.lineWidth = 1; }
+                        this.drawEvoPips(cx + cardW / 2, cy + cardH - 8, req, armed ? req : 0, armed);
+                    }
                 }
-                this.drawCenteredString("tap anywhere else to close", W / 2, H / 2 + 132, "600 12px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.7)");
+                // Header panel
+                ctx.fillStyle = "rgba(10,18,12,0.94)";
+                ctx.fillRect(0, 0, W, 92);
+                ctx.strokeStyle = "rgba(255,255,255,0.12)"; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(0, 92); ctx.lineTo(W, 92); ctx.stroke();
+                this.drawCenteredString("Pick a Card", W / 2, 38, "bold 26px 'Baloo 2', 'Segoe UI', sans-serif", "#eaffea");
+                let selLbl = this.eng.sel ? `Selected: ${this.eng.sel.n}${this.sandboxEvoSel ? " (EVO)" : ""}` : "tap a crystal to summon the EVO";
+                this.drawCenteredString(selLbl, W / 2, 70, "600 13px 'Baloo 2', 'Segoe UI', sans-serif", "#d9a8ff");
+                // Opaque footer behind BACK so the card grid never shows through it.
+                ctx.fillStyle = "rgba(10,18,12,0.94)";
+                ctx.fillRect(0, H - 140, W, 140);
+                ctx.strokeStyle = "rgba(255,255,255,0.12)"; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(0, H - 140); ctx.lineTo(W, H - 140); ctx.stroke();
+                this.drawBtn(this.backBtn, "BACK", "#FF6347");
             }
         }
 
@@ -1627,7 +1803,10 @@ class Main {
                 ctx.beginPath(); ctx.arc(cx, cy, tr * 0.44, 0, Math.PI * 2); ctx.fill();
             };
             if (e.noTurret) {
-                // Heist king: bare roof — no spell vent, no shooter, no box.
+                // Heist king: keeps the big spell-vent cannon, but has no shooter
+                // station or hatch (and never fires — see Tower.act).
+                let fs = isFriend ? -1 : 1;
+                turret(x, y - fs * r * 0.32, r * 0.4, false);
             } else if (!e.kg) {
                 turret(x, y, r * 0.5, true); // princess cannon — barrel, aims
             } else {
@@ -1778,15 +1957,38 @@ class Main {
         ctx.fillRect(0, 0, W, RIV_Y - 15);
     }
 
-    // Sandbox card-picker layout: the (≤8) deck cards in a centred 4×2 grid.
-    sandboxDeckRects() {
-        const cw = 110, ch = 90, gap = (W - 4 * cw) / 5;
-        let rects = [];
-        for (let i = 0; i < this.eng.myDeck.length && i < 8; i++) {
-            let col = i % 4, row = Math.floor(i / 4);
-            rects.push({ x: gap + col * (cw + gap), y: H / 2 - 120 + row * (ch + 20), w: cw, h: ch });
-        }
-        return rects;
+    // Sandbox MAP popup: one button per map, stacked.
+    sandboxMapRects() {
+        return this.sbMaps.map((m, i) => ({
+            map: m, label: this.sbMapNames[m],
+            x: W / 2 - 120, y: H / 2 - 150 + i * 62, w: 240, h: 50
+        }));
+    }
+
+    // Sandbox TOOLS popup.
+    sandboxToolRects() {
+        const mk = (id, label, i, color) => ({ id, label, color, x: W / 2 - 120, y: H / 2 - 120 + i * 62, w: 240, h: 50 });
+        return [
+            mk('eraser', this.sandboxEraser ? "ERASER: ON" : "ERASER", 0, this.sandboxEraser ? "#e84d8a" : "#7f8b84"),
+            mk('clear', "CLEAR TROOPS", 1, "#e0762c"),
+            mk('close', "CLOSE", 2, "#FF6347"),
+        ];
+    }
+
+    // Sandbox WORLD EDIT popup: placement rules, river / bridge movers, towers.
+    sandboxWorldRects() {
+        const fullW = 260, halfW = 124, x0 = W / 2 - fullW / 2, y0 = H / 2 - 210, rh = 50, gap = 12;
+        const row = i => y0 + i * (rh + gap);
+        return [
+            { id: 'rules', label: this.eng.sandboxNoRules ? "RULES: OFF" : "RULES: ON", color: this.eng.sandboxNoRules ? "#e84d8a" : "#39c44e", x: x0, y: row(0), w: fullW, h: rh },
+            { id: 'rivUp', label: "RIVER ↑", color: "#3296ff", x: x0, y: row(1), w: halfW, h: rh },
+            { id: 'rivDn', label: "RIVER ↓", color: "#3296ff", x: x0 + fullW - halfW, y: row(1), w: halfW, h: rh },
+            { id: 'brIn', label: "BRIDGES →←", color: "#9c6b3a", x: x0, y: row(2), w: halfW, h: rh },
+            { id: 'brOut', label: "BRIDGES ←→", color: "#9c6b3a", x: x0 + fullW - halfW, y: row(2), w: halfW, h: rh },
+            { id: 'king', label: "+ KING TOWER", color: "#b65cd6", x: x0, y: row(3), w: fullW, h: rh },
+            { id: 'princess', label: "+ PRINCESS TOWER", color: "#b65cd6", x: x0, y: row(4), w: fullW, h: rh },
+            { id: 'close', label: "CLOSE", color: "#FF6347", x: x0, y: row(5), w: fullW, h: rh },
+        ];
     }
 
     // Troops/buildings deploy on a 30px tile grid (like the real game).

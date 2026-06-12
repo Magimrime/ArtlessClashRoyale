@@ -113,8 +113,20 @@ export default class Troop extends Entity {
     }
 
     act(g) {
-        // Deploy time — can't move or attack for ~1s after being placed.
-        if (this.deployTime > 0) { this.deployTime--; this.chargeT = 0; return; }
+        // Shadow the module constant with the engine's LIVE river position so the
+        // sandbox world editor can move the river (normal games keep 405).
+        const RIV_Y = g.RIV_Y || 405;
+
+        // Deploy time — can't move or attack for ~1s after being placed. The dash
+        // charge ("dash cooldown") does NOT run during the spawn cooldown: it stays
+        // at zero and only starts building once the troop actually walks.
+        if (this.deployTime > 0) {
+            this.deployTime--;
+            this.chargeT = 0;
+            this.distWalked = 0;
+            this.isCharging = false;
+            return;
+        }
 
         // Spirit hop: once started, arc onto the target and explode on landing.
         if (this.sjT > 0) {
@@ -192,9 +204,17 @@ export default class Troop extends Entity {
                 let d = Math.hypot(dx, dy);
                 let jumpSpeed = 2.0;
 
-                if (d < jumpSpeed + 1) {
-                    this.x = this.jt.x;
-                    this.y = this.jt.y;
+                // Jumping AT an entity (Mega Knight's attack jump): land on CONTACT —
+                // collision keeps two bodies ~a hitbox apart, so requiring a near-zero
+                // distance would leave the jumper airborne forever (the "flying Mega
+                // Knights" pile-up). Static river-jump points still land exactly.
+                let isEntity = !!this.jt.rad;
+                let landReach = jumpSpeed + 1;
+                if (isEntity) landReach = Math.max(landReach, g.getHitboxRadius(this) + g.getHitboxRadius(this.jt) + 2);
+                let targetGone = isEntity && (this.jt.hp <= 0 || !g.ents.includes(this.jt));
+
+                if (d < landReach || targetGone) {
+                    if (!isEntity) { this.x = this.jt.x; this.y = this.jt.y; } // snap only to static points
                     this.jp = false;
                     this.fly = false;
 
@@ -237,7 +257,8 @@ export default class Troop extends Entity {
         if (!this.fly && !this.jp && this.currentTarget && !g.sandboxNoRiver &&
             ["Hog Rider", "Royal Hogs", "Prince", "Dark Prince"].includes(this.c.n)) {
             if (((this.y < RIV_Y) !== (this.currentTarget.y < RIV_Y)) && Math.abs(this.y - RIV_Y) < 40) {
-                let onBridge = (this.x >= W / 4 - 30 && this.x <= W / 4 + 30) || (this.x >= W * 3 / 4 - 30 && this.x <= W * 3 / 4 + 30);
+                let bxs = g.bridgeXs || [W / 4, W * 3 / 4];
+                let onBridge = bxs.some(bx => this.x >= bx - 30 && this.x <= bx + 30);
                 if (!onBridge) {
                     this.jp = true;
                     this.kbTime = 0;
@@ -415,7 +436,8 @@ export default class Troop extends Entity {
             // then the far bank — and only AFTER crossing does it path to the enemy
             // tower (which it approaches from the front, since it stays on the lane x).
             if (!this.fly && !g.sandboxNoRiver && (this.y < RIV_Y) !== (this.currentTarget.y < RIV_Y)) {
-                let laneX = (this.x < W / 2) ? W / 4 : W * 3 / 4;
+                let bxs = g.bridgeXs || [W / 4, W * 3 / 4];
+                let laneX = bxs.reduce((a, b) => Math.abs(this.x - a) <= Math.abs(this.x - b) ? a : b);
                 let pY = (this.tm === 0) ? 645 : 165;                 // own princess-tower y
                 let side = (this.x >= laneX) ? 1 : -1;                // approach side
                 // Clear of the princess's (rounded) friendly hitbox so the loop point is
@@ -424,11 +446,19 @@ export default class Troop extends Entity {
                 let bx = Math.max(laneX - 22, Math.min(laneX + 22, this.x)); // CLOSEST point on the bridge
                 let dyToP = (this.tm === 0) ? (this.y - pY) : (pY - this.y); // +behind/below, -in front
                 let past = dyToP <= -10;
-                if (dyToP > 10) {
+                // The princess loop only applies when an own princess actually STANDS
+                // in this lane AND sits between the troop's side and the river. On
+                // sandbox maps without princesses — or with a world-edited river moved
+                // past y645/165 — skip straight to the bridge stages (otherwise the
+                // loop waypoint can land inside the river and the troop never crosses).
+                let ownP = (this.tm === 0) ? (laneX < W / 2 ? g.t1L : g.t1R) : (laneX < W / 2 ? g.t2L : g.t2R);
+                let canLoop = ownP && ownP.hp > 0 && g.ents.includes(ownP) &&
+                    ((this.tm === 0) ? pY > RIV_Y + 40 : pY < RIV_Y - 40);
+                if (canLoop && dyToP > 10) {
                     // BEHIND/BELOW the princess: come up its near face on our approach
                     // side, staying outside the hitbox (loop step 1 → 2).
                     tx = laneX + side * off; ty = pY + ((this.tm === 0) ? 1 : -1) * (dyToP > off ? off * 0.5 : 6);
-                } else if (!past) {
+                } else if (canLoop && !past) {
                     // BESIDE the princess: slide forward to its FRONT (toward the bridge).
                     tx = laneX + side * off; ty = pY + ((this.tm === 0) ? -1 : 1) * off * 0.7;
                 } else if ((this.tm === 0 && this.y > RIV_Y + 14) || (this.tm === 1 && this.y < RIV_Y - 14)) {
@@ -522,8 +552,8 @@ export default class Troop extends Entity {
             }
 
             if (!this.atk) {
-                // Evo Royal Recruits dash 10% slower than a Prince (1.8x vs 2.0x).
-                let chargeSpd = this.isCharging ? (this.c.n === "Royal Recruits" ? 1.8 : 2.0) : 1.0;
+                // Evo Royal Recruits dash even faster than a Prince (2.2x vs 2.0x).
+                let chargeSpd = this.isCharging ? (this.c.n === "Royal Recruits" ? 2.2 : 2.0) : 1.0;
                 this.x += dx * this.c.s * chargeSpd * speedMult;
                 this.y += dy * this.c.s * chargeSpd * speedMult;
             }
@@ -652,11 +682,13 @@ export default class Troop extends Entity {
 
     checkPathBlocked(g, x1, y1, x2, y2) {
         if (this.fly) return false; // flying units fly over the river and all buildings
-        if (!this.fly) {
+        const RIV_Y = g.RIV_Y || 405; // live river position (sandbox world edit)
+        if (!this.fly && !g.sandboxNoRiver) {
             if ((y1 < RIV_Y && y2 > RIV_Y) || (y1 > RIV_Y && y2 < RIV_Y)) {
                 let t = (RIV_Y - y1) / (y2 - y1);
                 let crossX = x1 + t * (x2 - x1);
-                let onBridge = (crossX >= W / 4 - 30 && crossX <= W / 4 + 30) || (crossX >= W * 3 / 4 - 30 && crossX <= W * 3 / 4 + 30);
+                let bxs = g.bridgeXs || [W / 4, W * 3 / 4];
+                let onBridge = bxs.some(bx => crossX >= bx - 30 && crossX <= bx + 30);
                 if (!onBridge) return true;
             }
         }
@@ -750,9 +782,14 @@ export default class Troop extends Entity {
             return;
         }
 
+        // With NO enemy tower left (sandbox, or every lane objective destroyed)
+        // troops see 5x further, so they hunt down the next troop instead of idling.
+        const anyEnemyTower = g.ents.some(e => e.constructor.name === "Tower" && e.tm !== this.tm && e.hp > 0);
+        const sight = anyEnemyTower ? this.sightRange : this.sightRange * 5;
+
         // 1. Nearest valid enemy non-tower (unit or building) in sight.
         let distraction = null;
-        let minDist = this.sightRange;
+        let minDist = sight;
         for (let e of g.ents) {
             if (e.tm === this.tm || e.hp <= 0 || isTower(e)) continue;
             let isBldg = e.constructor.name === "Building";
@@ -768,12 +805,24 @@ export default class Troop extends Entity {
         if (this.tm === 0) primary = (g.t2L && g.t2L.hp > 0 && this.x < W / 2) ? g.t2L : (g.t2R && g.t2R.hp > 0 && this.x >= W / 2) ? g.t2R : g.t2K;
         else primary = (g.t1L && g.t1L.hp > 0 && this.x < W / 2) ? g.t1L : (g.t1R && g.t1R.hp > 0 && this.x >= W / 2) ? g.t1R : g.t1K;
         if (primary && primary.hp <= 0) primary = null;
+        // King gone (lane objective dead-ends): pathfind to the NEAREST living enemy
+        // tower instead — a cross-lane princess or an extra sandbox tower — so combined
+        // with the distraction scan the troop always heads for the nearest enemy
+        // troop, tower, or building.
+        if (!primary) {
+            let bd = Infinity;
+            for (let e of g.ents) {
+                if (e.constructor.name !== "Tower" || e.tm === this.tm || e.hp <= 0) continue;
+                let d = this.dist(e);
+                if (d < bd) { bd = d; primary = e; }
+            }
+        }
 
         // 3. Decide with hysteresis: keep the current distraction unless it dies /
         // leaves sight, or a notably closer one appears (avoids flip-flopping).
         const cur = this.currentTarget;
         const curOK = cur && cur.hp > 0 && cur.rad !== 0 && cur.tm !== this.tm &&
-            !isTower(cur) && !(cur.fly && !this.air) && this.dist(cur) <= this.sightRange;
+            !isTower(cur) && !(cur.fly && !this.air) && this.dist(cur) <= sight;
 
         // Compare against the tower's EDGE, not its (far) centre — towers are large,
         // so a troop right next to one should attack it, not get pulled to a unit
@@ -784,9 +833,10 @@ export default class Troop extends Entity {
         if (curOK) {
             target = (distraction && distraction !== cur && this.dist(distraction) < this.dist(cur) * 0.6) ? distraction : cur;
         } else if (distraction && this.dist(distraction) < towerReach &&
-            !this.checkPathBlocked(g, this.x, this.y, distraction.x, distraction.y)) {
+            (!primary || !this.checkPathBlocked(g, this.x, this.y, distraction.x, distraction.y))) {
             // When choosing (not yet attacking): a unit closer than the lane-tower edge
-            // is preferred; otherwise head for the tower.
+            // is preferred; otherwise head for the tower. With NO tower objective left
+            // the path veto is skipped — the staged movement routes over a bridge.
             target = distraction;
         } else {
             target = primary;

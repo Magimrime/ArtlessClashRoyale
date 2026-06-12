@@ -53,6 +53,9 @@ export default class GameEngine {
         this.sandbox = false;
         this.sandboxMap = 'default';
         this.sandboxNoRiver = false;
+        this.sandboxSide = 0;         // 0 (blue) | 1 (red) — fixes team + placement rules
+        this.sandboxNoRules = false;  // world edit: ignore ALL placement limitations
+        this.bridgeXs = [this.W / 4, this.W * 3 / 4]; // movable in sandbox world edit
         this.cheated = false;
         this.gamesPlayed = 0;
         this.gamesWon = 0;
@@ -195,14 +198,18 @@ export default class GameEngine {
 
     // Sandbox: a free-play arena with no opponent, elixir, or win condition. Maps
     // (every map has the two king towers):
-    //   'default' — river + bridges + kings
-    //   'tower'   — river + bridges + kings + princess towers
+    //   'default' — river + bridges + kings + princess towers (the standard arena)
+    //   'tower'   — river + bridges + kings only
     //   'open'    — no river / bridges, kings only
     //   'heist'   — river + bridges + kings that have NO turret (can't shoot)
     setupSandbox(map) {
         this.sandbox = true;
         this.sandboxMap = map || 'default';
         this.sandboxNoRiver = (this.sandboxMap === 'open');
+        // Reset world-edit geometry (side / rules prefs survive map switches).
+        this.RIV_Y = 405;
+        this.bridgeXs = [this.W / 4, this.W * 3 / 4];
+        if (this.sandboxSide !== 0 && this.sandboxSide !== 1) this.sandboxSide = 0; // always a chosen side
         this.p1 = new Player(0);
         this.p2 = new Player(1);
         this.ents = [];
@@ -226,7 +233,7 @@ export default class GameEngine {
             this.t1K.noTurret = true; this.t2K.noTurret = true;
             this.t1K.actv = false; this.t2K.actv = false;
         }
-        if (this.sandboxMap === 'tower') {
+        if (this.sandboxMap === 'default') {
             this.t1L = new Tower(0, this.W / 4, 645, false); this.ents.push(this.t1L);
             this.t1R = new Tower(0, this.W * 3 / 4, 645, false); this.ents.push(this.t1R);
             this.t2L = new Tower(1, this.W / 4, 165, false); this.ents.push(this.t2L);
@@ -234,13 +241,56 @@ export default class GameEngine {
         }
     }
 
-    // Sandbox placement: free, no elixir / validity rules. The SIDE you drop on
-    // decides the team — bottom half spawns blue (team 0), top half red (team 1).
-    sandboxPlace(c, x, y) {
+    // Sandbox placement: no elixir. Every placement is the CHOSEN side's team and
+    // that side's normal placement rules apply (unless world-edit rules are off).
+    // useEvo spawns the evolved version of evo-capable cards.
+    sandboxPlace(c, x, y, useEvo = false) {
         if (!this.sandbox || !c) return false;
-        if (!this.isValid(y, x, c, 0)) return false;
-        let tm = (y < this.RIV_Y) ? 1 : 0;
-        this.addU(tm, c, x, y);
+        let side = this.sandboxSide;
+        let tm = (side === 0 || side === 1) ? side : ((y < this.RIV_Y) ? 1 : 0);
+        if (!this.isValid(y, x, c, tm)) return false;
+        this.addU(tm, c, x, y, useEvo && this.isEvoCapable(c.n));
+        return true;
+    }
+
+    // Sandbox eraser: delete the troop/building (not a tower) under the point.
+    sandboxErase(x, y) {
+        let best = null, bd = 1e9, bi = -1;
+        for (let i = 0; i < this.ents.length; i++) {
+            let e = this.ents[i];
+            if (e.constructor.name === "Tower") continue;
+            let ey = e.y - (e.fly ? 22 : 0);
+            let d = Math.hypot(e.x - x, ey - y);
+            if (d < Math.max(e.rad, 14) + 8 && d < bd) { bd = d; best = e; bi = i; }
+        }
+        if (best) { this.ents.splice(bi, 1); return true; } // no death effects on erase
+        return false;
+    }
+
+    // Sandbox: wipe every troop and building (towers stay).
+    sandboxClearTroops() {
+        this.ents = this.ents.filter(e => e.constructor.name === "Tower");
+        this.projs = [];
+        this.deploys = [];
+    }
+
+    // Sandbox world edit: drop an EXTRA tower (king or princess). Team follows the
+    // chosen side, otherwise the half it lands on. Skips overlapping structures.
+    sandboxPlaceTower(kind, x, y) {
+        if (!this.sandbox) return false;
+        if (y < 60 || y > 750) return false;
+        let side = this.sandboxSide;
+        let tm = (side === 0 || side === 1) ? side : ((y < this.RIV_Y) ? 1 : 0);
+        let rad = kind === 'king' ? 50 : 36;
+        for (let e of this.ents) {
+            if ((e.constructor.name === "Tower" || e.constructor.name === "Building") && e.hp > 0) {
+                if (Math.hypot(e.x - x, e.y - y) < e.rad + rad) return false;
+            }
+        }
+        let t = new Tower(tm, x, y, kind === 'king');
+        t.actv = true;
+        if (this.sandboxMap === 'heist') { t.noTurret = true; t.actv = false; }
+        this.ents.push(t);
         return true;
     }
 
@@ -464,6 +514,12 @@ export default class GameEngine {
         // reset) so both clients stay in lockstep.
         if (!this.isMultiplayer) this.seed = (Math.random() * 2147483647) >>> 0;
 
+        // Leave sandbox mode and restore any world-edited geometry.
+        this.sandbox = false;
+        this.sandboxNoRiver = false;
+        this.RIV_Y = 405;
+        this.bridgeXs = [this.W / 4, this.W * 3 / 4];
+
         this.p1 = new Player(0);
         this.p2 = new Player(1);
         this.ents = [];
@@ -539,18 +595,23 @@ export default class GameEngine {
     }
 
     isValid(y, x, c, tm) {
-        // Sandbox: place anywhere on the field (either side), only not on a structure.
         if (this.sandbox) {
             if (y < 0 || y > 810) return false;
-            if (!this.sandboxNoRiver && c.t !== 2 && y > this.RIV_Y - 25 && y < this.RIV_Y + 25 && c.t === 3) return false;
-            for (let e of this.ents) {
-                let isStruct = e.constructor.name === "Building" || e.constructor.name === "Tower";
-                if (isStruct && e.hp > 0) {
-                    let gap = this.getHitboxRadius(e) + this.getVisualRadius(c) * (c.t === 3 ? 0.9 : 0.45);
-                    if (Math.hypot(e.x - x, e.y - y) < gap) return false;
+            // World edit "rules off": anywhere on the field goes, even on structures.
+            if (this.sandboxNoRules) return true;
+            // Free side: either half, only not on top of a structure.
+            if (this.sandboxSide !== 0 && this.sandboxSide !== 1) {
+                if (!this.sandboxNoRiver && c.t === 3 && y > this.RIV_Y - 25 && y < this.RIV_Y + 25) return false;
+                for (let e of this.ents) {
+                    let isStruct = e.constructor.name === "Building" || e.constructor.name === "Tower";
+                    if (isStruct && e.hp > 0) {
+                        let gap = this.getHitboxRadius(e) + this.getVisualRadius(c) * (c.t === 3 ? 0.9 : 0.45);
+                        if (Math.hypot(e.x - x, e.y - y) < gap) return false;
+                    }
                 }
+                return true;
             }
-            return true;
+            // A chosen side falls through to the NORMAL per-team rules below.
         }
         if (c.n === "The Log" || c.n === "Barbarian Barrel" || c.n === "Royale Delivery") {
             // Log/BarbBarrel must be placed on player's side (roughly) unless tower down
@@ -558,14 +619,14 @@ export default class GameEngine {
 
             if (tm === 0) {
                 // Player Logic — can be thrown right up to the river's edge.
-                if (this.t2L.hp <= 0 && x < this.W / 2 && y >= 200) return true; // Pocket Left
-                if (this.t2R.hp <= 0 && x > this.W / 2 && y >= 200) return true; // Pocket Right
+                if (this.t2L && this.t2L.hp <= 0 && x < this.W / 2 && y >= 200) return true; // Pocket Left
+                if (this.t2R && this.t2R.hp <= 0 && x > this.W / 2 && y >= 200) return true; // Pocket Right
                 if (y < this.RIV_Y + 5) return false;
                 return true;
             } else {
                 // Enemy Logic
-                if (this.t1L.hp <= 0 && x < this.W / 2 && y <= this.H - 200) return true; // Pocket Left
-                if (this.t1R.hp <= 0 && x > this.W / 2 && y <= this.H - 200) return true; // Pocket Right
+                if (this.t1L && this.t1L.hp <= 0 && x < this.W / 2 && y <= this.H - 200) return true; // Pocket Left
+                if (this.t1R && this.t1R.hp <= 0 && x > this.W / 2 && y <= this.H - 200) return true; // Pocket Right
                 if (y > this.RIV_Y - 5) return false;
                 return true;
             }
@@ -1302,7 +1363,7 @@ export default class GameEngine {
                 e.x = Math.max(visualR, Math.min(this.W - visualR, e.x));
                 e.y = Math.max(visualR, Math.min(810 - visualR, e.y));
                 if (!this.sandboxNoRiver && e.y + visualR > this.RIV_Y - 15 && e.y - visualR < this.RIV_Y + 15 && !e.fly) {
-                    let onBridge = (e.x >= this.W / 4 - 30 && e.x <= this.W / 4 + 30) || (e.x >= this.W * 3 / 4 - 30 && e.x <= this.W * 3 / 4 + 30);
+                    let onBridge = this.bridgeXs.some(bx => e.x >= bx - 30 && e.x <= bx + 30);
                     if (!onBridge) {
                         e.y = e.y < this.RIV_Y ? this.RIV_Y - 15 - visualR : this.RIV_Y + 15 + visualR;
                     }
