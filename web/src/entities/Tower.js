@@ -58,10 +58,11 @@ export default class Tower extends Entity {
 
         if (this.cd-- > 0) return; // still reloading
         if (best) {
-            // Crown-tower hit: 109 damage. Slightly slower than real CR so towers
-            // don't shred pushes — Princess every ~0.93s (56 ticks), King ~1.17s (70).
+            // Crown-tower hit: 109 damage. Reload tuned slow enough that fragile
+            // chargers (Spirits, Wall Breakers) eat at most two shots on the way in
+            // and reach the tower — Princess every 75 ticks, King every 90.
             g.projs.push(new Proj(this.x, this.y, best.x, best.y, best, 10, false, 4, 109, this.tm, false));
-            this.cd = this.kg ? 70 : 56;
+            this.cd = this.kg ? 96 : 90; // King every 1.6s, Princess every 1.5s
         }
     }
 }

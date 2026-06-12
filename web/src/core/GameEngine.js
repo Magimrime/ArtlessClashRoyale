@@ -226,12 +226,11 @@ export default class GameEngine {
         this.t1L = this.t1R = this.t2L = this.t2R = null;
         this.t1K = new Tower(0, this.W / 2, 735, true); this.ents.push(this.t1K);
         this.t2K = new Tower(1, this.W / 2, 75, true); this.ents.push(this.t2K);
-        // Kings are awake from the start (no activation rules in sandbox)…
-        this.t1K.actv = true; this.t2K.actv = true;
+        // Kings start ASLEEP (like a real match) and wake when attacked — see the
+        // sandbox activation check in upd().
         if (this.sandboxMap === 'heist') {
-            // …except Heist: bare kings with no turret — they can't shoot at all.
+            // Heist: bare kings with no turret — they can't shoot at all.
             this.t1K.noTurret = true; this.t2K.noTurret = true;
-            this.t1K.actv = false; this.t2K.actv = false;
         }
         if (this.sandboxMap === 'default') {
             this.t1L = new Tower(0, this.W / 4, 645, false); this.ents.push(this.t1L);
@@ -909,6 +908,21 @@ export default class GameEngine {
         this.deploys.push({ x, y, tm, t: dur, max: dur, fly });
     }
 
+    // Centre-column placement (either of the two middle tiles) splits multi-unit
+    // cards so the units head to OPPOSITE lanes, like real CR.
+    isMidSplit(x) { return Math.abs(x - this.W / 2) <= 30; }
+
+    // Spawn `n` units mirrored around the centreline — one each side, clearly across
+    // x = W/2 so lane targeting sends them opposite ways.
+    spawnSplit(tm, y, c, n) {
+        const off = 20;
+        for (let i = 0; i < n; i++) {
+            const side = (i % 2 === 0) ? -1 : 1;
+            const lane = Math.floor(i / 2) * 16; // extra spacing if >2 per side
+            this.ents.push(new Troop(tm, this.W / 2 + side * (off + lane), y, c));
+        }
+    }
+
     addU(tm, c, x, y, isEvo = false) {
         // Evolved cards spawn buffed units (all copies of a multi-unit card too).
         if (isEvo) c = this.makeEvoCard(c);
@@ -1029,27 +1043,36 @@ export default class GameEngine {
             }
         } else if (c.n === "Archers") {
             // Two archers almost touching — just outside the collision radius so they
-            // don't immediately snap apart, leaving a tiny visible gap.
-            this.ents.push(new Troop(tm, x - 8, y, c));
-            this.ents.push(new Troop(tm, x + 8, y, c));
+            // don't immediately snap apart, leaving a tiny visible gap. Centre
+            // placement SPLITS them, one to each lane (real CR behaviour).
+            if (this.isMidSplit(x)) { this.spawnSplit(tm, y, c, 2); }
+            else {
+                this.ents.push(new Troop(tm, x - 8, y, c));
+                this.ents.push(new Troop(tm, x + 8, y, c));
+            }
         } else if (["Spear Goblins", "Wall Breakers"].includes(c.n)) {
-            this.ents.push(new Troop(tm, x - 15, y, c));
-            this.ents.push(new Troop(tm, x + 15, y, c));
-            if (c.n.includes("Spear")) this.ents.push(new Troop(tm, x, y + 15, c));
+            if (this.isMidSplit(x)) { this.spawnSplit(tm, y, c, 2); if (c.n.includes("Spear")) this.ents.push(new Troop(tm, x, y + 15, c)); }
+            else {
+                this.ents.push(new Troop(tm, x - 15, y, c));
+                this.ents.push(new Troop(tm, x + 15, y, c));
+                if (c.n.includes("Spear")) this.ents.push(new Troop(tm, x, y + 15, c));
+            }
         } else if (c.n === "Skeletons") {
             // Tight triangle (same per-skeleton spacing as Skeleton Army).
-            const S = 13;
-            this.ents.push(new Troop(tm, x, y - S * 0.6, c));
-            this.ents.push(new Troop(tm, x - S * 0.55, y + S * 0.5, c));
-            this.ents.push(new Troop(tm, x + S * 0.55, y + S * 0.5, c));
-        } else if (c.n === "Goblins") {
-            this.ents.push(new Troop(tm, x, y - 10, c));
-            this.ents.push(new Troop(tm, x - 10, y + 10, c));
-            this.ents.push(new Troop(tm, x + 10, y + 10, c));
-        } else if (c.n === "Minions") {
-            this.ents.push(new Troop(tm, x, y - 10, c));
-            this.ents.push(new Troop(tm, x - 10, y + 10, c));
-            this.ents.push(new Troop(tm, x + 10, y + 10, c));
+            if (this.isMidSplit(x)) { this.spawnSplit(tm, y, c, 2); this.ents.push(new Troop(tm, x, y + 12, c)); }
+            else {
+                const S = 13;
+                this.ents.push(new Troop(tm, x, y - S * 0.6, c));
+                this.ents.push(new Troop(tm, x - S * 0.55, y + S * 0.5, c));
+                this.ents.push(new Troop(tm, x + S * 0.55, y + S * 0.5, c));
+            }
+        } else if (c.n === "Goblins" || c.n === "Minions") {
+            if (this.isMidSplit(x)) { this.spawnSplit(tm, y, c, 2); this.ents.push(new Troop(tm, x, y + 12, c)); }
+            else {
+                this.ents.push(new Troop(tm, x, y - 10, c));
+                this.ents.push(new Troop(tm, x - 10, y + 10, c));
+                this.ents.push(new Troop(tm, x + 10, y + 10, c));
+            }
         } else if (c.n === "Minion Horde") {
             for (let i = 0; i < 6; i++)
                 this.ents.push(new Troop(tm, x + this.random() * 50 - 25, y + this.random() * 50 - 25, this.getCard("Minions")));
@@ -1069,12 +1092,18 @@ export default class GameEngine {
             for (const [dx, dy] of [[-20, -11], [20, -11], [0, 0], [-20, 13], [20, 13]])
                 this.ents.push(new Troop(tm, x + dx, y + dy, c));
         } else if (c.n === "Elite Barbarians") {
-            this.ents.push(new Troop(tm, x - 10, y, c));
-            this.ents.push(new Troop(tm, x + 10, y, c));
+            if (this.isMidSplit(x)) { this.spawnSplit(tm, y, c, 2); }
+            else {
+                this.ents.push(new Troop(tm, x - 10, y, c));
+                this.ents.push(new Troop(tm, x + 10, y, c));
+            }
         } else if (c.n === "Zappies") {
-            this.ents.push(new Troop(tm, x - 10, y, c));
-            this.ents.push(new Troop(tm, x + 10, y, c));
-            this.ents.push(new Troop(tm, x, y + 10, c));
+            if (this.isMidSplit(x)) { this.spawnSplit(tm, y, c, 2); this.ents.push(new Troop(tm, x, y + 10, c)); }
+            else {
+                this.ents.push(new Troop(tm, x - 10, y, c));
+                this.ents.push(new Troop(tm, x + 10, y, c));
+                this.ents.push(new Troop(tm, x, y + 10, c));
+            }
         } else if (c.n === "Mega Knight") {
             this.ents.push(new Troop(tm, x, y, c));
             for (let e of this.ents)
@@ -1085,10 +1114,15 @@ export default class GameEngine {
         } else if (c.t === 3) {
             this.ents.push(new Building(tm, x, y, c));
         } else if (c.n === "Royal Hogs") {
-            this.ents.push(new Troop(tm, x - 30, y, c));
-            this.ents.push(new Troop(tm, x - 10, y, c));
-            this.ents.push(new Troop(tm, x + 10, y, c));
-            this.ents.push(new Troop(tm, x + 30, y, c));
+            if (this.isMidSplit(x)) {
+                // Centre placement: two hogs to each lane.
+                for (const off of [-48, -20, 20, 48]) this.ents.push(new Troop(tm, this.W / 2 + off, y, c));
+            } else {
+                this.ents.push(new Troop(tm, x - 30, y, c));
+                this.ents.push(new Troop(tm, x - 10, y, c));
+                this.ents.push(new Troop(tm, x + 10, y, c));
+                this.ents.push(new Troop(tm, x + 30, y, c));
+            }
         } else if (c.n === "Royal Recruits") {
             let offsets = [-150, -90, -30, 30, 90, 150];
             for (let off of offsets) {
@@ -1278,6 +1312,19 @@ export default class GameEngine {
             // ticks); otherwise tick it down while it runs.
             if (this.t1K.actv && !pk1) this.t1K.activateAnim = 45; else if (this.t1K.activateAnim > 0) this.t1K.activateAnim--;
             if (this.t2K.actv && !pk2) this.t2K.activateAnim = 45; else if (this.t2K.activateAnim > 0) this.t2K.activateAnim--;
+        } else {
+            // Sandbox: kings sleep until HIT (or a same-side princess falls on the
+            // Default map). Heist kings never wake — they have no turret at all.
+            for (const k of [this.t1K, this.t2K]) {
+                if (!k || k.noTurret) continue;
+                let pk = k.actv;
+                let pDown = (k === this.t1K)
+                    ? ((this.t1L && this.t1L.hp <= 0) || (this.t1R && this.t1R.hp <= 0))
+                    : ((this.t2L && this.t2L.hp <= 0) || (this.t2R && this.t2R.hp <= 0));
+                if (!k.actv && (k.hp < k.mhp || pDown)) k.actv = true;
+                if (k.actv && !pk) k.activateAnim = 45;
+                else if (k.activateAnim > 0) k.activateAnim--;
+            }
         }
 
         if (this.enemyAI && !this.isMultiplayer) this.enemyAI.update();
