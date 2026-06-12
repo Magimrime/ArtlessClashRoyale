@@ -89,6 +89,8 @@ export default class Proj {
     asFireArea() { this.fireArea = true; this.life = 6; return this; }
     asRedArea() { this.redArea = true; this.life = 12; return this; }
     asBrownArea() { this.brownArea = true; this.life = 12; return this; }
+    // Royale Delivery: a growing shadow as the crate falls (~1.5s) then it lands.
+    asDelivery() { this.isDelivery = true; this.life = 95; this.deliveryMax = 95; return this; }
     asPoison() { this.poison = true; this.life = 480; return this; }       // ~8s, real Poison
     asGraveyard() { this.graveyard = true; this.life = 570; return this; }  // ~9.5s, real Graveyard
     asStun(duration = 30) { this.shouldStun = true; this.stunDuration = duration; return this; }
@@ -142,7 +144,7 @@ export default class Proj {
                 if (this.hasKnockback && e instanceof Troop && !(e instanceof Tower) && !(e instanceof Building)) {
                     if (!["Mega Knight", "P.E.K.K.A", "Golem"].includes(e.c.n)) {
                         let ang = Math.atan2(e.y - this.ty, e.x - this.tx);
-                        e.kbTime = 10; e.kbX = Math.cos(ang) * 6.0; e.kbY = Math.sin(ang) * 6.0;
+                        e.kbTime = 12; e.kbMax = 12; e.kbX = Math.cos(ang) * 4.0; e.kbY = Math.sin(ang) * 4.0; // smaller, eases out
                     }
                 }
             }
@@ -163,7 +165,7 @@ export default class Proj {
             if (--this.chainStep <= 0 && this.chainHit.length < this.chainMax && this.chainCurrent && this.chainCurrent.hp > 0) {
                 this.chainStep = 4; // jump to the next target every 4 ticks
                 let c = this.chainCurrent;
-                if (!this.chainHit.includes(c)) { c.hp -= this.chainDmg; c.st = 6; this.chainHit.push(c); }
+                if (!this.chainHit.includes(c)) { c.hp -= this.chainDmg; c.st = Math.max(c.st, 16); this.chainHit.push(c); } // slightly longer stun
                 let next = null, nMin = 85; // shorter chain reach
                 for (let e of g.ents) {
                     if (e.tm !== this.tm && e.hp > 0 && !this.chainHit.includes(e) && c.dist(e) < nMin) { nMin = c.dist(e); next = e; }
@@ -174,8 +176,8 @@ export default class Proj {
             if (this.chainHit.length >= this.chainMax) this.life = Math.min(this.life, 8);
             return;
         }
-        if (this.chainTargets || this.barbBreak || this.isIceNova) {
-            this.life--;
+        if (this.chainTargets || this.barbBreak || this.isIceNova || this.shockBeams) {
+            this.life--; // brief visual-only flashes count down and vanish
             return;
         }
 
@@ -210,7 +212,26 @@ export default class Proj {
             if (this.life % 30 === 0) { // spawn a skeleton every ~0.5s
                 let angle = Math.random() * Math.PI * 2;
                 let dist = Math.sqrt(Math.random()) * (this.rad);
-                g.ents.push(new Troop(this.tm, this.x + Math.cos(angle) * dist, this.y + Math.sin(angle) * dist, g.getCard("Skeletons")));
+                let sk = new Troop(this.tm, this.x + Math.cos(angle) * dist, this.y + Math.sin(angle) * dist, g.getCard("Skeletons"));
+                sk.deployTime = 0; // graveyard skeletons move immediately
+                g.ents.push(sk);
+            }
+            return;
+        }
+
+        // Royale Delivery: the crate's shadow grows for ~1.5s, then it lands —
+        // dealing its impact damage and dropping a Royal Recruit.
+        if (this.isDelivery) {
+            this.life--;
+            if (this.life === 5) {
+                for (let e of g.ents) {
+                    if (e.tm !== this.tm && Math.hypot(this.x - e.x, this.y - e.y) < this.rad + e.rad) e.hp -= this.hitDmg(e);
+                }
+                g.ents.push(new Troop(this.tm, this.x, this.y, g.getCard("Royal Recruits")));
+                if (g.addDeploy) g.addDeploy(this.x, this.y, this.tm);
+                let f = new Proj(this.x, this.y, this.x, this.y, null, 0, false, this.rad, 0, this.tm, false);
+                f.brownArea = true; f.life = 11;
+                g.projs.push(f);
             }
             return;
         }
@@ -256,9 +277,9 @@ export default class Proj {
                             if (this.hasKnockback && e instanceof Troop && !(e instanceof Tower) && !(e instanceof Building)) {
                                 if (["Mega Knight", "P.E.K.K.A", "Golem"].includes(e.c.n)) continue;
                                 let angle = Math.atan2(e.y - this.y, e.x - this.x);
-                                e.kbTime = 10;
-                                e.kbX = Math.cos(angle) * 6.0;
-                                e.kbY = Math.sin(angle) * 6.0;
+                                e.kbTime = 12; e.kbMax = 12;
+                                e.kbX = Math.cos(angle) * 4.0;
+                                e.kbY = Math.sin(angle) * 4.0;
                             }
                         }
                     }
@@ -356,8 +377,10 @@ export default class Proj {
         }
 
         if (this.t) {
+            // Home to the target's VISUAL body — an air troop's real position is its
+            // raised sprite (22px up), not its ground shadow.
             this.tx = this.t.x;
-            this.ty = this.t.y;
+            this.ty = this.t.y - (this.t.fly ? 22 : 0);
         }
         let a = Math.atan2(this.ty - this.y, this.tx - this.x);
         let d = Math.hypot(this.tx - this.x, this.ty - this.y);

@@ -11,7 +11,7 @@ export default class GameEngine {
     constructor() {
         this.W = 540;
         this.H = 960;
-        this.RIV_Y = 400;
+        this.RIV_Y = 405;
 
         this.seed = 12345; // Default seed
         this.nextEntityId = 1;
@@ -63,6 +63,7 @@ export default class GameEngine {
             new Card("Archers", 3, 304, 107, 0.5, 128, 0, 100, 54, 150, false, true),
             new Card("Giant", 5, 4091, 254, 0.375, 14, 1, 100, 90, 150, false, false),
             new Card("Fireball", 4, 0, 689, 0, 0, 2, 0, 0, 0, false, true),
+            new Card("Rocket", 6, 0, 1484, 0, 0, 2, 0, 0, 0, false, true),
             new Card("Mini PEKKA", 4, 1361, 720, 0.75, 8, 0, 100, 96, 150, false, false),
             new Card("Zap", 2, 0, 192, 0, 0, 2, 0, 0, 0, false, true),
             new Card("Skeletons", 1, 81, 81, 0.75, 8, 0, 100, 60, 150, false, false),
@@ -73,7 +74,7 @@ export default class GameEngine {
             new Card("Skeleton Army", 3, 81, 81, 0.75, 8, 0, 100, 60, 150, false, false),
             new Card("Barbarians", 5, 670, 192, 0.5, 8, 0, 100, 78, 150, false, false),
             new Card("Goblin Barrel", 3, 0, 0, 0, 0, 2, 0, 0, 0, false, false),
-            new Card("Royale Delivery", 3, 0, 198, 0, 0, 2, 0, 0, 0, false, false),
+            new Card("Royale Delivery", 3, 0, 250, 0, 0, 2, 0, 0, 0, false, false),
             new Card("Vines", 2, 0, 44, 0, 0, 2, 0, 0, 0, false, true),
             new Card("Freeze", 4, 0, 115, 0, 0, 2, 0, 0, 0, false, true),
             new Card("Fire Spirit", 1, 230, 207, 1, 38, 0, 100, 18, 150, false, true),
@@ -258,8 +259,6 @@ export default class GameEngine {
             this.unlockedCards.push(pool[i]);
         for (let i = 0; i < Math.min(8, this.unlockedCards.length); i++)
             this.myDeck.push(this.unlockedCards[i]);
-
-
     }
 
     unlockRandomCard() {
@@ -395,53 +394,32 @@ export default class GameEngine {
 
         this.enemyAI = new EnemyAI(this);
 
-        this.p2.pile = [];
         if (enemyDeck && enemyDeck.length > 0) {
-            // Use provided enemy deck
-            enemyDeck.forEach(n => {
-                let c = this.getCard(n);
-                if (c) this.p2.pile.push(c);
-            });
-            // Fallback if deck incomplete?
-            if (this.p2.pile.length < 8) {
-                // Fill with random?
-                let pool = [...this.allCards];
-                while (this.p2.pile.length < 8) {
-                    let c = pool[Math.floor(this.random() * pool.length)];
-                    if (!this.p2.pile.includes(c)) this.p2.pile.push(c);
-                }
+            // Explicit enemy deck (e.g. from the deck builder).
+            this.p2.pile = [];
+            enemyDeck.forEach(n => { let c = this.getCard(n); if (c) this.p2.pile.push(c); });
+            let pool = [...this.allCards];
+            while (this.p2.pile.length < 8) {
+                let c = pool[Math.floor(this.random() * pool.length)];
+                if (!this.p2.pile.includes(c)) this.p2.pile.push(c);
             }
-        } else {
-            // Enemy Deck: Random 8 cards from unlocked cards (or all cards if not enough)
-            let enemyPool = [...this.unlockedCards];
-            if (enemyPool.length < 8) enemyPool = [...this.allCards]; // Fallback
-
-            // Shuffle pool
-            for (let i = enemyPool.length - 1; i > 0; i--) {
+            for (let i = this.p2.pile.length - 1; i > 0; i--) {
                 const j = Math.floor(this.random() * (i + 1));
-                [enemyPool[i], enemyPool[j]] = [enemyPool[j], enemyPool[i]];
+                [this.p2.pile[i], this.p2.pile[j]] = [this.p2.pile[j], this.p2.pile[i]];
             }
-
-            // Pick top 8
-            for (let i = 0; i < 8; i++) this.p2.pile.push(enemyPool[i]);
+            this.p2.h = [];
+            for (let i = 0; i < 4; i++) this.p2.h.push(this.p2.pile.shift());
+        } else {
+            // Role-balanced premade deck (1 building, 2 spells, tank / dps / swarm /
+            // 2 flying / win-con). Sets p2.pile + p2.h and the AI cycles via playAI.
+            this.enemyAI.generateDeck();
         }
 
-        // Shuffle p2 pile (important for fair draw order even if deck is known)
-        for (let i = this.p2.pile.length - 1; i > 0; i--) {
-            const j = Math.floor(this.random() * (i + 1));
-            [this.p2.pile[i], this.p2.pile[j]] = [this.p2.pile[j], this.p2.pile[i]];
-        }
-
-        this.p2.h = [];
-        for (let i = 0; i < 4; i++) this.p2.h.push(this.p2.pile.shift());
-
-        // King towers also sit on a tile centre (y 735 / 75) so the whole grid
-        // lines up with every tower.
+        // All towers sit on 30px tile centres (y = 15 + 30k). Kings at 735/75 leave
+        // exactly one placeable tile behind them (player tile [780-810], enemy tile
+        // [0-30] reaching the top edge); princesses at 645/165; river tile [390-420].
         this.t1K = new Tower(0, this.W / 2, 735, true);
         this.ents.push(this.t1K);
-        // Princess towers sit dead-centre on a tile (x already 135/405 = tile
-        // centres; y snapped to 645 / 165) so a barrel thrown at the middle lands
-        // exactly on centre and pushes troops symmetrically to the sides.
         this.t1L = new Tower(0, this.W / 4, 645, false);
         this.ents.push(this.t1L);
         this.t1R = new Tower(0, this.W * 3 / 4, 645, false);
@@ -456,7 +434,7 @@ export default class GameEngine {
     }
 
     isValid(y, x, c, tm) {
-        if (c.n === "The Log" || c.n === "Barbarian Barrel") {
+        if (c.n === "The Log" || c.n === "Barbarian Barrel" || c.n === "Royale Delivery") {
             // Log/BarbBarrel must be placed on player's side (roughly) unless tower down
             // P1 (tm=0) plays on bottom (y > RIV_Y), P2 (tm=1) plays on top (y < RIV_Y)
 
@@ -476,6 +454,9 @@ export default class GameEngine {
         }
         if (c.t === 2 || c.n === "Goblin Barrel") return true;
 
+        // Placement spans exactly one tile behind each king tower (y 0..810).
+        if (y < 0 || y > 810) return false;
+
         // Can't place a troop or building on top of an existing building OR a tower
         // (and buildings can't go too close to another building).
         for (let e of this.ents) {
@@ -488,7 +469,7 @@ export default class GameEngine {
 
         if (tm === 0) {
             // Buildings can't go in/near the river; troops can be placed right up
-            // to the bridge bank.
+            // to the bridge bank (river tile is RIV_Y ± 15).
             if (c.t === 3 && y > this.RIV_Y - 25 && y < this.RIV_Y + 25) return false;
             if (y >= this.RIV_Y + 15) return true;
             if (this.t2L && this.t2L.hp <= 0 && x < this.W / 2 && y >= 200) return true;
@@ -633,7 +614,8 @@ export default class GameEngine {
         if (c.n === "Freeze") return { type: 'circle', val: 67 };
         if (c.n === "Vines") return { type: 'circle', val: 59 };
         if (c.n === "Zap") return { type: 'circle', val: 55 };
-        if (c.n === "Fireball" || c.n === "Giant Snowball") return { type: 'circle', val: 55 };
+        if (c.n === "Fireball") return { type: 'circle', val: 62 }; // slightly bigger
+        if (c.n === "Giant Snowball") return { type: 'circle', val: 55 };
         if (c.n === "Royale Delivery" || c.n === "Rocket") return { type: 'circle', val: 43 };
         if (c.n === "The Log") return { type: 'rect', w: 83, h: 16 };
         if (c.n === "Barbarian Barrel") return { type: 'rect', w: 46, h: 16 };
@@ -721,7 +703,7 @@ export default class GameEngine {
 
     spawn(x, y) {
         if (this.tiebreaker) return;
-        if (!this.sel || y > this.H - 120) return;
+        if (!this.sel || y > this.H - 150) return;
 
         // Local Player (Team 0)
         this.playCard(this.p1, this.sel, x, y, 0);
@@ -746,17 +728,15 @@ export default class GameEngine {
             // Thrown from the king tower, arcs up and back down (like Fireball but
             // slower) with a flying shadow, then pops 3 goblins on the target tile.
             let kt = (tm === 0) ? this.t1K : this.t2K;
-            let p = new Proj(kt.x, kt.y, x, y, null, 6, false, 30, 0, tm, false);
+            let p = new Proj(kt.x, kt.y, x, y, null, 2.4, false, 30, 0, tm, false); // 2.5x slower
             p.asSpellArc(150, "barrel");
             p.barrelGoblins = true;
             this.projs.push(p);
         } else if (c.n === "Royale Delivery") {
             let shape = this.getSpellRadius(c);
             let rad = shape && shape.type === 'circle' ? shape.val : 60;
-            this.projs.push(new Proj(x, y, x, y, null, 0, false, rad, c.d, tm, false).asBrownArea());
-            let recruit = this.getCard("Royal Recruits");
-            this.ents.push(new Troop(tm, x, y, recruit));
-            this.addDeploy(x, y, tm);
+            // Crate falls (growing shadow ~1.5s) then lands → recruit + impact.
+            this.projs.push(new Proj(x, y, x, y, null, 0, false, rad, c.d, tm, false).asDelivery());
         } else if (c.n === "Poison") {
             let shape = this.getSpellRadius(c); // Returns val: 100
             let rad = shape && shape.type === 'circle' ? shape.val : 100;
@@ -796,14 +776,16 @@ export default class GameEngine {
             }
             for (let t of toClone) {
                 let clone = new Troop(tm, t.x + 20, t.y, t.c);
-                clone.hp = 1;
+                // Clones spawn with 1 HP. Set _hp DIRECTLY: the hp setter routes
+                // damage through the shield, so `clone.hp = 1` on a shielded unit
+                // would just drain the shield and leave HP full (the health bug).
+                clone.shield = 0;
+                clone._hp = 1;
                 clone.mhp = 1;
                 clone.isClone = true;
                 clone.deployTime = 0;
-                if (t.c.n === "Royal Recruits") {
-                    clone.shield = 1;
-                    clone.maxShield = 1;
-                }
+                if (t.maxShield > 0) { clone.shield = 1; clone.maxShield = 1; } // shielded clones keep a 1-HP shield
+                else { clone.maxShield = 0; }
                 this.ents.push(clone);
             }
         } else if (c.t === 2) {
@@ -814,8 +796,8 @@ export default class GameEngine {
             // Thrown spells launch from the caster's king tower and arc to the
             // target; speed/arc height depend on the spell.
             const ARC = {
-                "Fireball": { spd: 9, arc: 130, kind: "fireball" },
-                "Rocket": { spd: 7, arc: 160, kind: "rocket" },
+                "Fireball": { spd: 4.5, arc: 130, kind: "fireball" }, // slower
+                "Rocket": { spd: 1.8, arc: 160, kind: "rocket" },     // 2.5x slower than Fireball
                 "Giant Snowball": { spd: 10, arc: 110, kind: "snowball" }
             };
             // Crown-tower damage multiplier (real CR: spells chip towers).
@@ -982,7 +964,7 @@ export default class GameEngine {
 
         for (let s of state.ents) {
             let cx = this.W - s.x;
-            let cy = 800 - s.y;
+            let cy = 2 * this.RIV_Y - s.y; // mirror across the river (RIV_Y=405 → 810-y)
             let ctm = 1 - s.tm;
 
             if (localById.has(s.id)) {
@@ -1001,7 +983,7 @@ export default class GameEngine {
                 let e = null;
                 if (s.type === 'Troop') e = new Troop(ctm, cx, cy, c);
                 else if (s.type === 'Building') e = new Building(ctm, cx, cy, c);
-                
+
                 if (e) {
                     e.id = s.id;
                     e.hp = s.hp;
@@ -1076,8 +1058,13 @@ export default class GameEngine {
 
         this.aiTick++;
 
+        let pk1 = this.t1K.actv, pk2 = this.t2K.actv;
         this.t1K.actv = (this.t1K.hp < this.t1K.mhp) || (this.t1L.hp <= 0) || (this.t1R.hp <= 0);
         this.t2K.actv = (this.t2K.hp < this.t2K.mhp) || (this.t2L.hp <= 0) || (this.t2R.hp <= 0);
+        // On the activation flip, play the "shooter rises from its box" animation (45
+        // ticks); otherwise tick it down while it runs.
+        if (this.t1K.actv && !pk1) this.t1K.activateAnim = 45; else if (this.t1K.activateAnim > 0) this.t1K.activateAnim--;
+        if (this.t2K.actv && !pk2) this.t2K.activateAnim = 45; else if (this.t2K.activateAnim > 0) this.t2K.activateAnim--;
 
         if (this.enemyAI && !this.isMultiplayer) this.enemyAI.update();
 
@@ -1089,9 +1076,6 @@ export default class GameEngine {
                 let b = this.ents[j];
                 if (a.fly !== b.fly) continue;
 
-                // Towers AND buildings use a CIRCULAR hitbox (no squares). Friendly
-                // troops see a much smaller circle (so they slip past their own
-                // structures); enemies see one slightly larger than the building.
                 let aIsStruct = a instanceof Tower || a instanceof Building;
                 let bIsStruct = b instanceof Tower || b instanceof Building;
 
@@ -1099,24 +1083,31 @@ export default class GameEngine {
                     if (aIsStruct && bIsStruct) continue; // structures never push each other
                     let t = aIsStruct ? a : b;   // the structure
                     let u = aIsStruct ? b : a;   // the unit
+                    let uHb = this.getHitboxRadius(u);
 
-                    // Enemy units stop right on the tower's square (0.82 ≈ the drawn
-                    // square, so they travel ONTO it). Friendly units use only a
-                    // slightly-bigger-than-the-troop circle so they pass close by.
-                    let sR = (u.tm === t.tm) ? t.rad * 0.5 : t.rad * 0.82;
-                    let req = sR + this.getHitboxRadius(u);
-                    let dx = u.x - t.x, dy = u.y - t.y;
-                    let dist = Math.hypot(dx, dy);
-
-                    if (dist < req) {
-                        if (dist === 0) {
-                            let an = this.random() * Math.PI * 2;
-                            dx = Math.cos(an); dy = Math.sin(an); dist = 1; // unit vector
+                    if (u.tm !== t.tm) {
+                        // ENEMY units collide with the tower's VISUAL SQUARE (half-width
+                        // rad*0.88) — a box, so they stop exactly at the drawn edge,
+                        // corners included. Pushed out of the nearer face, capped so
+                        // they slide rather than teleport.
+                        let half = t.rad * 0.88 + uHb;
+                        let dx = u.x - t.x, dy = u.y - t.y;
+                        if (Math.abs(dx) < half && Math.abs(dy) < half) {
+                            let penX = half - Math.abs(dx), penY = half - Math.abs(dy);
+                            if (penX <= penY) u.x += (dx < 0 ? -1 : 1) * Math.min(penX, 3.5);
+                            else u.y += (dy < 0 ? -1 : 1) * Math.min(penY, 3.5);
                         }
-                        // Cap the push per tick so units slide off, never teleport.
-                        let push = Math.min(req - dist, 3.5);
-                        u.x += (dx / dist) * push;
-                        u.y += (dy / dist) * push;
+                    } else {
+                        // FRIENDLY units use a small circle so they slip past their own
+                        // structures (the capped push lets them squeeze through).
+                        let req = t.rad * 0.8 + uHb;
+                        let dx = u.x - t.x, dy = u.y - t.y, dist = Math.hypot(dx, dy);
+                        if (dist < req) {
+                            if (dist === 0) { let an = this.random() * Math.PI * 2; dx = Math.cos(an); dy = Math.sin(an); dist = 1; }
+                            let push = Math.min(req - dist, 3.5);
+                            u.x += (dx / dist) * push;
+                            u.y += (dy / dist) * push;
+                        }
                     }
                     continue;
                 }
@@ -1161,7 +1152,7 @@ export default class GameEngine {
             if (!(e instanceof Tower) && !(e instanceof Building)) {
                 let visualR = e.rad;
                 e.x = Math.max(visualR, Math.min(this.W - visualR, e.x));
-                e.y = Math.max(visualR, Math.min(this.H - 165 - visualR, e.y));
+                e.y = Math.max(visualR, Math.min(810 - visualR, e.y));
                 if (e.y + visualR > this.RIV_Y - 15 && e.y - visualR < this.RIV_Y + 15 && !e.fly) {
                     let onBridge = (e.x >= this.W / 4 - 30 && e.x <= this.W / 4 + 30) || (e.x >= this.W * 3 / 4 - 30 && e.x <= this.W * 3 / 4 + 30);
                     if (!onBridge) {

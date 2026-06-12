@@ -9,7 +9,7 @@ import GameEngine from '../core/GameEngine.js'; // Be careful with circular depe
 
 const W = 540;
 const H = 960;
-const RIV_Y = 400;
+const RIV_Y = 405;
 
 export default class Troop extends Entity {
     constructor(t, x, y, c) {
@@ -48,7 +48,9 @@ export default class Troop extends Entity {
         this.isClone = false;
         this.path = [];
 
-        this.sightRange = 150.0;
+        // Aggro radius: at least 150, but never less than the troop's own reach so
+        // ranged units (Witch, Musketeer…) notice enemies inside their attack range.
+        this.sightRange = Math.max(150.0, (c.rn || 0) + 35);
         this.currentTarget = null;
         this.moveTarget = null;
         this.currentWaypoint = null;
@@ -127,17 +129,23 @@ export default class Troop extends Entity {
         if (this.fr > 0) {
             this.infernoTick = 0;
             this.chargeT = 0;
+            this.atk = false; // a freeze breaks the lock (it can re-target after)
             return;
         }
         if (this.st-- > 0) {
             this.infernoTick = 0;
             this.chargeT = 0;
+            this.atk = false; // a stun breaks the lock
             return;
         }
 
         if (this.kbTime > 0) {
-            this.x += this.kbX;
-            this.y += this.kbY;
+            // Knockback eases out: full speed at the start, slowing to a stop as the
+            // timer runs down. (kbMax captures the peak duration on the first tick.)
+            if (!this.kbMax || this.kbMax < this.kbTime) this.kbMax = this.kbTime;
+            let f = this.kbTime / this.kbMax;
+            this.x += this.kbX * f;
+            this.y += this.kbY * f;
             this.kbTime--;
         }
 
@@ -156,19 +164,9 @@ export default class Troop extends Entity {
             return;
         }
 
-        // Electro Giant Aura
-        if (this.c.n === "Electro Giant") {
-            // User requested 5x slower aura cooldown. Base was 30, so 30 * 5 = 150.
-            if (g.aiTick % 150 === 0) {
-                for (let e of g.ents) {
-                    // User requested 2x larger aura (reverting from 4x).
-                    if (e.tm !== this.tm && this.dist(e) < (this.rad + 10 + e.rad) * 2.0) {
-                        e.hp -= 50;
-                        e.st = 10;
-                    }
-                }
-            }
-        }
+        // Electro Giant: shocks on every attack (see the attack branch). When it is
+        // NOT attacking, it still pulses a shock every 3 seconds.
+        if (this.c.n === "Electro Giant" && !this.atk && g.aiTick % 180 === 0) this.electroShock(g);
 
         // Witch Spawn — 4 skeletons that act immediately (no deploy cooldown).
         if (this.c.n === "Witch") {
@@ -304,6 +302,7 @@ export default class Troop extends Entity {
         } else if (this.lk && this.lk.hp > 0 &&
             this.dist(this.lk) <= this.attackReach(g, myHitbox, targetHitbox)) {
             this.atk = true;
+            if (this.c.n === "Inferno Dragon") this.infernoTick++; // ramp EVERY tick while locked on
             if (this.rt > 0 && !this.fly) return;
 
             let isChargedSpecial = ["Zappies", "Sparky"].includes(this.c.n) && this.chargeT >= (this.c.n === "Zappies" ? 72 : 180);
@@ -335,8 +334,7 @@ export default class Troop extends Entity {
                     this.kbY = Math.sin(angle) * speed;
                 }
             } else if (this.c.n === "Inferno Dragon") {
-                this.infernoTick++;
-                let stage = Math.floor(this.infernoTick / 25);
+                let stage = Math.floor(this.infernoTick / 58); // buffed: ramps faster so it can solo a tower
                 let mult = this.getInfernoMultiplier(stage);
                 this.lk.hp -= this.c.d * mult;
             } else if (this.c.n === "Royal Giant") {
@@ -351,6 +349,12 @@ export default class Troop extends Entity {
                 g.projs.push(new Proj(this.x, this.y, tx, ty, null, 2.33, false, 18, this.c.d, this.tm, false).asRolling());
             } else if (this.c.n === "Mother Witch") {
                 g.projs.push(new Proj(this.x, this.y, this.lk.x, this.lk.y, this.lk, 12, false, 4, this.c.d, this.tm, false).asCurse());
+            } else if (["Minions", "Mega Minion", "Minion Horde"].includes(this.c.n)) {
+                // Minions lob a short-range projectile (a dark dart) rather than melee.
+                g.projs.push(new Proj(this.x, this.y, this.lk.x, this.lk.y, this.lk, 9, false, 4, this.c.d, this.tm, false));
+            } else if (this.c.n === "Electro Giant") {
+                this.lk.hp -= this.c.d;   // melee hit
+                this.electroShock(g);     // + electric shock to everything in the aura
             } else if (this.c.rn > 30) {
                 let p = new Proj(this.x, this.y, this.lk.x, this.lk.y, this.lk, 8, false, 4, this.c.d, this.tm, false);
                 if (["Wizard", "Witch", "Baby Dragon"].includes(this.c.n)) {
@@ -401,7 +405,7 @@ export default class Troop extends Entity {
                 let laneX = (this.x < W / 2) ? W / 4 : W * 3 / 4;
                 let pY = (this.tm === 0) ? 645 : 165;                 // own princess-tower y
                 let side = (this.x >= laneX) ? 1 : -1;                // approach side
-                let touchOff = 25 + g.getHitboxRadius(this);          // touch the princess edge
+                let touchOff = 32 + g.getHitboxRadius(this);          // touch the (larger) princess edge
                 let bx = Math.max(laneX - 22, Math.min(laneX + 22, this.x)); // CLOSEST point on the bridge
                 let past = (this.tm === 0) ? (this.y <= pY - 8) : (this.y >= pY + 8);
                 if (!past) {
@@ -412,10 +416,15 @@ export default class Troop extends Entity {
                 } else {
                     tx = bx; ty = (this.tm === 0) ? RIV_Y - 45 : RIV_Y + 45; // cross
                 }
+            } else {
+                // Same side as the target: attack a tower/building from its FRONT (the
+                // face toward our home) so troops gather UNDER it, not off to the side.
+                let cn = this.currentTarget.constructor.name;
+                if (cn === "Tower" || cn === "Building") {
+                    tx = this.currentTarget.x;
+                    ty = this.currentTarget.y + ((this.tm === 0) ? 1 : -1) * this.currentTarget.rad * 0.7;
+                }
             }
-            // Otherwise tx,ty stay on the target's centre — for a tower/building the
-            // reduced enemy hitbox lets the troop travel right ONTO the square and the
-            // collision settles it at the nearest edge (the front).
             this.path = [{ x: tx, y: ty }]; // debug path shows only the next step
 
             this.moveTarget = { x: tx, y: ty };
@@ -608,6 +617,9 @@ export default class Troop extends Entity {
             if (e === this) continue;
             if (e.constructor.name === "Tower" || e.constructor.name === "Building") {
                 if (e.tm !== this.tm) continue;
+                // An obstacle sitting AT the target (e.g. an enemy attacking our own
+                // tower) isn't really blocking — we CAN reach a unit next to our tower.
+                if (Math.hypot(e.x - x2, e.y - y2) < e.rad + 25) continue;
                 let hR = e.rad;
                 let myR = g.getHitboxRadius(this);
                 let safeDist = hR + myR + 5;
@@ -642,6 +654,24 @@ export default class Troop extends Entity {
         return obstacle;
     }
 
+    // Electro Giant: shock every enemy in the aura (damage + brief stun) and spawn a
+    // short-lived beam flash from the giant to each.
+    electroShock(g) {
+        let auraR = (this.rad + 12) * 2.0, shocked = [];
+        for (let e of g.ents) {
+            if (e.tm !== this.tm && e.hp > 0 && e.constructor.name !== "Tower" && this.dist(e) < auraR + g.getHitboxRadius(e)) {
+                e.hp -= 60; e.st = Math.max(e.st, 30); shocked.push(e); // ~0.5s stun
+            }
+        }
+        if (shocked.length) {
+            let beam = new Proj(this.x, this.y, this.x, this.y, null, 0, false, 0, 0, this.tm, false);
+            beam.shockSrc = { x: this.x, y: this.y, fly: this.fly };
+            beam.shockBeams = shocked.map(e => ({ x: e.x, y: e.y, fly: e.fly }));
+            beam.life = 6; // appears and vanishes quickly
+            g.projs.push(beam);
+        }
+    }
+
     // Distance at which this troop can attack its current target. Melee units (short
     // range) must travel right ONTO a tower/building's square before they attack;
     // ranged units keep their full reach.
@@ -649,7 +679,7 @@ export default class Troop extends Entity {
         const lk = this.lk;
         const cn = lk.constructor.name;
         if ((cn === "Tower" || cn === "Building") && this.c.rn <= 30) {
-            return myHitbox + lk.rad * 0.82 + 2; // touch the square
+            return myHitbox + lk.rad * 0.88 + 1; // attack only when right on the square — small area
         }
         let archer = (this.c.n.includes("Archer") && lk.fly) ? 60 : 0;
         return this.c.rn + myHitbox + targetHitbox + 2 + archer;
@@ -659,11 +689,12 @@ export default class Troop extends Entity {
         const towers = [g.t1L, g.t1R, g.t1K, g.t2L, g.t2R, g.t2K];
         const isTower = e => towers.includes(e);
 
-        // Lock on: once attacking a living UNIT/BUILDING, stay on it. (A troop
-        // attacking a crown tower can still be pulled off by a closer unit/building.)
+        // Lock on: once ATTACKING a living target (tower, unit, or building) the troop
+        // stays committed and never peels off. The lock only breaks when it's no
+        // longer attacking — i.e. stunned/frozen, pushed out of range, or the target
+        // dies (all of which clear atk or fail the hp check below).
         if (this.atk && this.currentTarget && this.currentTarget.hp > 0 &&
-            this.currentTarget.tm !== this.tm && this.currentTarget.rad !== 0 &&
-            !isTower(this.currentTarget)) {
+            this.currentTarget.tm !== this.tm && this.currentTarget.rad !== 0) {
             return;
         }
 
@@ -690,13 +721,18 @@ export default class Troop extends Entity {
         const curOK = cur && cur.hp > 0 && cur.rad !== 0 && cur.tm !== this.tm &&
             !isTower(cur) && !(cur.fly && !this.air) && this.dist(cur) <= this.sightRange;
 
+        // Compare against the tower's EDGE, not its (far) centre — towers are large,
+        // so a troop right next to one should attack it, not get pulled to a unit
+        // that's closer to the tower's middle.
+        const towerReach = primary ? Math.max(0, this.dist(primary) - primary.rad) : Infinity;
+
         let target;
         if (curOK) {
             target = (distraction && distraction !== cur && this.dist(distraction) < this.dist(cur) * 0.6) ? distraction : cur;
-        } else if (distraction && this.dist(distraction) < this.dist(primary) &&
+        } else if (distraction && this.dist(distraction) < towerReach &&
             !this.checkPathBlocked(g, this.x, this.y, distraction.x, distraction.y)) {
-            // Only chase a unit/building if it's actually CLOSER than the lane tower —
-            // otherwise attack the tower (don't redirect to a farther troop).
+            // When choosing (not yet attacking): a unit closer than the lane-tower edge
+            // is preferred; otherwise head for the tower.
             target = distraction;
         } else {
             target = primary;

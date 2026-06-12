@@ -35,7 +35,7 @@ const ctx = canvas.getContext('2d');
 
 const W = 540;
 const H = 960;
-const RIV_Y = 400;
+const RIV_Y = 405;
 
 const State = {
     TITLE: 'TITLE',
@@ -92,7 +92,7 @@ class Main {
         this.enteredCode = "";
 
         this.cardRects = [];
-        this.nextCardRect = { x: W - 60, y: H - 135, w: 60, h: 125 };
+        this.nextCardRect = { x: W - 80, y: H - 110, w: 68, h: 90 }; // recomputed with the card row below
         this.cardOffsets = [0, 0, 0, 0]; // For hover animation
 
         this.init();
@@ -128,12 +128,16 @@ class Main {
             })
             .catch(() => { });
 
-        let cardPanelY = H - 135;            // moved up — bigger card area, less dead space
-        let cardAreaW = W - 60;
-        let cardW = (cardAreaW - 30) / 4;
+        // Portrait card rectangles with generous spacing; the "next" preview is a
+        // smaller card in the 5th slot. Cards sit low enough that a SELECTED card
+        // poking up a little never reaches the play area's bottom row (810).
+        let cardW = 110, cardH = 122, prevW = 72, prevH = 100;
+        let gap = (W - 4 * cardW - prevW) / 6; // ≈ 4px — cards sit tight together
+        let cardPanelY = H - 126;
         for (let i = 0; i < 4; i++) {
-            this.cardRects.push({ x: 6 + i * (cardW + 6), y: cardPanelY, w: cardW, h: 125 });
+            this.cardRects.push({ x: gap + i * (cardW + gap), y: cardPanelY, w: cardW, h: cardH });
         }
+        this.nextCardRect = { x: gap + 4 * (cardW + gap), y: cardPanelY + (cardH - prevH) / 2, w: prevW, h: prevH };
 
         canvas.width = W;
         canvas.height = H;
@@ -395,7 +399,7 @@ class Main {
                 }
             }
         } else if (this.state === State.PLAY) {
-            if (y > H - 165) {
+            if (y > H - 150) {
                 if (this.eng.p1) {
                     for (let i = 0; i < 4; i++) {
                         if (i < this.eng.p1.h.length) {
@@ -814,9 +818,9 @@ class Main {
             return;
         }
 
-        // River — solid water, no lines/ripples.
+        // River — solid water, exactly one tile tall.
         ctx.fillStyle = "#3a8fd0";
-        ctx.fillRect(0, RIV_Y - 16, W, 32);
+        ctx.fillRect(0, RIV_Y - 15, W, 30);
         // Bridges — solid wood, no plank lines.
         ctx.fillStyle = "#9c6b3a";
         for (const bx of [W / 4, W * 3 / 4]) {
@@ -843,7 +847,7 @@ class Main {
             // (shadows/effects -> ground units -> projectiles -> flying units).
 
             // HOVER PREVIEW (Ghost Unit & Range)
-            if ((this.state === State.PLAY || this.state === State.CNT) && this.eng.sel && this.mouse.y < H - 165) {
+            if ((this.state === State.PLAY || this.state === State.CNT) && this.eng.sel && this.mouse.y < H - 150) {
                 let c = this.eng.sel;
                 let spellShape = this.eng.getSpellRadius(c);
                 let canAfford = this.eng.p1.elx >= c.c;
@@ -855,8 +859,8 @@ class Main {
                     // Animated Dashed Border Style
                     let time = Date.now() / 50; // Speed of animation
 
-                    // Rolling spells (Log / Barb Barrel) turn RED where they can't be placed.
-                    let rollValid = !["The Log", "Barbarian Barrel"].includes(c.n) || this.eng.isValid(gm.y, gm.x, c, 0);
+                    // Placement-restricted spells turn RED where they can't be placed.
+                    let rollValid = !["The Log", "Barbarian Barrel", "Royale Delivery"].includes(c.n) || this.eng.isValid(gm.y, gm.x, c, 0);
                     let ghostFill = !rollValid ? "rgba(255,70,70,0.3)" : (canAfford ? "rgba(255, 255, 255, 0.2)" : "rgba(100, 100, 100, 0.2)");
                     ctx.fillStyle = ghostFill;
                     ctx.strokeStyle = rollValid ? "white" : "#ff5a5a";
@@ -911,7 +915,7 @@ class Main {
                     let snap = this.snapToGrid(this.mouse.x, this.mouse.y);
                     let gx = snap.x, gy = snap.y;
                     let range = c.rn || 0;
-                    let valid = canAfford && this.eng.isValid(gy, gx, c, 0) && this.mouse.y < H - 165;
+                    let valid = canAfford && this.eng.isValid(gy, gx, c, 0) && this.mouse.y < H - 150;
                     let col = valid ? this.getUnitColor(c.n) : "#8a8a8a";
                     let outline = valid ? "#ffffff" : "#ff6a6a";
 
@@ -938,9 +942,36 @@ class Main {
                 ctx.globalAlpha = 1.0;
             }
 
-            // Projectiles
-            for (let p of this.eng.projs) {
-                if (p.isArrows || p.isSpellArc || p.isRolling || p.isSpellDrop || p.isVines) continue; // drawn in drawProj (top layer); Vines is invisible
+            // Per-projectile ground renderer (bullets, area effects, cannonball, the
+            // delivery crate, boulders…). Arcs / arrows / drops / logs are handled by
+            // drawProj instead, so return for those.
+            const drawGroundProj = (p) => {
+                if (p.isArrows || p.isSpellArc || p.isLog || p.isSpellDrop || p.isVines) return;
+                if (p.shockBeams) {
+                    // Electro Giant: near-straight electric beams that FLICKER (each
+                    // blinks on/off rapidly).
+                    let sx = p.shockSrc.x, sy = p.shockSrc.y - (p.shockSrc.fly ? 22 : 0);
+                    ctx.lineCap = "round";
+                    let phase = Math.floor(Date.now() / 35);
+                    for (let i = 0; i < p.shockBeams.length; i++) {
+                        if ((phase + i) % 2 !== 0) continue; // flicker (offset per beam)
+                        let tgt = p.shockBeams[i];
+                        let tx = tgt.x, ty = tgt.y - (tgt.fly ? 22 : 0);
+                        let dx = tx - sx, dy = ty - sy, len = Math.hypot(dx, dy) || 1;
+                        let nx = -dy / len, ny = dx / len;
+                        const pts = [];
+                        for (let s = 0; s <= 3; s++) {
+                            let f = s / 3;
+                            let jit = (s === 0 || s === 3) ? 0 : (s % 2 === 0 ? 1.5 : -1.5); // barely jagged
+                            pts.push([sx + dx * f + nx * jit, sy + dy * f + ny * jit]);
+                        }
+                        ctx.strokeStyle = "#5fa8ff"; ctx.lineWidth = 2.5;
+                        ctx.beginPath(); pts.forEach((q, k) => k ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
+                        ctx.fillStyle = "#dceeff"; ctx.beginPath(); ctx.arc(tx, ty, 2.5, 0, Math.PI * 2); ctx.fill();
+                    }
+                    ctx.lineCap = "butt"; ctx.lineWidth = 1;
+                    return;
+                }
                 if (p.barrel) {
                     ctx.fillStyle = "#643200";
                 } else if (p.fireArea) {
@@ -966,13 +997,44 @@ class Main {
                     ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.fill();
                     ctx.fillStyle = "#5a5a5a";
                     ctx.beginPath(); ctx.arc(p.x - 2, p.y - 2, 2.5, 0, Math.PI * 2); ctx.fill();
-                    continue;
+                    return;
+                } else if (p.isDelivery) {
+                    // Falling wooden crate: a shadow that grows over ~1.5s while the
+                    // big crate descends into it.
+                    let frac = 1 - (p.life - 5) / ((p.deliveryMax || 95) - 5);
+                    frac = Math.max(0, Math.min(1, frac));
+                    ctx.fillStyle = "rgba(0,0,0,0.3)";
+                    ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(4, p.rad * 0.75 * frac), 0, Math.PI * 2); ctx.fill();
+                    // A reinforced cardboard box showing only TWO faces: a gray metal
+                    // TOP (a trapezoid receding back) and a cardboard FRONT with gray
+                    // metal edging. No side face.
+                    let cw = 42, hw = cw / 2, ch = 42, hy = ch / 2, dep = 9, fy = -hy + dep, inset = 6;
+                    let ccy = p.y - (1 - frac) * 150;
+                    ctx.save(); ctx.translate(p.x, ccy);
+                    // gray metal TOP face (trapezoid receding straight back)
+                    ctx.fillStyle = "#b6bbc0";
+                    ctx.beginPath();
+                    ctx.moveTo(-hw, fy); ctx.lineTo(-hw + inset, -hy); ctx.lineTo(hw - inset, -hy); ctx.lineTo(hw, fy);
+                    ctx.closePath(); ctx.fill();
+                    // cardboard FRONT face
+                    ctx.fillStyle = "#c79a5e"; ctx.fillRect(-hw, fy, cw, ch - dep);
+                    // simple gray metal reinforcement on all four front edges
+                    let m = 5;
+                    ctx.fillStyle = "#9aa0a6";
+                    ctx.fillRect(-hw, fy, cw, m); ctx.fillRect(-hw, hy - m, cw, m);
+                    ctx.fillRect(-hw, fy, m, ch - dep); ctx.fillRect(hw - m, fy, m, ch - dep);
+                    // one light highlight so the metal reads as slightly raised
+                    ctx.fillStyle = "#c6cace"; ctx.fillRect(-hw, fy, cw, 1.5); ctx.fillRect(-hw, fy, 1.5, ch - dep);
+                    ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = 1.5; ctx.strokeRect(-hw, fy, cw, ch - dep);
+                    ctx.lineWidth = 1;
+                    ctx.restore();
+                    return;
                 } else if (p.isHeal) {
                     ctx.fillStyle = "rgba(0, 255, 0, 0.6)";
                 } else if (p.redArea) {
                     ctx.fillStyle = "rgba(255, 0, 0, 0.6)";
                 } else if (p.brownArea) {
-                    ctx.fillStyle = "rgba(139, 69, 19, 0.6)";
+                    ctx.fillStyle = "#8b4513"; // solid impact colour
                 } else if (p.poison) {
                     ctx.fillStyle = "rgba(0, 128, 0, 0.4)";
                     ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.fill();
@@ -999,7 +1061,7 @@ class Main {
                         ctx.fillRect(p.x - w / 2, p.y - h / 2, w, h);
                         // ctx.strokeStyle = "black";
                         // ctx.strokeRect(p.x - w / 2, p.y - h / 2, w, h);
-                        continue; // Skip default circle rendering
+                        return; // Skip default circle rendering
                     }
                     ctx.fillStyle = "#640096";
                 } else {
@@ -1013,30 +1075,42 @@ class Main {
                 }
 
                 if (p.chainTargets) {
-                    // Blue electric bolt between chained targets: mostly a straight
-                    // line with a small, static jagged edge (no wiggle).
+                    // A mostly-STRAIGHT blue electric current with only a few small jags
+                    // and little sparkles travelling along it — a single flat colour, no
+                    // glow / white highlight.
                     ctx.lineCap = "round";
                     for (let i = 0; i < p.chainTargets.length - 1; i++) {
                         let a = p.chainTargets[i], b = p.chainTargets[i + 1];
                         if (!a || !b) continue;
-                        let dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+                        // Connect to each unit's VISUAL body (flying units float 22px
+                        // above their shadow), not the ground point.
+                        let ax = a.x, ay = a.y - (a.fly ? 22 : 0);
+                        let bx = b.x, by = b.y - (b.fly ? 22 : 0);
+                        let dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
                         let nx = -dy / len, ny = dx / len;
-                        const segs = 4;
+                        const segs = 5;
                         const pts = [];
                         for (let s = 0; s <= segs; s++) {
                             let f = s / segs;
-                            // small fixed zig-zag (alternating), zero at the endpoints
-                            let jit = (s === 0 || s === segs) ? 0 : (s % 2 === 0 ? 2.5 : -2.5);
-                            pts.push([a.x + dx * f + nx * jit, a.y + dy * f + ny * jit]);
+                            let jit = (s === 0 || s === segs) ? 0 : (s % 2 === 0 ? 2 : -2); // very slight jag
+                            pts.push([ax + dx * f + nx * jit, ay + dy * f + ny * jit]);
                         }
                         ctx.strokeStyle = "#4f9bff"; ctx.lineWidth = 3;
                         ctx.beginPath(); pts.forEach((q, k) => k ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
-                        ctx.strokeStyle = "#e6f3ff"; ctx.lineWidth = 1;
-                        ctx.beginPath(); pts.forEach((q, k) => k ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
+                        // twinkling sparkles along the current
+                        ctx.fillStyle = "#bfe3ff";
+                        for (let s = 1; s < segs; s++) {
+                            if ((Math.floor(Date.now() / 60) + s) % 2 === 0) {
+                                ctx.beginPath(); ctx.arc(pts[s][0], pts[s][1], 1.3 + (s % 3) * 0.5, 0, Math.PI * 2); ctx.fill();
+                            }
+                        }
                     }
                     ctx.lineCap = "butt"; ctx.lineWidth = 1;
                 }
-            }
+            };
+            // Non-spell ground projectiles (bullets, cannonball, boulders, area
+            // effects) render BELOW the ground troops.
+            for (let p of this.eng.projs) if (!this.isSpellProj(p)) drawGroundProj(p);
 
             // Entities (Shadows/Effects first)
             for (let e of this.eng.ents) {
@@ -1052,27 +1126,6 @@ class Main {
                         ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI * 2); ctx.stroke();
                         ctx.lineWidth = 1;
                     }
-                }
-
-                // Inferno Beams
-                let isInferno = false;
-                let target = null;
-                let ticks = e.infernoTick;
-
-                if (e instanceof Troop && e.c.n === "Inferno Dragon" && e.atk) {
-                    isInferno = true; target = e.lk;
-                } else if (e instanceof Building && e.c.n === "Inferno Tower" && e.atk) {
-                    isInferno = true; target = e.lk;
-                }
-
-                if (isInferno && target) {
-                    let width = 2 + (ticks / 20.0);
-                    if (width > 8) width = 8;
-                    ctx.lineWidth = width;
-                    let green = Math.max(0, 165 - ticks);
-                    ctx.strokeStyle = `rgb(255, ${green}, 0)`;
-                    ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(target.x, target.y); ctx.stroke();
-                    ctx.lineWidth = 1;
                 }
 
                 // Soft ground shadow under units. Ground units cast it at their
@@ -1116,16 +1169,45 @@ class Main {
             // units above them, then deploy clocks, and finally spells on the very
             // top. (Anything airborne — a jumping unit, the goblin barrel — already
             // has fly set, so it renders in the flying layer.)
-            for (let e of this.eng.ents) if (!e.fly) this.drawEntityBody(e);
+            // Inferno beams render BELOW the units.
+            for (let e of this.eng.ents) {
+                let isInf = e.atk && e.lk && e.lk.hp > 0 &&
+                    ((e instanceof Troop && e.c.n === "Inferno Dragon") || (e instanceof Building && e.c.n === "Inferno Tower"));
+                if (!isInf) continue;
+                let stage = Math.min(5, Math.floor((e.infernoTick || 0) / 90)); // steps up only every ~1.5s
+                let t = stage / 5;
+                let rt = e.c.rt || 24;
+                let pulse = 0.6 + 0.4 * ((e.cd || 0) / rt); // flares on each damage burst, dims during the delay
+                let sy = e.y - (e.fly ? 22 : 0), ty = e.lk.y - (e.lk.fly ? 22 : 0);
+                ctx.lineCap = "round";
+                ctx.lineWidth = (3 + t * 9) * pulse;
+                ctx.strokeStyle = `rgb(255, ${Math.round(200 - t * 200)}, ${Math.round(40 - t * 40)})`;
+                ctx.beginPath(); ctx.moveTo(e.x, sy); ctx.lineTo(e.lk.x, ty); ctx.stroke();
+                ctx.lineWidth = (1.5 + t * 3) * pulse;
+                ctx.strokeStyle = `rgb(255, 255, ${Math.round(200 - t * 120)})`;
+                ctx.beginPath(); ctx.moveTo(e.x, sy); ctx.lineTo(e.lk.x, ty); ctx.stroke();
+                ctx.lineCap = "butt"; ctx.lineWidth = 1;
+            }
+
+            // Ground troops + buildings (NOT towers).
+            for (let e of this.eng.ents) if (!e.fly && !(e instanceof Tower)) this.drawEntityBody(e);
+
+            // Only the rolling Log / Barbarian Barrel render here — above ground troops
+            // but BELOW the towers.
+            for (let p of this.eng.projs) if (p.isLog) this.drawProj(p);
+
+            // Towers above the rolling logs.
+            for (let e of this.eng.ents) if (!e.fly && (e instanceof Tower)) this.drawEntityBody(e);
+
+            // Flying troops.
             for (let e of this.eng.ents) if (e.fly) this.drawEntityBody(e);
 
             // Deploy-time clocks (one per card, above the units)
             this.drawDeploys();
 
-            // Spells (arcs, arrow volleys, sky strikes, barrels) on the top layer.
-            if (this.eng.projs) {
-                for (let p of this.eng.projs) this.drawProj(p);
-            }
+            // Every OTHER spell (arcs, Goblin Barrel, arrows, Zap / Freeze drops, the
+            // delivery crate, area spells) renders ABOVE EVERYTHING.
+            for (let p of this.eng.projs) if (this.isSpellProj(p) && !p.isLog) { drawGroundProj(p); this.drawProj(p); }
 
             // Status Effects
             for (let e of this.eng.ents) {
@@ -1141,26 +1223,33 @@ class Main {
             }
 
             if (this.eng.debugView) {
-                ctx.strokeStyle = "rgba(255, 255, 0, 0.2)";
                 for (let e of this.eng.ents) {
                     if (e instanceof Troop) {
-                        let r = e.sightRange;
-                        ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI * 2); ctx.stroke();
+                        ctx.strokeStyle = "rgba(255, 255, 0, 0.2)";
+                        ctx.beginPath(); ctx.arc(e.x, e.y, e.sightRange, 0, Math.PI * 2); ctx.stroke();
                         ctx.strokeStyle = "rgba(255, 165, 0, 0.6)";
                         let ar = e.c.rn;
                         if (ar > 0) { ctx.beginPath(); ctx.arc(e.x, e.y, ar, 0, Math.PI * 2); ctx.stroke(); }
+                    } else if (e instanceof Tower || e instanceof Building) {
+                        // attack reach: range param + the structure's own hitbox.
+                        let rng = (e instanceof Tower) ? e.range : (e.c ? e.c.rn : 0);
+                        if (rng > 0) {
+                            ctx.strokeStyle = "rgba(255, 165, 0, 0.6)";
+                            ctx.beginPath(); ctx.arc(e.x, e.y, rng + this.eng.getHitboxRadius(e), 0, Math.PI * 2); ctx.stroke();
+                        }
                     }
                 }
             }
 
             // Gameplay UI
             if (this.state === State.PLAY || this.state === State.CNT) {
-                // HUD backdrop panel behind the elixir bar + card tray
+                // HUD backdrop panel — starts exactly at the play-field bottom (810,
+                // tile 27) so the bottom area lines up with the 18×32 grid.
                 ctx.fillStyle = "rgba(18,26,22,0.82)";
-                this.drawRoundRect(-12, H - 138, W + 24, 150, 16, true, false);
+                this.drawRoundRect(-12, H - 150, W + 24, 162, 16, true, false);
 
-                // Elixir bar (rounded, solid, pip ticks)
-                const ebX = 10, ebY = H - 160, ebW = W - 20, ebH = 22;
+                // Elixir bar — full width, one screen edge to the other.
+                const ebX = 0, ebY = H - 146, ebW = W, ebH = 16;
                 ctx.fillStyle = "#2a1430";
                 this.drawRoundRect(ebX, ebY, ebW, ebH, 11, true, false);
                 let elxPct = Math.max(0, Math.min(1, this.eng.p1.elx / 10.0));
@@ -1194,10 +1283,9 @@ class Main {
                         let isSel = this.eng.sel === c;
                         let canAfford = this.eng.p1.elx >= c.c;
 
-                        // DISABLED POP UP ON SELECTION
-                        // let paintY = r.y - (isSel ? 30 : 0) - hoverOff;
-                        // Only hover effect, no selection offset
-                        let paintY = r.y - hoverOff;
+                        // Only a SELECTED card pokes up, and only a little (hovering
+                        // does nothing).
+                        let paintY = r.y - (isSel ? 12 : 0);
 
                         // White card, no black outline; greyed when unaffordable.
                         ctx.fillStyle = canAfford ? "#ffffff" : "#b9bdb7";
@@ -1218,8 +1306,14 @@ class Main {
                     let nr = this.nextCardRect;
                     ctx.fillStyle = "rgba(255,255,255,0.18)";
                     this.drawRoundRect(nr.x, nr.y, nr.w, nr.h, 5, true, false);
-                    this.drawCenteredString("Next", nr.x + nr.w / 2, nr.y + 16, "600 10px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.85)");
-                    this.drawCenteredString(nextC.n, nr.x + nr.w / 2, nr.y + nr.h / 2 + 4, "700 9px 'Baloo 2', 'Segoe UI', sans-serif", "white");
+                    this.drawCenteredString("Next", nr.x + nr.w / 2, nr.y + 14, "600 9px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.85)");
+                    // Stack the name word-by-word in a small font so it fits the card.
+                    let words = nextC.n.split(' ');
+                    let fy = nr.y + nr.h / 2 - (words.length - 1) * 4.5 + 6;
+                    for (let wd of words) {
+                        this.drawCenteredString(wd, nr.x + nr.w / 2, fy, "700 8px 'Baloo 2', 'Segoe UI', sans-serif", "white");
+                        fy += 9;
+                    }
                 }
 
                 // Timer / Messages
@@ -1300,37 +1394,9 @@ class Main {
             y -= 20 * Math.sin(prog * Math.PI);
         }
 
-        // Electric Aura (Blue, Flickering)
+        // (Sparky / Zappies charge ring is drawn once in drawCharge — no duplicate
+        // aura here.)
         let name = e.c ? e.c.n : "";
-        if (name === "Sparky" || name === "Zappies") {
-            let threshold = (name === "Zappies") ? 72 : 180;
-            let isCharging = (e.chargeT > 0 && e.chargeT < threshold);
-            let isReady = (e.chargeT >= threshold);
-
-            if (isCharging) {
-                // Flicker while charging
-                let flick = (Math.floor(Date.now() / 50) % 2 === 0);
-                if (flick) {
-                    ctx.strokeStyle = "cyan";
-                    ctx.lineWidth = 3;
-                    ctx.beginPath();
-                    ctx.arc(x, y, radius + 5, 0, Math.PI * 2);
-                    ctx.stroke();
-                    ctx.lineWidth = 1;
-                }
-            } else if (isReady) {
-                // Solid ring when ready? User said "stop flickering".
-                // Detailed interpretation: "when it is done charging, it should stop flickering."
-                // I will leave it as NO aura when ready, or maybe a solid one.
-                // Let's go with SOLID to indicate readiness.
-                ctx.strokeStyle = "rgba(0, 255, 255, 0.8)";
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.arc(x, y, radius + 5, 0, Math.PI * 2);
-                ctx.stroke();
-                ctx.lineWidth = 1;
-            }
-        }
 
         let isFriend = (e.tm === 0);
         // Each unit keeps its own identity color; friend vs foe is shown ONLY by
@@ -1340,7 +1406,7 @@ class Main {
             color = isFriend ? "#4aa3ff" : "#ff5a5a";
         } else {
             color = this.getUnitColor(name);
-            if (e.isClone) color = "rgba(185, 240, 255, 0.9)";
+            if (e.isClone) color = "#bce8ff"; // light tint; translucency comes from globalAlpha below
         }
 
         // Freeze/Slow status tints temporarily override the identity color.
@@ -1352,6 +1418,7 @@ class Main {
         // While deploying, the body is a touch translucent (the per-card clock
         // indicator is drawn separately, once per card — see drawDeploys).
         ctx.globalAlpha = (e instanceof Troop && e.deployTime > 0) ? 0.75 : 1;
+        if (e.isClone) ctx.globalAlpha *= 0.5; // cloned troops are translucent
         ctx.fillStyle = color;
         ctx.strokeStyle = "rgba(0,0,0,0.3)"; // soft outline, not harsh black
         ctx.lineWidth = 1.5;
@@ -1361,12 +1428,68 @@ class Main {
             let r = radius;
             this.drawRoundRect(x - r, y - r, r * 2, r * 2, 8, true, false);
             ctx.stroke();
-            // Cannon turret (no barrel) sitting on top of the tower.
-            ctx.fillStyle = "#4a4e55";
-            ctx.beginPath(); ctx.arc(x, y, r * 0.5, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.stroke();
-            ctx.fillStyle = "#26282c";
-            ctx.beginPath(); ctx.arc(x, y, r * 0.22, 0, Math.PI * 2); ctx.fill(); // muzzle
+            // Turret(s) rotate to aim at the tower's current target, each with a
+            // barrel sticking out. The KING also has a smaller "shooter" above.
+            // Smoothly ease the displayed turret angle toward the aim angle (along
+            // the shortest arc) so the barrel turns instead of snapping.
+            let aim = (e.aimAngle !== undefined) ? e.aimAngle : (isFriend ? -Math.PI / 2 : Math.PI / 2);
+            if (e.dispAngle === undefined) e.dispAngle = aim;
+            let da = aim - e.dispAngle;
+            while (da > Math.PI) da -= 2 * Math.PI;
+            while (da < -Math.PI) da += 2 * Math.PI;
+            e.dispAngle += da * 0.16;
+            let ang = e.dispAngle;
+            const turret = (cx, cy, tr, withBarrel) => {
+                // barrel (drawn first, under the base, pointing toward the target)
+                if (withBarrel) {
+                    ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang);
+                    ctx.fillStyle = "#3a3e44";
+                    ctx.fillRect(tr * 0.3, -tr * 0.34, tr * 1.35, tr * 0.68);
+                    ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1;
+                    ctx.strokeRect(tr * 0.3, -tr * 0.34, tr * 1.35, tr * 0.68);
+                    ctx.restore();
+                }
+                // turret base + muzzle
+                ctx.fillStyle = "#4a4e55";
+                ctx.beginPath(); ctx.arc(cx, cy, tr, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1; ctx.stroke();
+                ctx.fillStyle = "#26282c";
+                ctx.beginPath(); ctx.arc(cx, cy, tr * 0.44, 0, Math.PI * 2); ctx.fill();
+            };
+            if (!e.kg) {
+                turret(x, y, r * 0.5, true); // princess cannon — barrel, aims
+            } else {
+                // King: big spell vent (no barrel) pushed BACK; the aiming shooter
+                // lives in a box toward the FRONT and rises out of it on activation.
+                let fs = isFriend ? -1 : 1;                   // front = toward the enemy half
+                turret(x, y - fs * r * 0.32, r * 0.4, false); // spell vent, pushed back
+                let shY = y + fs * r * 0.52, bs = r * 0.32;   // shooter station, toward the front
+                // rounded-rect path (keeps the soft outline, slightly rounded corners)
+                const rr = (rx, ry, rw, rh, rad) => {
+                    rad = Math.min(rad, rw / 2, rh / 2);
+                    ctx.beginPath();
+                    ctx.moveTo(rx + rad, ry);
+                    ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, rad);
+                    ctx.arcTo(rx + rw, ry + rh, rx, ry + rh, rad);
+                    ctx.arcTo(rx, ry + rh, rx, ry, rad);
+                    ctx.arcTo(rx, ry, rx + rw, ry, rad);
+                    ctx.closePath();
+                };
+                // box mount
+                ctx.fillStyle = "#3a3e44"; rr(x - bs, shY - bs, bs * 2, bs * 2, 5); ctx.fill();
+                ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = 1.5; ctx.stroke();
+                ctx.lineWidth = 1;
+                // open fraction: 0 asleep, 0→1 during the wake animation, 1 active
+                let p = !e.actv ? 0 : (e.activateAnim > 0 ? 1 - e.activateAnim / 45 : 1);
+                let sp = Math.max(0, (p - 0.2) / 0.8); // shooter scales up as the lids part
+                if (sp > 0) turret(x, shY, r * 0.28 * sp, sp > 0.55);
+                // Two lids: meet in the middle when closed, slide apart as it opens,
+                // and REMAIN open at the sides afterwards (they never disappear).
+                let slide = p * (bs + 2);
+                ctx.fillStyle = "#5a5f66"; ctx.strokeStyle = "rgba(0,0,0,0.4)";
+                rr(x - bs - slide, shY - bs, bs + 1, bs * 2, 4); ctx.fill(); ctx.stroke();
+                rr(x + slide - 1, shY - bs, bs + 1, bs * 2, 4); ctx.fill(); ctx.stroke();
+            }
             ctx.lineWidth = 1;
         } else if (e instanceof Building) {
             ctx.rect(x - radius, y - radius, radius * 2, radius * 2);
@@ -1407,14 +1530,15 @@ class Main {
         let barY = y - radius - 9;
 
         if (e.shield > 0) {
-            let shPct = Math.max(0, e.shield / e.maxShield);
+            // Guard against a missing/zero maxShield (would make the bar infinite).
+            let shPct = e.maxShield > 0 ? Math.max(0, Math.min(1, e.shield / e.maxShield)) : 1;
             ctx.fillStyle = "rgba(0,0,0,0.5)";
             ctx.fillRect(x - barW / 2 - 1, barY - 6, barW + 2, 5);
             ctx.fillStyle = "#d9b3ff";
             ctx.fillRect(x - barW / 2, barY - 5, barW * shPct, 3);
         }
         if (!(e instanceof Tower) || e.hp < e.mhp) {
-            let hpPct = Math.max(0, e.hp / e.mhp);
+            let hpPct = Math.max(0, Math.min(1, e.hp / e.mhp));
             ctx.fillStyle = "rgba(0,0,0,0.55)";
             ctx.fillRect(x - barW / 2 - 1, barY - 1, barW + 2, 6);
             ctx.fillStyle = teamCol;
@@ -1485,14 +1609,14 @@ class Main {
     arenaGrass() {
         this.paintBg("#5cb356");
         ctx.fillStyle = "rgba(255,255,255,0.025)";
-        for (let gy = 0; gy < H - 165; gy += 60) ctx.fillRect(0, gy, W, 30);
+        for (let gy = 0; gy < H - 150; gy += 60) ctx.fillRect(0, gy, W, 30);
         ctx.fillStyle = "rgba(20,45,75,0.06)";
         ctx.fillRect(0, 0, W, RIV_Y - 15);
     }
 
     // Troops/buildings deploy on a 30px tile grid (like the real game).
     snapToGrid(x, y) {
-        const T = 30, oy = RIV_Y % T; // rows anchored so a line runs through the river
+        const T = 30, oy = (RIV_Y - 15) % T; // RIV_Y=405 → oy=0, so the top/bottom edges and the river all land on tile lines
         return { x: Math.floor(x / T) * T + T / 2, y: Math.floor((y - oy) / T) * T + oy + T / 2 };
     }
 
@@ -1562,17 +1686,17 @@ class Main {
 
     // Always-on tile grid, aligned to the 30px snap cells (lines on cell edges).
     drawGrid() {
-        const T = 30, oy = RIV_Y % T; // a horizontal line runs through the river centre
+        const T = 30, oy = (RIV_Y - 15) % T; // grid lines fall on the river's edges (1 tile)
         ctx.strokeStyle = "rgba(255,255,255,0.08)";
         ctx.lineWidth = 1;
-        for (let gx = T; gx < W; gx += T) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H - 165); ctx.stroke(); }
-        for (let gy = oy; gy < H - 165; gy += T) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+        for (let gx = T; gx < W; gx += T) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H - 150); ctx.stroke(); }
+        for (let gy = oy; gy < H - 150; gy += T) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
     }
 
     // Hovered cell highlight (green valid / red invalid) while placing.
     drawHoverCell(sel) {
-        const T = 30, oy = RIV_Y % T;
-        if (this.mouse.y >= H - 165) return;
+        const T = 30, oy = (RIV_Y - 15) % T;
+        if (this.mouse.y >= H - 150) return;
         let cx = Math.floor(this.mouse.x / T) * T, cy = Math.floor((this.mouse.y - oy) / T) * T + oy;
         let s = this.snapToGrid(this.mouse.x, this.mouse.y);
         let valid = this.eng.isValid(s.y, s.x, sel, 0);
@@ -1666,16 +1790,22 @@ class Main {
         }
     }
 
+    // True for projectiles that come from a SPELL (incl. Log / Barbarian Barrel and
+    // the area spells) — these render above ground troops but below the towers.
+    isSpellProj(p) {
+        return !!(p.isSpellArc || p.isArrows || p.isSpellDrop || p.isLog || p.isDelivery ||
+            p.poison || p.graveyard || p.brownArea || p.isClone || p.isVines || p.chainTargets || p.shockBeams);
+    }
+
     drawProj(p) {
         if (p.isArrows) { this.drawArrowsVolley(p); return; }
         if (p.isSpellArc) { this.drawSpellArc(p); return; }
         if (p.isSpellDrop) { this.drawSpellDrop(p); return; }
 
-        // Only the rolling log / boulder render here (top layer) — they're skipped
-        // in the inline pass. EVERY other projectile (bullets, the Royal Giant
-        // cannonball, area effects) is drawn beneath the units in the inline pass,
-        // so return and don't redraw it on top.
-        if (!p.isRolling && !p.isLog) return;
+        // Only the rolling LOG renders here (top layer) — it rolls over units. Every
+        // other projectile (bullets, boulders, the Royal Giant cannonball, area
+        // effects) draws beneath the units in the inline pass, so return.
+        if (!p.isLog) return;
 
         let x = p.x;
         let y = p.y;
@@ -1770,14 +1900,23 @@ class Main {
             ctx.fillStyle = "#dff1ff"; ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = "#9cc6e8"; ctx.lineWidth = 1.5; ctx.stroke();
         } else if (k === "rocket") {
-            ctx.fillStyle = "#d23b3b"; ctx.fillRect(-4, -10, 8, 16);
-            ctx.fillStyle = "#bbb"; ctx.beginPath(); ctx.moveTo(-4, -10); ctx.lineTo(0, -18); ctx.lineTo(4, -10); ctx.closePath(); ctx.fill();
-            ctx.fillStyle = "#ffb13c"; ctx.beginPath(); ctx.arc(0, 9, 4, 0, Math.PI * 2); ctx.fill();
+            // A big heavy brown ball with a white skull on it.
+            ctx.fillStyle = "#6e4a2b"; ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = "#46301c"; ctx.lineWidth = 2; ctx.stroke();
+            ctx.fillStyle = "#8a5f38"; ctx.beginPath(); ctx.arc(-4.5, -4.5, 4.5, 0, Math.PI * 2); ctx.fill(); // highlight
+            ctx.fillStyle = "#f2eede";                                              // skull
+            ctx.beginPath(); ctx.arc(0, -1.5, 7.5, 0, Math.PI * 2); ctx.fill();
+            ctx.fillRect(-4, 3, 8, 4.8);                                            // jaw
+            ctx.fillStyle = "#241509";                                             // eyes + nose
+            ctx.beginPath(); ctx.arc(-3, -1.8, 2.1, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(3, -1.8, 2.1, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(0, 0.5); ctx.lineTo(-1.5, 3); ctx.lineTo(1.5, 3); ctx.closePath(); ctx.fill();
+            ctx.lineWidth = 1;
         } else {
-            // fireball
-            ctx.fillStyle = "rgba(255,120,30,0.55)"; ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = "#ff7a1e"; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = "#ffd24d"; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
+            // fireball (slightly bigger)
+            ctx.fillStyle = "rgba(255,120,30,0.55)"; ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#ff7a1e"; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#ffd24d"; ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
         }
         ctx.restore();
     }
@@ -1837,41 +1976,27 @@ class Main {
         ctx.lineWidth = 1;
     }
 
-    // Sparky / Zappies charge-up: nothing → sparkle → flicker → constant beam.
+    // Sparky / Zappies charge-up: a single electric ring that grows from slim+dim to
+    // thick+bright as it charges. No white tendrils.
     drawCharge(e) {
         let thr = e.c.n === "Sparky" ? 180 : 72;
         let frac = Math.min(1, e.chargeT / thr);
-        if (frac < 0.25) return; // not yet charged enough — nothing
+        if (frac < 0.12) return; // barely started — nothing yet
         let cx = e.x, cy = e.y, R = e.rad + 4;
-        let seed = Math.floor(Date.now() / 50);
+        let seed = Math.floor(Date.now() / 60);
+        // Slim & dim early, thick & bright near full charge.
+        let width = 0.8 + frac * 2.6;
+        let alpha = 0.22 + frac * 0.7;
+        // A light flicker while still charging; steady once nearly full.
+        let flick = (frac < 0.85 && seed % 2 === 0) ? 0.5 : 1.0;
+        ctx.strokeStyle = `rgba(150, 225, 255, ${(alpha * flick).toFixed(2)})`;
+        ctx.lineWidth = width;
+        ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+        // Fully charged: a soft bright inner glow ring (still no spikes).
         if (frac >= 0.85) {
-            // fully charged: constant bright electric corona
-            ctx.strokeStyle = "#aef0ff"; ctx.lineWidth = 2.5;
-            ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
-            ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.5;
-            for (let i = 0; i < 6; i++) {
-                let a = i * Math.PI / 3 + seed * 0.3;
-                ctx.beginPath();
-                ctx.moveTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
-                ctx.lineTo(cx + Math.cos(a) * (R + 7), cy + Math.sin(a) * (R + 7));
-                ctx.stroke();
-            }
-        } else if (frac >= 0.5) {
-            // flicker: ring blinks on and off
-            if (seed % 2 === 0) {
-                ctx.strokeStyle = "rgba(150,220,255,0.85)"; ctx.lineWidth = 2;
-                ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
-            }
-        } else {
-            // sparkle: a few short sparks
-            ctx.strokeStyle = "rgba(180,230,255,0.9)"; ctx.lineWidth = 1.5;
-            for (let i = 0; i < 3; i++) {
-                let a = (seed * 1.7 + i * 2.1) % (Math.PI * 2);
-                ctx.beginPath();
-                ctx.moveTo(cx + Math.cos(a) * R * 0.6, cy + Math.sin(a) * R * 0.6);
-                ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
-                ctx.stroke();
-            }
+            ctx.strokeStyle = "rgba(205, 245, 255, 0.9)";
+            ctx.lineWidth = 1.2;
+            ctx.beginPath(); ctx.arc(cx, cy, R - 2, 0, Math.PI * 2); ctx.stroke();
         }
         ctx.lineWidth = 1;
     }

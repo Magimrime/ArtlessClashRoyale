@@ -35,14 +35,16 @@ export default class Building extends Entity {
         }
 
         if (this.lk) {
-            if (this.lk.hp <= 0 || this.dist(this.lk) > this.c.si) {
+            if (this.lk.hp <= 0 || !g.ents.includes(this.lk) || this.dist(this.lk) > this.c.si) {
                 this.lk = null;
                 this.atk = false;
                 this.infernoTick = 0;
             }
         }
 
-        if (!this.atk) {
+        // Lock onto the first target until it dies or leaves SIGHT; only then
+        // re-acquire the nearest (don't switch just because it stepped out of range).
+        if (!this.lk) {
             let min = 9999;
             let best = null;
             for (let e of g.ents) {
@@ -64,12 +66,12 @@ export default class Building extends Entity {
 
         if (this.lk && this.dist(this.lk) <= attackRange) {
             this.atk = true;
+            if (this.c.n === "Inferno Tower") this.infernoTick++; // ramp EVERY tick while locked on
             if (this.cd-- > 0) return;
 
             // Attack
             if (this.c.n === "Inferno Tower") {
-                this.infernoTick++;
-                let stage = Math.floor(this.infernoTick / 25);
+                let stage = Math.floor(this.infernoTick / 90); // starts at x1, steps up only every ~1.5s
                 let mult = this.getInfernoMultiplier(stage);
                 let dmg = this.c.d * mult;
                 this.lk.hp -= dmg;
