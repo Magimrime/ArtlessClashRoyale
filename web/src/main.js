@@ -120,6 +120,14 @@ class Main {
         this.nextCardRect = { x: W - 80, y: H - 110, w: 68, h: 90 }; // recomputed with the card row below
         this.cardOffsets = [0, 0, 0, 0]; // For hover animation
 
+        // Eraser cursor sprite — uses the pixel art at web/images/eraser.png when
+        // present, otherwise the built-in vector eraser icon.
+        this.eraserImg = new Image();
+        this.eraserImgLoaded = false;
+        this.eraserImg.onload = () => { this.eraserImgLoaded = true; };
+        this.eraserImg.onerror = () => { this.eraserImgLoaded = false; };
+        this.eraserImg.src = "images/eraser.png";
+
         this.init();
     }
 
@@ -1116,16 +1124,28 @@ class Main {
                     ctx.strokeStyle = "rgba(0,0,0,0.5)";
                     ctx.stroke();
                 } else {
-                    // Snapped ghost preview — one circle per unit the card spawns,
-                    // each the size that unit will actually be.
+                    // Snapped ghost preview — one shape per unit the card spawns, each
+                    // the size that unit will actually be.
+                    ctx.globalAlpha = 1.0;
                     let snap = this.snapToGrid(this.mouse.x, this.mouse.y);
                     let gx = snap.x, gy = snap.y;
-                    let range = c.rn || 0;
+                    let effR = this.effectRadius(c);          // splash for hop/suicide units
+                    let range = effR > 0 ? 0 : (c.rn || 0);   // …otherwise the attack range
                     let valid = canAfford && this.eng.isValid(gy, gx, c, 0) && this.mouse.y < H - 150;
                     let col = valid ? this.getUnitColor(c.n) : "#8a8a8a";
                     let outline = valid ? "#ffffff" : "#ff6a6a";
+                    let isBuilding = c.t === 3;
 
-                    if (range > 0) {
+                    if (effR > 0) {
+                        // Explosion / splash area (where the spirit or wall breaker
+                        // hits) — a clear tinted disc so it's not "just a dot".
+                        ctx.fillStyle = this.hexA(col, 0.3);
+                        ctx.beginPath(); ctx.arc(gx, gy, effR, 0, Math.PI * 2); ctx.fill();
+                        ctx.strokeStyle = this.hexA(col, 0.95);
+                        ctx.lineWidth = 2.5; ctx.setLineDash([7, 6]);
+                        ctx.beginPath(); ctx.arc(gx, gy, effR, 0, Math.PI * 2); ctx.stroke();
+                        ctx.setLineDash([]); ctx.lineWidth = 1;
+                    } else if (range > 0) {
                         ctx.beginPath();
                         ctx.strokeStyle = "rgba(255,255,255,0.4)";
                         ctx.lineWidth = 2; ctx.setLineDash([6, 6]);
@@ -1134,13 +1154,21 @@ class Main {
                     }
                     for (const gp of this.ghostLayout(c)) {
                         let px = gx + gp.dx, py = gy + gp.dy;
-                        ctx.globalAlpha = 0.6;
+                        ctx.globalAlpha = 0.7;
                         ctx.fillStyle = col;
-                        ctx.beginPath(); ctx.arc(px, py, gp.r, 0, Math.PI * 2); ctx.fill();
-                        ctx.globalAlpha = 1.0;
-                        ctx.strokeStyle = outline;
-                        ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
-                        ctx.beginPath(); ctx.arc(px, py, gp.r + 1, 0, Math.PI * 2); ctx.stroke();
+                        if (isBuilding) {
+                            // Buildings show their VISUAL SQUARE (matches the deployed
+                            // building), not a hitbox circle.
+                            this.drawRoundRect(px - gp.r, py - gp.r, gp.r * 2, gp.r * 2, 4, true, false);
+                            ctx.globalAlpha = 1.0;
+                            ctx.strokeStyle = outline; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
+                            this.drawRoundRect(px - gp.r, py - gp.r, gp.r * 2, gp.r * 2, 4, false, false); ctx.stroke();
+                        } else {
+                            ctx.beginPath(); ctx.arc(px, py, gp.r, 0, Math.PI * 2); ctx.fill();
+                            ctx.globalAlpha = 1.0;
+                            ctx.strokeStyle = outline; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
+                            ctx.beginPath(); ctx.arc(px, py, gp.r + 1, 0, Math.PI * 2); ctx.stroke();
+                        }
                         ctx.setLineDash([]); ctx.lineWidth = 1;
                     }
                     this.drawCenteredString(c.n, gx, gy - 26, "700 11px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.92)");
@@ -1620,12 +1648,16 @@ class Main {
             // Eraser / tower-stamp cursor on the field.
             if (this.mouse.y < H - 150 && !this.sandboxDeckOpen && !this.sandboxMapOpen && !this.sandboxToolsOpen && !this.sandboxWorldOpen) {
                 if (this.sandboxEraser) {
-                    ctx.strokeStyle = "#ff5a5a"; ctx.lineWidth = 2.5;
-                    ctx.beginPath(); ctx.arc(this.mouse.x, this.mouse.y, 14, 0, Math.PI * 2); ctx.stroke();
-                    ctx.beginPath();
-                    ctx.moveTo(this.mouse.x - 8, this.mouse.y - 8); ctx.lineTo(this.mouse.x + 8, this.mouse.y + 8);
-                    ctx.moveTo(this.mouse.x + 8, this.mouse.y - 8); ctx.lineTo(this.mouse.x - 8, this.mouse.y + 8);
-                    ctx.stroke(); ctx.lineWidth = 1;
+                    if (this.eraserImgLoaded) {
+                        // Pixel art at images/eraser.png, drawn crisp (no smoothing).
+                        const sz = 52;
+                        let prev = ctx.imageSmoothingEnabled;
+                        ctx.imageSmoothingEnabled = false;
+                        ctx.drawImage(this.eraserImg, this.mouse.x - sz / 2, this.mouse.y - sz / 2, sz, sz);
+                        ctx.imageSmoothingEnabled = prev;
+                    } else {
+                        this.drawEraserIcon(this.mouse.x, this.mouse.y, 1.9);
+                    }
                 } else if (this.sandboxTowerArm) {
                     let gm = this.snapToGrid(this.mouse.x, this.mouse.y);
                     let r = (this.sandboxTowerArm === 'king' ? 50 : 36) * 0.88;
@@ -2009,15 +2041,38 @@ class Main {
         ];
     }
 
+    // "#rrggbb" + alpha → an "rgba(...)" string.
+    hexA(hex, a) {
+        let h = (hex || "#ffffff").replace("#", "");
+        if (h.length === 3) h = h.split("").map(ch => ch + ch).join("");
+        const r = parseInt(h.slice(0, 2), 16) || 255;
+        const g = parseInt(h.slice(2, 4), 16) || 255;
+        const b = parseInt(h.slice(4, 6), 16) || 255;
+        return `rgba(${r},${g},${b},${a})`;
+    }
+
+    // Hop/suicide units (Spirits, Wall Breakers) explode rather than shoot — this is
+    // the splash radius where they actually do damage, shown as their ghost preview
+    // instead of a misleading tiny "range" ring.
+    effectRadius(c) {
+        if (c.n === "Ice Spirit") return 50;
+        if (["Fire Spirit", "Heal Spirit", "Electro Spirit", "Wall Breakers"].includes(c.n)) return 60;
+        return 0;
+    }
+
     // Troops/buildings deploy on a 30px tile grid (like the real game).
     snapToGrid(x, y) {
         const T = 30, oy = (RIV_Y - 15) % T; // RIV_Y=405 → oy=0, so the top/bottom edges and the river all land on tile lines
         return { x: Math.floor(x / T) * T + T / 2, y: Math.floor((y - oy) / T) * T + oy + T / 2 };
     }
 
-    // Approximate drawn radius of one unit of a card (mirrors Troop sizing).
+    // Approximate drawn radius of one unit of a card (mirrors Troop / Building sizing).
     unitRadius(c) {
-        if (c.t === 3) return this.eng.getVisualRadius(c) * 0.88;
+        // Buildings: the half-width of their drawn square (matches Building.js rad*0.88).
+        if (c.t === 3) {
+            let r = (c.n === "Cannon") ? 15 : (c.n === "Crate") ? 14 : 20;
+            return r * 0.88;
+        }
         let m = 10;
         const n = c.n;
         if (["Skeletons", "Bats"].includes(n)) m = 6;
@@ -2099,6 +2154,41 @@ class Main {
         ctx.fillStyle = "rgba(255,255,255,0.55)";
         ctx.beginPath(); ctx.arc(gx - radius * 0.3, gy - radius * 0.3, radius * 0.28, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
+    }
+
+    // A small tilted two-tone rubber eraser (blue sleeve + light rubbing end). The
+    // blue sleeve carries a black band, a white label band, and an "ERASER" label.
+    // `s` scales it.
+    drawEraserIcon(cx, cy, s = 1) {
+        const w = 14 * s, h = 22 * s, r = 3.5 * s;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(-Math.PI / 4.3); // tilt like the icon
+        // drop shadow
+        ctx.fillStyle = "rgba(0,0,0,0.28)";
+        this.drawRoundRect(-w / 2 + 1.5 * s, -h / 2 + 2 * s, w, h, r, true, false);
+        // clip to the body so everything shares its rounded outline
+        this.drawRoundRect(-w / 2, -h / 2, w, h, r, false, false);
+        ctx.save(); ctx.clip();
+        ctx.fillStyle = "#ece4f0"; ctx.fillRect(-w / 2, -h / 2, w, h);              // rubbing end (light)
+        ctx.fillStyle = "#4f7be2"; ctx.fillRect(-w / 2, -h / 2, w, h * 0.58);       // sleeve (blue)
+        // black band near the sleeve's far end (the "opposite side" of the label)
+        ctx.fillStyle = "#171717"; ctx.fillRect(-w / 2, -h / 2 + h * 0.06, w, h * 0.07);
+        // white label band across the middle of the sleeve, with the "ERASER" text
+        const stripY = -h / 2 + h * 0.27, stripH = h * 0.17;
+        ctx.fillStyle = "#ffffff"; ctx.fillRect(-w / 2, stripY, w, stripH);
+        ctx.fillStyle = "#1c1c1c";
+        ctx.font = `bold ${Math.max(3, h * 0.13)}px 'Baloo 2', 'Segoe UI', sans-serif`;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText("ERASER", 0, stripY + stripH / 2 + 0.3 * s);
+        ctx.restore();
+        // divider + outline
+        ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = 1.2 * s;
+        ctx.beginPath(); ctx.moveTo(-w / 2, -h / 2 + h * 0.58); ctx.lineTo(w / 2, -h / 2 + h * 0.58); ctx.stroke();
+        ctx.strokeStyle = "rgba(0,0,0,0.5)"; ctx.lineWidth = 1.5 * s;
+        this.drawRoundRect(-w / 2, -h / 2, w, h, r, false, false); ctx.stroke();
+        ctx.restore();
+        ctx.lineWidth = 1; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
     }
 
     // The bottom-strip hit region where the evo gems live on a deck card.

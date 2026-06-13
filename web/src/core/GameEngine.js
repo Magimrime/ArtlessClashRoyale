@@ -649,12 +649,13 @@ export default class GameEngine {
         if (y < 0 || y > 810) return false;
 
         // Can't place a troop or building on top of an existing building OR a tower
-        // (and buildings can't go too close to another building).
+        // (and buildings can't go too close to another building). Towers/buildings
+        // are SQUARES, so use a BOX test — otherwise their corners stay placeable.
         for (let e of this.ents) {
             let isStruct = e.constructor.name === "Building" || e.constructor.name === "Tower";
             if (isStruct && e.hp > 0) {
                 let gap = this.getHitboxRadius(e) + this.getVisualRadius(c) * (c.t === 3 ? 0.9 : 0.45);
-                if (Math.hypot(e.x - x, e.y - y) < gap) return false;
+                if (Math.abs(e.x - x) < gap && Math.abs(e.y - y) < gap) return false;
             }
         }
 
@@ -840,12 +841,14 @@ export default class GameEngine {
         // Elixir Check
         if (p.elx < cost) return;
 
-        // Building Placement Check (Don't place on top of buildings)
+        // Building Placement Check (Don't place on top of buildings/towers — box
+        // test so the square corners of a structure block too).
         if (cardToPlay.t === 3) {
             let newVisualRad = this.getVisualRadius(cardToPlay);
             for (let e of this.ents) {
                 if (e instanceof Tower || e instanceof Building) {
-                    if (Math.hypot(x - e.x, y - e.y) < e.rad + newVisualRad + 3) return;
+                    let gap = e.rad + newVisualRad + 3;
+                    if (Math.abs(x - e.x) < gap && Math.abs(y - e.y) < gap) return;
                 }
             }
         }
