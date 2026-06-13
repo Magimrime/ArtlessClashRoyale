@@ -448,7 +448,11 @@ export default class Troop extends Entity {
             // tower (which it approaches from the front, since it stays on the lane x).
             if (!this.fly && !g.sandboxNoRiver && (this.y < RIV_Y) !== (this.currentTarget.y < RIV_Y)) {
                 let bxs = g.bridgeXs || [W / 4, W * 3 / 4];
-                let laneX = bxs.reduce((a, b) => Math.abs(this.x - a) <= Math.abs(this.x - b) ? a : b);
+                // A lane-assigned troop (centre-placed split) crosses ITS lane's
+                // bridge; everyone else takes the nearest one.
+                let laneX = (this.laneAssign !== undefined)
+                    ? bxs[Math.min(this.laneAssign, bxs.length - 1)]
+                    : bxs.reduce((a, b) => Math.abs(this.x - a) <= Math.abs(this.x - b) ? a : b);
                 let pY = (this.tm === 0) ? 645 : 165;                 // own princess-tower y
                 let side = (this.x >= laneX) ? 1 : -1;                // approach side
                 // Clear of the princess's (rounded) friendly hitbox so the loop point is
@@ -822,10 +826,12 @@ export default class Troop extends Entity {
         }
 
         // 2. Lane tower (default objective). Null-safe: sandbox maps may have only
-        // king towers (and a destroyed sandbox king is gone for good).
+        // king towers (and a destroyed sandbox king is gone for good). A lane-assigned
+        // troop (centre-placed split) heads for ITS lane's tower, not the nearest.
+        const leftLane = (this.laneAssign !== undefined) ? this.laneAssign === 0 : this.x < W / 2;
         let primary;
-        if (this.tm === 0) primary = (g.t2L && g.t2L.hp > 0 && this.x < W / 2) ? g.t2L : (g.t2R && g.t2R.hp > 0 && this.x >= W / 2) ? g.t2R : g.t2K;
-        else primary = (g.t1L && g.t1L.hp > 0 && this.x < W / 2) ? g.t1L : (g.t1R && g.t1R.hp > 0 && this.x >= W / 2) ? g.t1R : g.t1K;
+        if (this.tm === 0) primary = (g.t2L && g.t2L.hp > 0 && leftLane) ? g.t2L : (g.t2R && g.t2R.hp > 0 && !leftLane) ? g.t2R : g.t2K;
+        else primary = (g.t1L && g.t1L.hp > 0 && leftLane) ? g.t1L : (g.t1R && g.t1R.hp > 0 && !leftLane) ? g.t1R : g.t1K;
         if (primary && primary.hp <= 0) primary = null;
         // King gone (lane objective dead-ends): pathfind to the NEAREST living enemy
         // tower instead — a cross-lane princess or an extra sandbox tower — so combined

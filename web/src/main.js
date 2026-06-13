@@ -2049,6 +2049,7 @@ class Main {
         if (n === "Zappies") return [at(-10, 0), at(10, 0), at(0, 10)];
         if (n === "Royal Hogs") return [at(-30, 0), at(-10, 0), at(10, 0), at(30, 0)];
         if (n === "Royal Recruits") return [-150, -90, -30, 30, 90, 150].map(off => at(off, 0));
+        if (n === "Three Musketeers") return [at(-26, 0), at(26, 0), at(0, 18)];
         return [at(0, 0)];
     }
 

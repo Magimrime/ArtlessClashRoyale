@@ -925,14 +925,14 @@ export default class GameEngine {
     // cards so the units head to OPPOSITE lanes, like real CR.
     isMidSplit(x) { return Math.abs(x - this.W / 2) <= 30; }
 
-    // Spawn `n` units mirrored around the centreline — one each side, clearly across
-    // x = W/2 so lane targeting sends them opposite ways.
-    spawnSplit(tm, y, c, n) {
-        const off = 20;
+    // Assign lanes to the LAST `lanes.length` spawned troops (0 = left, 1 = right).
+    // The units keep their normal spawn formation — the assignment makes them
+    // PATHFIND to their lane's bridge and tower instead.
+    splitLanes(lanes) {
+        const n = lanes.length;
         for (let i = 0; i < n; i++) {
-            const side = (i % 2 === 0) ? -1 : 1;
-            const lane = Math.floor(i / 2) * 16; // extra spacing if >2 per side
-            this.ents.push(new Troop(tm, this.W / 2 + side * (off + lane), y, c));
+            const t = this.ents[this.ents.length - n + i];
+            if (t) t.laneAssign = lanes[i];
         }
     }
 
@@ -1057,35 +1057,27 @@ export default class GameEngine {
         } else if (c.n === "Archers") {
             // Two archers almost touching — just outside the collision radius so they
             // don't immediately snap apart, leaving a tiny visible gap. Centre
-            // placement SPLITS them, one to each lane (real CR behaviour).
-            if (this.isMidSplit(x)) { this.spawnSplit(tm, y, c, 2); }
-            else {
-                this.ents.push(new Troop(tm, x - 8, y, c));
-                this.ents.push(new Troop(tm, x + 8, y, c));
-            }
+            // placement SPLITS them via lane-assigned pathfinding (one per lane).
+            this.ents.push(new Troop(tm, x - 8, y, c));
+            this.ents.push(new Troop(tm, x + 8, y, c));
+            if (this.isMidSplit(x)) this.splitLanes([0, 1]);
         } else if (["Spear Goblins", "Wall Breakers"].includes(c.n)) {
-            if (this.isMidSplit(x)) { this.spawnSplit(tm, y, c, 2); if (c.n.includes("Spear")) this.ents.push(new Troop(tm, x, y + 15, c)); }
-            else {
-                this.ents.push(new Troop(tm, x - 15, y, c));
-                this.ents.push(new Troop(tm, x + 15, y, c));
-                if (c.n.includes("Spear")) this.ents.push(new Troop(tm, x, y + 15, c));
-            }
+            this.ents.push(new Troop(tm, x - 15, y, c));
+            this.ents.push(new Troop(tm, x + 15, y, c));
+            if (c.n.includes("Spear")) this.ents.push(new Troop(tm, x, y + 15, c));
+            if (this.isMidSplit(x)) this.splitLanes(c.n.includes("Spear") ? [0, 1, x < this.W / 2 ? 0 : 1] : [0, 1]);
         } else if (c.n === "Skeletons") {
             // Tight triangle (same per-skeleton spacing as Skeleton Army).
-            if (this.isMidSplit(x)) { this.spawnSplit(tm, y, c, 2); this.ents.push(new Troop(tm, x, y + 12, c)); }
-            else {
-                const S = 13;
-                this.ents.push(new Troop(tm, x, y - S * 0.6, c));
-                this.ents.push(new Troop(tm, x - S * 0.55, y + S * 0.5, c));
-                this.ents.push(new Troop(tm, x + S * 0.55, y + S * 0.5, c));
-            }
+            const S = 13;
+            this.ents.push(new Troop(tm, x, y - S * 0.6, c));
+            this.ents.push(new Troop(tm, x - S * 0.55, y + S * 0.5, c));
+            this.ents.push(new Troop(tm, x + S * 0.55, y + S * 0.5, c));
+            if (this.isMidSplit(x)) this.splitLanes([x < this.W / 2 ? 0 : 1, 0, 1]);
         } else if (c.n === "Goblins" || c.n === "Minions") {
-            if (this.isMidSplit(x)) { this.spawnSplit(tm, y, c, 2); this.ents.push(new Troop(tm, x, y + 12, c)); }
-            else {
-                this.ents.push(new Troop(tm, x, y - 10, c));
-                this.ents.push(new Troop(tm, x - 10, y + 10, c));
-                this.ents.push(new Troop(tm, x + 10, y + 10, c));
-            }
+            this.ents.push(new Troop(tm, x, y - 10, c));
+            this.ents.push(new Troop(tm, x - 10, y + 10, c));
+            this.ents.push(new Troop(tm, x + 10, y + 10, c));
+            if (this.isMidSplit(x)) this.splitLanes([x < this.W / 2 ? 0 : 1, 0, 1]);
         } else if (c.n === "Minion Horde") {
             for (let i = 0; i < 6; i++)
                 this.ents.push(new Troop(tm, x + this.random() * 50 - 25, y + this.random() * 50 - 25, this.getCard("Minions")));
@@ -1105,18 +1097,14 @@ export default class GameEngine {
             for (const [dx, dy] of [[-20, -11], [20, -11], [0, 0], [-20, 13], [20, 13]])
                 this.ents.push(new Troop(tm, x + dx, y + dy, c));
         } else if (c.n === "Elite Barbarians") {
-            if (this.isMidSplit(x)) { this.spawnSplit(tm, y, c, 2); }
-            else {
-                this.ents.push(new Troop(tm, x - 10, y, c));
-                this.ents.push(new Troop(tm, x + 10, y, c));
-            }
+            this.ents.push(new Troop(tm, x - 10, y, c));
+            this.ents.push(new Troop(tm, x + 10, y, c));
+            if (this.isMidSplit(x)) this.splitLanes([0, 1]);
         } else if (c.n === "Zappies") {
-            if (this.isMidSplit(x)) { this.spawnSplit(tm, y, c, 2); this.ents.push(new Troop(tm, x, y + 10, c)); }
-            else {
-                this.ents.push(new Troop(tm, x - 10, y, c));
-                this.ents.push(new Troop(tm, x + 10, y, c));
-                this.ents.push(new Troop(tm, x, y + 10, c));
-            }
+            this.ents.push(new Troop(tm, x - 10, y, c));
+            this.ents.push(new Troop(tm, x + 10, y, c));
+            this.ents.push(new Troop(tm, x, y + 10, c));
+            if (this.isMidSplit(x)) this.splitLanes([0, 1, x < this.W / 2 ? 0 : 1]);
         } else if (c.n === "Mega Knight") {
             this.ents.push(new Troop(tm, x, y, c));
             for (let e of this.ents)
@@ -1127,28 +1115,20 @@ export default class GameEngine {
         } else if (c.t === 3) {
             this.ents.push(new Building(tm, x, y, c));
         } else if (c.n === "Royal Hogs") {
-            if (this.isMidSplit(x)) {
-                // Centre placement: two hogs to each lane.
-                for (const off of [-48, -20, 20, 48]) this.ents.push(new Troop(tm, this.W / 2 + off, y, c));
-            } else {
-                this.ents.push(new Troop(tm, x - 30, y, c));
-                this.ents.push(new Troop(tm, x - 10, y, c));
-                this.ents.push(new Troop(tm, x + 10, y, c));
-                this.ents.push(new Troop(tm, x + 30, y, c));
-            }
+            this.ents.push(new Troop(tm, x - 30, y, c));
+            this.ents.push(new Troop(tm, x - 10, y, c));
+            this.ents.push(new Troop(tm, x + 10, y, c));
+            this.ents.push(new Troop(tm, x + 30, y, c));
+            // Centre placement: two hogs pathfind to each lane.
+            if (this.isMidSplit(x)) this.splitLanes([0, 0, 1, 1]);
         } else if (c.n === "Three Musketeers") {
             // Deploys 3 ELITE Musketeers (ranged + bayonet melee). Centre placement
-            // splits them 1 / 2 between the lanes, like the real card.
+            // splits them 1 / 2 between the lanes via pathfinding, like the real card.
             const em = this.getCard("Elite Musketeer");
-            if (this.isMidSplit(x)) {
-                this.ents.push(new Troop(tm, this.W / 2 - 22, y, em));
-                this.ents.push(new Troop(tm, this.W / 2 + 20, y - 8, em));
-                this.ents.push(new Troop(tm, this.W / 2 + 38, y + 12, em));
-            } else {
-                this.ents.push(new Troop(tm, x - 26, y, em));
-                this.ents.push(new Troop(tm, x + 26, y, em));
-                this.ents.push(new Troop(tm, x, y + 18, em));
-            }
+            this.ents.push(new Troop(tm, x - 26, y, em));
+            this.ents.push(new Troop(tm, x + 26, y, em));
+            this.ents.push(new Troop(tm, x, y + 18, em));
+            if (this.isMidSplit(x)) this.splitLanes([0, 1, x < this.W / 2 ? 0 : 1]);
         } else if (c.n === "Royal Recruits") {
             let offsets = [-150, -90, -30, 30, 90, 150];
             for (let off of offsets) {
