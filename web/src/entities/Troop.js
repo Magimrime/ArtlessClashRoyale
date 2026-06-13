@@ -87,6 +87,8 @@ export default class Troop extends Entity {
 
         if (c.n === "Princess") this.sightRange = 400;
         if (c.n === "Prince") this.rad = 12;
+        // EVO Musketeer: 3 global-range sniper shots (never spent on towers).
+        if (c.n === "Musketeer" && c.isEvo) this.sniperShots = 3;
     }
 
     get hp() {
@@ -280,6 +282,31 @@ export default class Troop extends Entity {
                     this.jt = { x: this.x + dx, y: landingY, hp: 1 };
                     this.jd = this.dist(this.jt);
                 }
+            }
+        }
+
+        // EVO Musketeer sniper: while she has shots left, ANY enemy troop or building
+        // anywhere on the map (never a tower) gets sniped — she stands and fires a
+        // very fast purple bolt on her normal reload.
+        if (this.c.n === "Musketeer" && this.c.isEvo && this.sniperShots > 0) {
+            let tgt = null, bd = Infinity;
+            for (let e of g.ents) {
+                if (e.tm === this.tm || e.hp <= 0) continue;
+                if (e.constructor.name === "Tower") continue;
+                let d = this.dist(e);
+                if (d < bd) { bd = d; tgt = e; }
+            }
+            if (tgt) {
+                this.atk = true; // aiming — stands still
+                if (this.cd-- <= 0) {
+                    // 280 dmg: kills everything The Log (290) kills, slightly weaker.
+                    let p = new Proj(this.x, this.y, tgt.x, tgt.y, tgt, 22, false, 5, 280, this.tm, false);
+                    p.flashCol = "#c45cff"; // purple sniper bolt
+                    g.projs.push(p);
+                    this.sniperShots--;
+                    this.cd = this.c.rt;
+                }
+                return;
             }
         }
 

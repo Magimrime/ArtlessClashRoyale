@@ -2416,6 +2416,16 @@ class Main {
                 ctx.fillStyle = e._barFriend ? "#2f8bff" : "#ff4d4d";
                 ctx.fillRect(x - barW / 2, barY, barW * hpPct, 4);
             }
+            // EVO Musketeer: remaining sniper shots as purple pips above the bar.
+            if (e.sniperShots > 0) {
+                for (let i = 0; i < e.sniperShots; i++) {
+                    let px = x - (e.sniperShots - 1) * 5 + i * 10;
+                    ctx.fillStyle = "#c45cff";
+                    ctx.beginPath(); ctx.arc(px, barY - 9, 3.2, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = "rgba(255,255,255,0.75)"; ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.arc(px, barY - 9, 3.2, 0, Math.PI * 2); ctx.stroke();
+                }
+            }
         }
     }
 
