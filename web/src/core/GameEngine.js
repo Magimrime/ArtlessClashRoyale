@@ -23,7 +23,7 @@ export default class GameEngine {
 
         // Evolutions: which cards CAN evolve and how many normal plays charge the
         // evo. evoSel / enemyEvoSel hold the (≤2) card names chosen as evos per deck.
-        this.EVO_REQ = { "Barbarians": 1, "Archers": 2, "Inferno Dragon": 2, "Royal Recruits": 1, "Goblin Barrel": 2, "Musketeer": 2 };
+        this.EVO_REQ = { "Barbarians": 1, "Archers": 2, "Inferno Dragon": 2, "Royal Recruits": 1, "Goblin Barrel": 2, "Musketeer": 2, "Wall Breakers": 2 };
         this.evoSel = [];
         this.enemyEvoSel = [];
 

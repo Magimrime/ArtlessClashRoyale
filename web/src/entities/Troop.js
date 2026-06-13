@@ -89,6 +89,15 @@ export default class Troop extends Entity {
         if (c.n === "Prince") this.rad = 12;
         // EVO Musketeer: 3 global-range sniper shots (never spent on towers).
         if (c.n === "Musketeer" && c.isEvo) this.sniperShots = 3;
+        // EVO Wall Breakers: a bomb SHIELD (second health bar) with the same HP as
+        // the breaker itself. Breaking it sets off the bomb where they stand — but
+        // they survive at full health and keep charging. Connecting with it intact
+        // adds the bomb to the suicide blast.
+        if (c.n === "Wall Breakers" && c.isEvo) {
+            this.shield = c.hp;
+            this.maxShield = c.hp;
+            this.bombArmed = true;
+        }
     }
 
     get hp() {
@@ -153,6 +162,15 @@ export default class Troop extends Entity {
             this.isCharging = false; this.distWalked = 0; // a stun stops a Prince's charge
             this.atk = false; // a stun breaks the lock
             return;
+        }
+
+        // EVO Wall Breakers: the bomb shield popped — detonate on the spot. The
+        // breaker itself survives (the shield ate the hit) and keeps charging.
+        if (this.bombArmed && this.maxShield > 0 && this.shield <= 0) {
+            this.bombArmed = false;
+            for (let e of g.ents)
+                if (e.tm !== this.tm && e.hp > 0 && this.dist(e) < 60) e.hp -= 288;
+            g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 60, 0, this.tm, false).asShockwave());
         }
 
         if (this.kbTime > 0) {
@@ -666,6 +684,9 @@ export default class Troop extends Entity {
     explodeSpirit(g, t) {
         if (this.exploded) return;
         this.exploded = true;
+        // Self-destruct bypasses any shield (an evo Wall Breaker's bomb shield must
+        // not absorb its own suicide blast and leave it standing).
+        this.shield = 0;
         this.hp = 0;
 
         if (this.c.n === "Fire Spirit") {
@@ -678,10 +699,16 @@ export default class Troop extends Entity {
         }
         if (this.c.n === "Wall Breakers") {
             g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 60, 0, this.tm, false).asFireArea());
+            // EVO with the bomb shield still intact: the bomb goes off WITH the
+            // suicide blast — 392 + 288 = 680 to the structure it connects with.
+            let bomb = this.bombArmed ? 288 : 0;
+            this.bombArmed = false;
             for (let e of g.ents) {
-                if (e.tm !== this.tm && this.dist(e) < 60) {
-                    if (e.constructor.name === "Tower" || e.constructor.name === "Building") e.hp -= this.c.d;
-                    else e.hp -= Math.floor(this.c.d / 2);
+                // Blast reaches the EDGE of big targets (a king's hitbox is wider
+                // than the old flat 60, which made wall breakers whiff on kings).
+                if (e.tm !== this.tm && this.dist(e) < 60 + g.getHitboxRadius(e)) {
+                    if (e.constructor.name === "Tower" || e.constructor.name === "Building") e.hp -= this.c.d + bomb;
+                    else e.hp -= Math.floor(this.c.d / 2) + bomb;
                 }
             }
             return;
