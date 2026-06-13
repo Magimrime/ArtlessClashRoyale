@@ -56,9 +56,6 @@ export default class GameEngine {
         this.sandboxSide = 0;         // 0 (blue) | 1 (red) — fixes team + placement rules
         this.sandboxNoRules = false;  // world edit: ignore ALL placement limitations
         this.bridgeXs = [this.W / 4, this.W * 3 / 4]; // movable in sandbox world edit
-        // The TERRITORY LINE: splits the board into blue (below) and red (above)
-        // halves and caps how far placement may go. Movable in the sandbox Tools.
-        this.territoryY = 405;
         this.cheated = false;
         this.gamesPlayed = 0;
         this.gamesWon = 0;
@@ -218,7 +215,6 @@ export default class GameEngine {
         // Reset world-edit geometry (side / rules prefs survive map switches).
         this.RIV_Y = 405;
         this.bridgeXs = [this.W / 4, this.W * 3 / 4];
-        this.territoryY = 405;
         if (this.sandboxSide !== 0 && this.sandboxSide !== 1) this.sandboxSide = 0; // always a chosen side
         this.p1 = new Player(0);
         this.p2 = new Player(1);
@@ -256,7 +252,7 @@ export default class GameEngine {
     sandboxPlace(c, x, y, useEvo = false) {
         if (!this.sandbox || !c) return false;
         let side = this.sandboxSide;
-        let tm = (side === 0 || side === 1) ? side : ((y < this.territoryY) ? 1 : 0);
+        let tm = (side === 0 || side === 1) ? side : ((y < this.RIV_Y) ? 1 : 0);
         if (!this.isValid(y, x, c, tm)) return false;
         this.addU(tm, c, x, y, useEvo && this.isEvoCapable(c.n));
         return true;
@@ -289,7 +285,7 @@ export default class GameEngine {
         if (!this.sandbox) return false;
         if (y < 60 || y > 750) return false;
         let side = this.sandboxSide;
-        let tm = (side === 0 || side === 1) ? side : ((y < this.territoryY) ? 1 : 0);
+        let tm = (side === 0 || side === 1) ? side : ((y < this.RIV_Y) ? 1 : 0);
         let rad = kind === 'king' ? 50 : 36;
         for (let e of this.ents) {
             if ((e.constructor.name === "Tower" || e.constructor.name === "Building") && e.hp > 0) {
@@ -533,7 +529,6 @@ export default class GameEngine {
         this.sandboxNoRiver = false;
         this.RIV_Y = 405;
         this.bridgeXs = [this.W / 4, this.W * 3 / 4];
-        this.territoryY = 405;
 
         this.p1 = new Player(0);
         this.p2 = new Player(1);
@@ -635,16 +630,16 @@ export default class GameEngine {
             // P1 (tm=0) plays on bottom (y > RIV_Y), P2 (tm=1) plays on top (y < RIV_Y)
 
             if (tm === 0) {
-                // Player Logic — can be thrown right up to the territory line.
+                // Player Logic — can be thrown right up to the river's edge.
                 if (this.t2L && this.t2L.hp <= 0 && x < this.W / 2 && y >= 200) return true; // Pocket Left
                 if (this.t2R && this.t2R.hp <= 0 && x > this.W / 2 && y >= 200) return true; // Pocket Right
-                if (y < this.territoryY + 5) return false;
+                if (y < this.RIV_Y + 5) return false;
                 return true;
             } else {
                 // Enemy Logic
                 if (this.t1L && this.t1L.hp <= 0 && x < this.W / 2 && y <= this.H - 200) return true; // Pocket Left
                 if (this.t1R && this.t1R.hp <= 0 && x > this.W / 2 && y <= this.H - 200) return true; // Pocket Right
-                if (y > this.territoryY - 5) return false;
+                if (y > this.RIV_Y - 5) return false;
                 return true;
             }
         }
@@ -665,16 +660,16 @@ export default class GameEngine {
 
         if (tm === 0) {
             // Buildings can't go in/near the river; troops can be placed right up
-            // to the TERRITORY LINE (the last tile on your side of it).
+            // to the bridge bank (river tile is RIV_Y ± 15).
             if (c.t === 3 && y > this.RIV_Y - 25 && y < this.RIV_Y + 25) return false;
-            if (y >= this.territoryY + 15) return true;
+            if (y >= this.RIV_Y + 15) return true;
             if (this.t2L && this.t2L.hp <= 0 && x < this.W / 2 && y >= 200) return true;
             if (this.t2R && this.t2R.hp <= 0 && x > this.W / 2 && y >= 200) return true;
             return false;
         } else {
             // Enemy placement
             if (c.t === 3 && y > this.RIV_Y - 25 && y < this.RIV_Y + 25) return false;
-            if (y <= this.territoryY - 15) return true;
+            if (y <= this.RIV_Y - 15) return true;
             if (this.t1L && this.t1L.hp <= 0 && x < this.W / 2 && y <= this.H - 200) return true;
             if (this.t1R && this.t1R.hp <= 0 && x > this.W / 2 && y <= this.H - 200) return true;
             return false;

@@ -500,7 +500,6 @@ class Main {
                 return;
             }
             if (this.sandboxToolsOpen) {
-                let keepOpen = false;
                 for (const o of this.sandboxToolRects()) {
                     if (!this.contains(o, x, y)) continue;
                     if (o.id === 'eraser') {
@@ -508,17 +507,10 @@ class Main {
                         if (this.sandboxEraser) { this.eng.sel = null; this.sandboxTowerArm = null; }
                     } else if (o.id === 'clear') {
                         this.eng.sandboxClearTroops();
-                    } else if (o.id === 'lineUp') {
-                        // Territory line moves in tile steps; popup stays open for repeats.
-                        this.eng.territoryY = Math.max(105, this.eng.territoryY - 30);
-                        keepOpen = true;
-                    } else if (o.id === 'lineDn') {
-                        this.eng.territoryY = Math.min(705, this.eng.territoryY + 30);
-                        keepOpen = true;
                     }
                     break;
                 }
-                if (!keepOpen) this.sandboxToolsOpen = false;
+                this.sandboxToolsOpen = false;
                 return;
             }
             if (this.sandboxWorldOpen) {
@@ -1032,8 +1024,6 @@ class Main {
             // The tile grid is always visible during play.
             this.drawGrid();
 
-            // (The territory boundary is invisible — it still caps placement and can
-            // be moved from the sandbox Tools, but no line is drawn.)
 
             if ((this.state === State.PLAY || this.state === State.CNT) && this.eng.sel && (this.eng.sel.t !== 2 || ["The Log", "Barbarian Barrel", "Royale Delivery"].includes(this.eng.sel.n))) {
                 // Invalid-placement tint
@@ -1053,10 +1043,10 @@ class Main {
                 this.eng.sandboxMap !== 'open' && // open map: no restrictions, no tint
                 (this.eng.sel.t !== 2 || ["The Log", "Barbarian Barrel", "Royale Delivery"].includes(this.eng.sel.n)) &&
                 (this.eng.sandboxSide === 0 || this.eng.sandboxSide === 1)) {
-                const TY = this.eng.territoryY; // the line, not the river, bounds placement
+                const RY = this.eng.RIV_Y || RIV_Y;
                 ctx.fillStyle = "rgba(255, 0, 0, 0.28)";
-                if (this.eng.sandboxSide === 0) ctx.fillRect(0, 0, W, TY - 15);
-                else ctx.fillRect(0, TY + 15, W, 810 - TY - 15);
+                if (this.eng.sandboxSide === 0) ctx.fillRect(0, 0, W, RY - 15);
+                else ctx.fillRect(0, RY + 15, W, 810 - RY - 15);
             }
 
             // Entity bodies are drawn below in layered passes
@@ -1665,8 +1655,6 @@ class Main {
                 let rects = this.sandboxToolRects();
                 popupBg("Tools", rects[0].y);
                 for (const o of rects) this.drawBtn(o, o.label, o.color);
-                this.drawCenteredString(`Territory line y: ${this.eng.territoryY}`,
-                    W / 2, rects[rects.length - 1].y + 50 + 22, "600 12px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.75)");
             } else if (this.sandboxWorldOpen) {
                 let rects = this.sandboxWorldRects();
                 popupBg("World Edit", rects[0].y - 26); // leave room for the info line
@@ -1997,15 +1985,11 @@ class Main {
 
     // Sandbox TOOLS popup.
     sandboxToolRects() {
-        const mk = (id, label, i, color) => ({ id, label, color, x: W / 2 - 120, y: H / 2 - 150 + i * 62, w: 240, h: 50 });
-        // Row 2 splits into the two territory-line movers.
-        const half = (id, label, left, color) => ({ id, label, color, x: W / 2 - 120 + (left ? 0 : 126), y: H / 2 - 150 + 2 * 62, w: 114, h: 50 });
+        const mk = (id, label, i, color) => ({ id, label, color, x: W / 2 - 120, y: H / 2 - 120 + i * 62, w: 240, h: 50 });
         return [
             mk('eraser', this.sandboxEraser ? "ERASER: ON" : "ERASER", 0, this.sandboxEraser ? "#e84d8a" : "#7f8b84"),
             mk('clear', "CLEAR TROOPS", 1, "#e0762c"),
-            half('lineUp', "LINE ↑", true, "#9a7bd0"),
-            half('lineDn', "LINE ↓", false, "#9a7bd0"),
-            mk('close', "CLOSE", 3, "#FF6347"),
+            mk('close', "CLOSE", 2, "#FF6347"),
         ];
     }
 
