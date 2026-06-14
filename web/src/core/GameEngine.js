@@ -37,6 +37,7 @@ export default class GameEngine {
         this.aiTick = 0;
         this.gameStart = 0;
         this.over = false;
+        this.gameOverTimer = undefined;
         this.win = 0;
 
         // Multiplayer Stats
@@ -74,13 +75,14 @@ export default class GameEngine {
         // effect value (Crate and Vines have no real counterpart).
         this.allCards = [
             new Card("Knight", 3, 1766, 202, 0.5, 14, 0, 100, 72, 150, false, false),
+            new Card("Hopper", 4, 1766, 0, 0, 45, 0, 100, 30, 150, false, false),
             new Card("Archers", 3, 304, 87, 0.5, 128, 0, 100, 54, 150, false, true),
             new Card("Giant", 5, 4091, 254, 0.375, 14, 1, 100, 90, 150, false, false),
             new Card("Fireball", 4, 0, 689, 0, 0, 2, 0, 0, 0, false, true),
             new Card("Rocket", 6, 0, 1484, 0, 0, 2, 0, 0, 0, false, true),
             new Card("Mini PEKKA", 4, 1361, 720, 0.75, 8, 0, 100, 96, 150, false, false),
             new Card("Zap", 2, 0, 192, 0, 0, 2, 0, 0, 0, false, true),
-            new Card("Skeletons", 1, 81, 81, 0.75, 8, 0, 100, 60, 150, false, false),
+            new Card("Skeletons", 1, 30, 81, 0.75, 8, 0, 100, 60, 150, false, false),
             new Card("Musketeer", 4, 720, 218, 0.5, 158, 0, 100, 60, 150, false, true),
             new Card("Three Musketeers", 9, 883, 204, 0.5, 158, 0, 100, 72, 150, false, true),
             new Card("Cannon", 3, 824, 212, 0, 143, 3, 1800, 54, 165, false, false),
@@ -132,7 +134,10 @@ export default class GameEngine {
             new Card("Royal Recruits", 7, 532, 133, 0.5, 26, 0, 100, 78, 150, false, false),
             new Card("Dark Prince", 4, 1200, 248, 0.5, 14, 0, 100, 78, 150, false, false),
             new Card("Crate", 2, 300, 0, 0, 0, 3, 1800, 0, 0, false, false),
-            new Card("Ice Golem", 2, 1197, 84, 0.375, 8, 1, 100, 150, 150, false, false)
+            new Card("Ice Golem", 2, 1197, 84, 0.375, 8, 1, 100, 150, 150, false, false),
+            new Card("Lumberjack", 4, 1244, 150, 1, 14, 0, 100, 60, 150, false, false),
+            new Card("Rage", 2, 0, 140, 0, 0, 2, 0, 0, 0, false, true),
+            new Card("Balloon", 5, 1421, 644, 0.75, 14, 1, 100, 120, 150, true, false)
         ];
 
         // Role tags drive the enemy AI's counter logic. (Stats above are already
@@ -166,7 +171,7 @@ export default class GameEngine {
         // Win conditions: cards whose job is to deal tower damage.
         if (has(["Giant", "Golem", "Royal Giant", "Electro Giant", "Hog Rider",
             "Royal Hogs", "Lava Hound", "Elixir Golem", "Wall Breakers",
-            "Goblin Barrel", "Graveyard"]))
+            "Goblin Barrel", "Graveyard", "Balloon"]))
             tags.push("WinCon");
 
         // Tanks: high-HP units meant to soak damage up front.
@@ -188,7 +193,7 @@ export default class GameEngine {
         // High single-target DPS: melts tanks and win conditions.
         if (has(["Mini PEKKA", "P.E.K.K.A", "Musketeer", "Inferno Dragon",
             "Sparky", "Prince", "Elite Barbarians", "Mega Minion", "Wizard",
-            "Three Musketeers", "Elite Musketeer"]))
+            "Three Musketeers", "Elite Musketeer", "Lumberjack"]))
             tags.push("DamageDealer");
 
         // Direct-damage / effect spells the AI can throw at a threat.
@@ -211,7 +216,8 @@ export default class GameEngine {
     setupSandbox(map) {
         this.sandbox = true;
         this.sandboxMap = map || 'default';
-        this.sandboxNoRiver = (this.sandboxMap === 'open');
+        // 'open' and 'blank' have no river. ('blank' also has no towers.)
+        this.sandboxNoRiver = (this.sandboxMap === 'open' || this.sandboxMap === 'blank');
         // Reset world-edit geometry (side / rules prefs survive map switches).
         this.RIV_Y = 405;
         this.bridgeXs = [this.W / 4, this.W * 3 / 4];
@@ -223,20 +229,25 @@ export default class GameEngine {
         this.deploys = [];
         this.sel = null;
         this.over = false;
+        this.gameOverTimer = undefined;
         this.tiebreaker = false;
         this.isDoubleElixir = false;
         this.aiTick = 0;
         this.gameStart = Date.now();
         this.nextEntityId = 1;
         this.enemyAI = null;
-        this.t1L = this.t1R = this.t2L = this.t2R = null;
-        this.t1K = new Tower(0, this.W / 2, 735, true); this.ents.push(this.t1K);
-        this.t2K = new Tower(1, this.W / 2, 75, true); this.ents.push(this.t2K);
-        // Kings start ASLEEP (like a real match) and wake when attacked — see the
-        // sandbox activation check in upd().
-        if (this.sandboxMap === 'heist') {
-            // Heist: bare kings with no turret — they can't shoot at all.
-            this.t1K.noTurret = true; this.t2K.noTurret = true;
+        this.t1L = this.t1R = this.t2L = this.t2R = this.t1K = this.t2K = null;
+        // 'river' (river only) and 'blank' (empty) have NO towers at all.
+        const hasKings = (this.sandboxMap !== 'river' && this.sandboxMap !== 'blank');
+        if (hasKings) {
+            this.t1K = new Tower(0, this.W / 2, 735, true); this.ents.push(this.t1K);
+            this.t2K = new Tower(1, this.W / 2, 75, true); this.ents.push(this.t2K);
+            // Kings start ASLEEP (like a real match) and wake when attacked — see the
+            // sandbox activation check in upd().
+            if (this.sandboxMap === 'heist') {
+                // Heist: bare kings with no turret — they can't shoot at all.
+                this.t1K.noTurret = true; this.t2K.noTurret = true;
+            }
         }
         if (this.sandboxMap === 'default') {
             this.t1L = new Tower(0, this.W / 4, 645, false); this.ents.push(this.t1L);
@@ -537,6 +548,7 @@ export default class GameEngine {
         this.deploys = [];
         this.sel = null;
         this.over = false;
+        this.gameOverTimer = undefined;
         this.aiTick = 0;
         this.gameStart = Date.now();
         this.isDoubleElixir = false;
@@ -607,23 +619,18 @@ export default class GameEngine {
     isValid(y, x, c, tm) {
         if (this.sandbox) {
             if (y < 0 || y > 810) return false;
-            // World edit "rules off": anywhere on the field goes, even on structures.
-            if (this.sandboxNoRules) return true;
-            // The OPEN map has no placement restrictions at all.
-            if (this.sandboxMap === 'open') return true;
-            // Free side: either half, only not on top of a structure.
-            if (this.sandboxSide !== 0 && this.sandboxSide !== 1) {
-                if (!this.sandboxNoRiver && c.t === 3 && y > this.RIV_Y - 25 && y < this.RIV_Y + 25) return false;
-                for (let e of this.ents) {
-                    let isStruct = e.constructor.name === "Building" || e.constructor.name === "Tower";
-                    if (isStruct && e.hp > 0) {
-                        let gap = this.getHitboxRadius(e) + this.getVisualRadius(c) * (c.t === 3 ? 0.9 : 0.45);
-                        if (Math.hypot(e.x - x, e.y - y) < gap) return false;
-                    }
+            // Sandbox has NO side/river red zones. Spells (and the "rules off" toggle)
+            // drop anywhere; the ONLY restriction is you can't place on top of a tower
+            // or building.
+            if (this.sandboxNoRules || c.t === 2 || c.n === "Goblin Barrel") return true;
+            for (let e of this.ents) {
+                let isStruct = e.constructor.name === "Building" || e.constructor.name === "Tower";
+                if (isStruct && e.hp > 0) {
+                    let gap = this.getHitboxRadius(e) + this.getVisualRadius(c) * (c.t === 3 ? 0.9 : 0.45);
+                    if (Math.abs(e.x - x) < gap && Math.abs(e.y - y) < gap) return false;
                 }
-                return true;
             }
-            // A chosen side falls through to the NORMAL per-team rules below.
+            return true;
         }
         if (c.n === "The Log" || c.n === "Barbarian Barrel" || c.n === "Royale Delivery") {
             // Log/BarbBarrel must be placed on player's side (roughly) unless tower down
@@ -694,12 +701,16 @@ export default class GameEngine {
         const COLS = 18, ROWS = 32, T = 30;
         this.navCols = COLS; this.navRows = ROWS; this.navT = T;
         let grid = new Uint8Array(COLS * ROWS);
+        const RY = this.RIV_Y || 405;
+        const bxs = this.bridgeXs || [this.W / 4, this.W * 3 / 4];
         for (let r = 0; r < ROWS; r++) {
             for (let c = 0; c < COLS; c++) {
                 let cx = c * T + 15, cy = r * T + 15, ok = 1;
-                // River: passable only in the bridge cells that sit fully on the
-                // actual bridge (the river-clamp allows x within ±30 of the bridge).
-                if (cy > 385 && cy < 415) ok = (Math.abs(cx - this.W / 4) <= 15 || Math.abs(cx - this.W * 3 / 4) <= 15) ? 1 : 0;
+                // River (live position): impassable except the bridge columns. Maps with
+                // no river leave the whole field open.
+                if (!this.sandboxNoRiver && Math.abs(cy - RY) <= 15) {
+                    ok = bxs.some(bx => Math.abs(cx - bx) <= 16) ? 1 : 0;
+                }
                 grid[r * COLS + c] = ok;
             }
         }
@@ -803,8 +814,9 @@ export default class GameEngine {
         if (c.n === "Arrows") return { type: 'circle', val: 91 };
         if (c.n === "Poison") return { type: 'circle', val: 95 };
         if (c.n === "Graveyard") return { type: 'circle', val: 92 };
+        if (c.n === "Rage") return { type: 'circle', val: 88 };
         if (c.n === "Freeze") return { type: 'circle', val: 67 };
-        if (c.n === "Vines") return { type: 'circle', val: 59 };
+        if (c.n === "Vines") return { type: 'circle', val: 52 };
         if (c.n === "Zap") return { type: 'circle', val: 55 };
         if (c.n === "Fireball") return { type: 'circle', val: 55 }; // slightly bigger
         if (c.n === "Giant Snowball") return { type: 'circle', val: 55 };
@@ -948,7 +960,7 @@ export default class GameEngine {
         if (c.n === "Goblin Barrel") {
             // Thrown from the king tower, arcs up and back down (like Fireball but
             // slower) with a flying shadow, then pops 3 goblins on the target tile.
-            let kt = (tm === 0) ? this.t1K : this.t2K;
+            let kt = this.kingOrigin(tm);
             let p = new Proj(kt.x, kt.y, x, y, null, 2.4, false, 30, 0, tm, false); // 2.5x slower
             p.asSpellArc(150, "barrel");
             p.barrelGoblins = true;
@@ -1040,13 +1052,16 @@ export default class GameEngine {
                 p.crownMult = crown;
                 this.projs.push(p);
             } else if (ARC[c.n]) {
-                let kt = (tm === 0) ? this.t1K : this.t2K;
+                let kt = this.kingOrigin(tm);
                 let cfg = ARC[c.n];
                 let p = new Proj(kt.x, kt.y, x, y, null, cfg.spd, false, rad, dmg, tm, false);
                 p.asSpellArc(cfg.arc, cfg.kind);
                 p.crownMult = crown;
                 if (c.n === "Fireball") p.hasKnockback = true;
                 this.projs.push(p);
+            } else if (c.n === "Rage") {
+                // A pink bottle hops up then splashes into a 5s buff zone.
+                this.projs.push(new Proj(x, y, x, y, null, 0, true, rad, dmg, tm, false).asRage(rad, 300));
             } else {
                 // Placed spells fall from the sky as a symbol, then resolve.
                 let p = new Proj(x, y, x, y, null, 0, true, rad, dmg, tm, false);
@@ -1076,7 +1091,14 @@ export default class GameEngine {
             this.ents.push(new Troop(tm, x - S * 0.55, y + S * 0.5, c));
             this.ents.push(new Troop(tm, x + S * 0.55, y + S * 0.5, c));
             if (this.isMidSplit(x)) this.splitLanes([x < this.W / 2 ? 0 : 1, 0, 1]);
-        } else if (c.n === "Goblins" || c.n === "Minions") {
+        } else if (c.n === "Goblins") {
+            // Four goblins in a tight diamond.
+            this.ents.push(new Troop(tm, x, y - 12, c));
+            this.ents.push(new Troop(tm, x - 12, y, c));
+            this.ents.push(new Troop(tm, x + 12, y, c));
+            this.ents.push(new Troop(tm, x, y + 12, c));
+            if (this.isMidSplit(x)) this.splitLanes([0, 0, 1, 1]);
+        } else if (c.n === "Minions") {
             this.ents.push(new Troop(tm, x, y - 10, c));
             this.ents.push(new Troop(tm, x - 10, y + 10, c));
             this.ents.push(new Troop(tm, x + 10, y + 10, c));
@@ -1148,6 +1170,14 @@ export default class GameEngine {
         c = this.tokens.find(c => c.n === n);
         if (c) return c;
         return this.allCards[0];
+    }
+
+    // Origin a king-tower-thrown spell (Fireball / Goblin Barrel / …) arcs FROM.
+    // Null-safe for tower-less sandbox maps: falls back to the team's back line.
+    kingOrigin(tm) {
+        let kt = (tm === 0) ? this.t1K : this.t2K;
+        if (kt) return { x: kt.x, y: kt.y };
+        return { x: this.W / 2, y: (tm === 0) ? 760 : 50 };
     }
 
     endGame(winner) {
@@ -1275,8 +1305,15 @@ export default class GameEngine {
             if (this.doubleElixirAnim > 0) this.doubleElixirAnim--;
 
             if (this.t1K.hp <= 0 || this.t2K.hp <= 0) {
-                this.endGame(this.t1K.hp <= 0 ? 1 : 0);
-                return;
+                // King down: it's already removed/gone from the field. Hold the game-over
+                // popup ~0.5s so the tower visibly DISAPPEARS first, then show it.
+                if (this.gameOverTimer === undefined) {
+                    this.gameOverTimer = 30; // 0.5s
+                    this.gameOverWinner = this.t1K.hp <= 0 ? 1 : 0;
+                }
+            }
+            if (this.gameOverTimer !== undefined) {
+                if (--this.gameOverTimer <= 0) { this.endGame(this.gameOverWinner); return; }
             }
         }
 
@@ -1342,9 +1379,13 @@ export default class GameEngine {
         // unit-vs-unit). One pass per pair — no redundant push loop.
         for (let i = 0; i < this.ents.length; i++) {
             let a = this.ents[i];
+            if (a.hp <= 0) continue; // dying units are gone — they don't block
             for (let j = i + 1; j < this.ents.length; j++) {
                 let b = this.ents[j];
-                if (a.fly !== b.fly) continue;
+                if (a.fly !== b.fly || b.hp <= 0) continue;
+                // A unit mid-LEAP is airborne and passes through everything (incl. another
+                // leaper) — so each completes its full arc and deals its own landing splash.
+                if (a.jp || b.jp) continue;
 
                 let aIsStruct = a instanceof Tower || a instanceof Building;
                 let bIsStruct = b instanceof Tower || b instanceof Building;
@@ -1398,29 +1439,55 @@ export default class GameEngine {
                         let ang = this.random() * Math.PI * 2;
                         dx = Math.cos(ang); dy = Math.sin(ang); d = 1; // unit vector
                     }
-                    // Mass-weighted separation: the lighter unit moves more, the
-                    // heavier one barely budges (so tanks plow through swarms). Each
-                    // unit's step is capped so they slide apart smoothly, no teleport.
+                    // Mass-weighted separation: the lighter unit moves more, the heavier
+                    // one barely budges. A Hopper is IMMOVABLE — nothing can push past it.
                     let overlap = r - d;
                     let nx = dx / d, ny = dy / d;
+                    let aHop = a.c && a.c.n === "Hopper", bHop = b.c && b.c.n === "Hopper";
                     let total = a.mass + b.mass;
-                    let aMove = Math.min(overlap * (b.mass / total), 5);
-                    let bMove = Math.min(overlap * (a.mass / total), 5);
+                    let aMove = (aHop && !bHop) ? 0 : Math.min(overlap * (b.mass / total), 5);
+                    let bMove = (bHop && !aHop) ? 0 : Math.min(overlap * (a.mass / total), 5);
+                    if (aHop && !bHop) bMove = Math.min(overlap, 5);
+                    if (bHop && !aHop) aMove = Math.min(overlap, 5);
                     a.x += nx * aMove; a.y += ny * aMove;
                     b.x -= nx * bMove; b.y -= ny * bMove;
                 }
             }
         }
 
+        // Rebuild the pathfinding grid every few ticks (and on first use) so troop
+        // waypoints route around the current towers / buildings and the river.
+        if (!this.navGrid || this.aiTick % 8 === 0) this.buildNavGrid();
+
+        // Snapshot who is alive at the START of the tick (for the mutual-kill draw).
+        for (let e of this.ents) e._aliveAtTick = (e.hp > 0);
+
         for (let i = 0; i < this.ents.length; i++) {
             let e = this.ents[i];
             if (e.fr > 0) e.fr--;
             if (e.rt > 0) e.rt--;
+            if (e.ragedTime > 0) e.ragedTime--;
             // Vines grounding: restore flight when it wears off.
             if (e.groundedTime > 0) { e.groundedTime--; if (e.groundedTime === 0 && e.wasFlying) { e.fly = true; e.wasFlying = false; } }
-            if (e.vinedTime > 0) e.vinedTime--;
+            if (e.vinedTime > 0) {
+                e.vinedTime--;
+                // Vines DoT: exactly 3 pulses, each hitting HARDER than the last
+                // (60, 100, 140 = 300 total, just over The Log's 290 — so it kills
+                // everything the Log kills).
+                e.vineTick = (e.vineTick || 0) + 1;
+                if (e.vineTick >= 12 && (e.vinePulse || 0) < 3) {
+                    e.vineTick = 0;
+                    e.vinePulse = (e.vinePulse || 0) + 1;
+                    e.hp -= [0, 60, 100, 140][e.vinePulse];
+                }
+                if (e.vinedTime === 0) { e.vineTick = 0; e.vinePulse = 0; }
+            }
 
-            if (e.fr <= 0 && e.hp > 0) e.act(this);
+            // A TROOP acts if it was alive at the START of the tick, or is still in its
+            // brief DYING window — so a troop reduced to 0 this tick still lands its blow
+            // (mutual kills become draws). Towers/buildings act only while truly alive.
+            let mayAct = (e instanceof Troop) ? (e._aliveAtTick || e.dyingTime > 0) : (e.hp > 0);
+            if (e.fr <= 0 && mayAct) e.act(this);
 
             // Clamp position AFTER acting so a unit ends each tick inside the arena
             // and at the river bank (avoids the 1-tick edge/river jitter). Off-bridge
@@ -1429,17 +1496,39 @@ export default class GameEngine {
                 let visualR = e.rad;
                 e.x = Math.max(visualR, Math.min(this.W - visualR, e.x));
                 e.y = Math.max(visualR, Math.min(810 - visualR, e.y));
-                if (!this.sandboxNoRiver && e.y + visualR > this.RIV_Y - 15 && e.y - visualR < this.RIV_Y + 15 && !e.fly) {
-                    let onBridge = this.bridgeXs.some(bx => e.x >= bx - 30 && e.x <= bx + 30);
-                    if (!onBridge) {
-                        e.y = e.y < this.RIV_Y ? this.RIV_Y - 15 - visualR : this.RIV_Y + 15 + visualR;
-                    }
+                // Only clamp a unit whose CENTRE is actually in the water (not one merely
+                // skirting the bank near the river) — otherwise a troop walking laterally
+                // between the two bridges gets snapped sideways onto a bridge and clips.
+                if (!this.sandboxNoRiver && Math.abs(e.y - this.RIV_Y) < 16 && !e.fly) {
+                    // In the water but off a bridge: slide back ONTO the nearest bridge
+                    // (keeps forward progress) rather than bouncing to the bank.
+                    let bx = this.bridgeXs.reduce((a, b) => Math.abs(e.x - a) <= Math.abs(e.x - b) ? a : b);
+                    if (Math.abs(e.x - bx) > 30) e.x = Math.max(bx - 30, Math.min(bx + 30, e.x));
                 }
             }
+        }
+
+        // DEATH pass (after every unit has acted). Handling deaths here — not inline in
+        // the act loop — means two troops that bring each other to 0 on the same tick are
+        // BOTH marked dying together, so their 3-tick delays stay in sync and they vanish
+        // together (a clean draw). Towers/buildings die immediately.
+        for (let i = 0; i < this.ents.length; i++) {
+            let e = this.ents[i];
             if (e.hp <= 0) {
-                e.die(this);
-                this.ents.splice(i, 1);
-                i--;
+                // Combat deaths get the 3-tick draw delay; SUICIDE units (spirits / wall
+                // breakers that exploded) and towers/buildings die instantly — they have
+                // nothing left to strike back with.
+                if (e instanceof Troop && !e.exploded) {
+                    if (e.dyingTime > 0) {
+                        if (--e.dyingTime <= 0) { e.die(this); this.ents.splice(i, 1); i--; }
+                    } else {
+                        e.dyingTime = 3;
+                    }
+                } else {
+                    e.die(this); this.ents.splice(i, 1); i--;
+                }
+            } else if (e.dyingTime) {
+                e.dyingTime = 0;
             }
         }
 

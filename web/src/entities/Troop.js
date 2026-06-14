@@ -21,6 +21,7 @@ export default class Troop extends Entity {
         else if (c.n === "Mega Knight" || c.n === "P.E.K.K.A") mass = 20;
         else if (c.n === "Sparky" || c.n === "Bowler") mass = 18;
         else if (c.n === "Cannon") mass = 15;
+        else if (c.n === "Balloon") mass = 19;
         else if (c.n.includes("Dragon") || c.n === "Lava Hound") mass = 16;
         else if (["Giant", "Golem", "Elixir Golem", "Royal Giant", "Electro Giant"].includes(c.n) || c.t === 3) mass = 20;
         else if (c.n === "Elixir Golemite") mass = 10;
@@ -33,7 +34,7 @@ export default class Troop extends Entity {
 
         this.c = c;
         this.tags = c.tags || [];
-        this.cd = 0;
+        this.cd = c.rt; // first-attack wind-up: a troop doesn't strike the instant it's ready
         // Deploy time: ~1s after placement a troop can't move or attack, like real
         // Clash Royale. (Death-spawns / clones clear this so they act instantly.)
         this.deployTime = 55;
@@ -55,6 +56,8 @@ export default class Troop extends Entity {
         this.moveTarget = null;
         this.currentWaypoint = null;
         this.crossedRiver = false;
+        this.crossT = 0;        // ticks the target has recently been across the river
+        this.crossing = false;  // sticky: committed to finishing a bridge crossing
 
         this.lastPos = { x: 0, y: 0 };
         this.stuckTimer = 0;
@@ -65,6 +68,8 @@ export default class Troop extends Entity {
         this.kbX = 0;
         this.kbY = 0;
         this.kbTime = 0;
+        this.fbSlowDelay = 0; // ticks until a Fireball's delayed slow+shove lands
+        this.fbSlow2 = 0;     // queued follow-up (1s/80%) slow after the first wears off
 
         this.curseTime = 0;
         this.aimTime = 0;
@@ -173,31 +178,52 @@ export default class Troop extends Entity {
             g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 60, 0, this.tm, false).asShockwave());
         }
 
-        if (this.kbTime > 0) {
-            // Knockback eases out: full speed at the start, slowing to a stop as the
-            // timer runs down. (kbMax captures the peak duration on the first tick.)
-            if (!this.kbMax || this.kbMax < this.kbTime) this.kbMax = this.kbTime;
-            let f = this.kbTime / this.kbMax;
-            this.x += this.kbX * f;
-            this.y += this.kbY * f;
+        if (this.kbTime > 0 && (this.kbVX || this.kbVY)) {
+            // FRICTION slide: a knocked-back unit keeps its velocity but the ground saps
+            // it (×0.84) every tick, so it skids and slows to a stop — never a smooth
+            // glide. (kbX/kbY are unused now; kbVX/kbVY carry the velocity.)
+            this.x += this.kbVX;
+            this.y += this.kbVY;
+            this.kbVX *= 0.84;
+            this.kbVY *= 0.84;
             this.kbTime--;
+            if (Math.hypot(this.kbVX, this.kbVY) < 0.25) { this.kbVX = 0; this.kbVY = 0; this.kbTime = 0; }
             this.isCharging = false; this.distWalked = 0; // a knockback stops a Prince's charge
         }
 
         if (this.curseTime > 0) this.curseTime--;
-        if (this.sl > 0) this.sl--;
+        // Fireball aftershock: 0.3s after the hit (the single impact shove has just
+        // faded), the unit is slowed 50% for 0.6s, which then chains into another 1s of
+        // a harder 80% slow.
+        if (this.fbSlowDelay > 0) {
+            this.fbSlowDelay--;
+            if (this.fbSlowDelay === 0) {
+                this.sl = 36; this.slowMul = 0.5; this.fbSlow2 = 60; // queue 1s/80% follow-up
+            }
+        }
+        if (this.sl > 0) {
+            this.sl--;
+            if (this.sl <= 0) {
+                if (this.fbSlow2 > 0) { this.sl = this.fbSlow2; this.fbSlow2 = 0; this.slowMul = 0.2; } // chained 80% slow, 1s
+                else this.slowMul = 0;
+            }
+        }
 
-        let speedMult = (this.sl > 0) ? 0.65 : 1.0;
+        // Most slows knock movement to 0.65x; a Fireball hit slows harder (0.5x) via slowMul.
+        let speedMult = (this.sl > 0) ? (this.slowMul || 0.65) : 1.0;
+        if (this.ragedTime > 0) speedMult *= 1.15; // Rage: +15% movement speed
+        // Rage: +20% hit speed (attacks land 20% faster — applied to the reload below).
+        const rageRt = (rt) => (this.ragedTime > 0 ? Math.max(1, Math.round(rt * 0.8)) : rt);
 
         if (["Zappies", "Sparky"].includes(this.c.n)) {
             let threshold = this.c.n === "Zappies" ? 72 : 180;
             if (this.chargeT < threshold) this.chargeT++;
         }
 
-        if (this.hp <= 0) {
-            this.die(g);
-            return;
-        }
+        // Reduced to 0 this tick? Don't bail here — fall through so we can land one final
+        // RETALIATING strike (the attack below is cd-gated, so at most once). The engine
+        // runs death effects and removes us after the short dying delay. We skip MOVEMENT
+        // (a dying troop holds its ground) — see the movement gate below.
 
         // Electro Giant: shocks on every attack (see the attack branch). When it is
         // NOT attacking, it still pulses a shock every 3 seconds.
@@ -215,43 +241,51 @@ export default class Troop extends Entity {
             }
         }
 
-        // Jump
+        // Jump — arc to a FIXED landing point (snapped when the leap began) so it
+        // reaches where it jumped smoothly instead of chasing a moving target.
         if (this.jp) {
             this.fly = true;
-            if (this.jt) {
-                let dx = this.jt.x - this.x;
-                let dy = this.jt.y - this.y;
+            {
+                let gx = (this.jdx !== undefined) ? this.jdx : (this.jt ? this.jt.x : this.x);
+                let gy = (this.jdy !== undefined) ? this.jdy : (this.jt ? this.jt.y : this.y);
+                let dx = gx - this.x;
+                let dy = gy - this.y;
                 let d = Math.hypot(dx, dy);
                 let jumpSpeed = 2.0;
 
-                // Jumping AT an entity (Mega Knight's attack jump): land on CONTACT —
-                // collision keeps two bodies ~a hitbox apart, so requiring a near-zero
-                // distance would leave the jumper airborne forever (the "flying Mega
-                // Knights" pile-up). Static river-jump points still land exactly.
-                let isEntity = !!this.jt.rad;
-                let landReach = jumpSpeed + 1;
-                if (isEntity) landReach = Math.max(landReach, g.getHitboxRadius(this) + g.getHitboxRadius(this.jt) + 2);
-                let targetGone = isEntity && (this.jt.hp <= 0 || !g.ents.includes(this.jt));
-
-                if (d < landReach || targetGone) {
-                    if (!isEntity) { this.x = this.jt.x; this.y = this.jt.y; } // snap only to static points
+                if (d < jumpSpeed + 1) {
+                    this.x = gx; this.y = gy; // land exactly at the fixed point
                     this.jp = false;
                     this.fly = false;
+                    this.jdx = undefined; this.jdy = undefined;
 
                     if (this.c.n === "Mega Knight") {
                         for (let e of g.ents)
-                            if (e.tm !== this.tm && !e.fly && this.dist(e) < 60)
+                            if (e.tm !== this.tm && !e.fly && this.dist(e) < 60) {
                                 e.hp -= 340; // jump-land area damage (real L11)
+                                // The slam knocks ground troops back — even a Hopper (hopperToo).
+                                if (e.constructor.name === "Troop") e.applyKnockback(Math.atan2(e.y - this.y, e.x - this.x), 38, false, true);
+                            }
                         // Landing shockwave visual.
                         g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 60, 0, this.tm, false).asShockwave());
+                    } else if (this.c.n === "Hopper") {
+                        // Mega-Knight-style landing: 65% smaller radius, 20% less damage,
+                        // and a hard 1.6-tile friction knockback that shoves EVERY card —
+                        // air, ground, even heavies (force = true).
+                        for (let e of g.ents) {
+                            if (e.tm !== this.tm && e.hp > 0 && this.dist(e) < 21 + g.getHitboxRadius(e)) {
+                                e.hp -= 272; // 80% of MK's 340 (20% less)
+                                // Shoves EVERY card (force): 1.7 tiles for normal troops,
+                                // 1.5 for another Hopper (so they leapfrog cleanly).
+                                if (e.constructor.name === "Troop") e.applyKnockback(Math.atan2(e.y - this.y, e.x - this.x), (e.c.n === "Hopper") ? 45 : 51, true, true);
+                            }
+                        }
+                        g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 21, 0, this.tm, false).asShockwave());
                     }
                 } else {
                     this.x += (dx / d) * jumpSpeed;
                     this.y += (dy / d) * jumpSpeed;
                 }
-            } else {
-                this.jp = false;
-                this.fly = false;
             }
             return;
         }
@@ -260,10 +294,29 @@ export default class Troop extends Entity {
             this.preJump--;
             if (this.preJump === 0 && this.jt && this.jt.hp > 0) {
                 this.jp = true;
-                this.kbTime = 0;
+                this.kbTime = 0; this.kbVX = 0; this.kbVY = 0;
+                this.jdx = this.jt.x; this.jdy = this.jt.y; // freeze the landing spot now
                 this.jd = this.dist(this.jt);
             }
             return;
+        }
+
+        // HOPPER: can't walk and never melees. While not already mid-leap, it LEAPS onto
+        // the nearest enemy GROUND troop within 1.5 tiles (45px straight-line — so it can
+        // even leap across the river to a troop right on the far bank), reloading between
+        // leaps. The leap's landing damage + knockback are dealt in the jump-land code.
+        if (this.c.n === "Hopper") {
+            if (this.cd > 0) this.cd--;
+            if (this.cd <= 0) {
+                let best = null, bd = 45;
+                for (let e of g.ents) {
+                    if (e.tm === this.tm || e.hp <= 0 || e.constructor.name !== "Troop") continue;
+                    let d = this.dist(e);
+                    if (d < bd) { bd = d; best = e; }
+                }
+                if (best) { this.jt = best; this.preJump = 45; this.cd = this.c.rt; } // Mega-Knight-style wind-up
+            }
+            return; // no walking, no melee
         }
 
         // (Spirits / Wall Breakers rush their target and explode on contact — handled
@@ -322,7 +375,7 @@ export default class Troop extends Entity {
                     p.flashCol = "#c45cff"; // purple sniper bolt
                     g.projs.push(p);
                     this.sniperShots--;
-                    this.cd = this.c.rt;
+                    this.cd = rageRt(this.c.rt);
                 }
                 return;
             }
@@ -372,7 +425,8 @@ export default class Troop extends Entity {
             }
             this.atk = false;
         } else if (this.lk && this.lk.hp > 0 &&
-            this.effReach(g, this.lk) <= this.attackReach(g, myHitbox, targetHitbox) + (this.atk ? 12 : 0)) {
+            this.effReach(g, this.lk) <= this.attackReach(g, myHitbox, targetHitbox) + (this.atk ? 12 : 0) &&
+            !this.blockedByRiver(g, this.lk)) {
             this.atk = true;
             if (this.c.n === "Inferno Dragon") this.infernoTick++; // ramp EVERY tick while locked on
             if (this.rt > 0 && !this.fly) return;
@@ -401,16 +455,12 @@ export default class Troop extends Entity {
                     }
                     this.aimTime = 0;
                     this.chargeT = 0;
-                    let p = new Proj(this.x, this.y, this.lk.x, this.lk.y, this.lk, 14, false, 40, this.c.d, this.tm, false).asLightBlue();
+                    let p = new Proj(this.x, this.y, this.lk.x, this.lk.y, this.lk, 14, false, 16, this.c.d, this.tm, false).asLightBlue();
                     p.delayedSplash = true;
                     p.life = 100;
                     g.projs.push(p);
 
-                    let angle = Math.atan2(this.y - this.lk.y, this.x - this.lk.x);
-                    this.kbTime = 12;
-                    let speed = 30.0 / 12.0;
-                    this.kbX = Math.cos(angle) * speed;
-                    this.kbY = Math.sin(angle) * speed;
+                    this.applyKnockback(Math.atan2(this.y - this.lk.y, this.x - this.lk.x), 16); // recoil
                 }
             } else if (this.c.n === "Inferno Dragon") {
                 let stage = Math.floor(this.infernoTick / (this.c.isEvo ? 49 : 58)); // evo charges 15% faster
@@ -457,6 +507,10 @@ export default class Troop extends Entity {
                     for (let e of g.ents)
                         if (e.tm !== this.tm && !e.fly && e.dist(this.lk) < 60)
                             e.hp -= this.c.d;
+                } else if (this.c.n === "Balloon") {
+                    // Instant hit — it's a building-targeter, so its target is always a
+                    // tower/building. No bomb projectile, no troop splash.
+                    this.lk.hp -= this.c.d;
                 } else {
                     let dmg = this.c.d;
                     if (this.c.n === "Prince" || this.c.n === "Dark Prince") dmg = Math.floor(dmg * 0.3);
@@ -470,146 +524,65 @@ export default class Troop extends Entity {
                     this.lk.hp -= dmg;
                 }
             }
-            this.cd = ["Zappies", "Sparky"].includes(this.c.n) ? 0 : this.c.rt;
+            this.cd = ["Zappies", "Sparky"].includes(this.c.n) ? 0 : rageRt(this.c.rt);
             return;
         } else {
             this.atk = false;
             this.infernoTick = 0;
-            this.cd = this.c.rt;
+            // Keep the reload PROGRESSING while out of range instead of resetting it to
+            // full every tick. This lets a troop arrive ready to strike — and crucially
+            // land a hit on a target that's only briefly reachable (a unit mid-LEAP) or
+            // one that keeps getting shoved away (so it can RETALIATE after a push). The
+            // deploy timer — not this reload — is the anti-instant-attack gate.
+            // Balloon keeps cd at 0 so it drops its first bomb the instant it arrives.
+            if (this.c.n === "Balloon") this.cd = 0;
+            else if (this.cd > 0) this.cd--;
         }
 
         // 4. Movement
+        if (this.hp <= 0) return; // dying troops hold their ground (no chasing)
         if (this.c.s === 0) return;
         if (this.rt > 0) return;
 
         if (this.currentTarget) {
-            let tx = this.currentTarget.x;
-            let ty = this.currentTarget.y;
+            // GOAL point. For a tower/building, aim at its FRONT face (toward our home)
+            // so troops gather under it rather than off to the side.
+            let gx = this.currentTarget.x;
+            let gy = this.currentTarget.y;
+            const cn = this.currentTarget.constructor.name;
+            if (cn === "Tower" || cn === "Building") {
+                gy = this.currentTarget.y + ((this.tm === 0) ? 1 : -1) * this.currentTarget.rad * 0.7;
+            }
 
-            // Staged lane movement: a ground troop only ever knows the NEXT step of
-            // its lane, never the whole route. If it must cross the river it heads
-            // (in order) to its own princess-tower lane, then the bridge entrance,
-            // then the far bank — and only AFTER crossing does it path to the enemy
-            // tower (which it approaches from the front, since it stays on the lane x).
-            if (!this.fly && !g.sandboxNoRiver && (this.y < RIV_Y) !== (this.currentTarget.y < RIV_Y)) {
-                let bxs = g.bridgeXs || [W / 4, W * 3 / 4];
-                // A lane-assigned troop (centre-placed split) crosses ITS lane's
-                // bridge; everyone else takes the nearest one.
-                let laneX = (this.laneAssign !== undefined)
-                    ? bxs[Math.min(this.laneAssign, bxs.length - 1)]
-                    : bxs.reduce((a, b) => Math.abs(this.x - a) <= Math.abs(this.x - b) ? a : b);
-                let pY = (this.tm === 0) ? 645 : 165;                 // own princess-tower y
-                let side = (this.x >= laneX) ? 1 : -1;                // approach side
-                // Clear of the princess's (rounded) friendly hitbox so the loop point is
-                // reachable — the troop curves AROUND the side, never into the tower.
-                let off = 41 + g.getHitboxRadius(this);
-                let bx = Math.max(laneX - 22, Math.min(laneX + 22, this.x)); // CLOSEST point on the bridge
-                let dyToP = (this.tm === 0) ? (this.y - pY) : (pY - this.y); // +behind/below, -in front
-                let past = dyToP <= -10;
-                // The princess loop only applies when an own princess actually STANDS
-                // in this lane AND sits between the troop's side and the river. On
-                // sandbox maps without princesses — or with a world-edited river moved
-                // past y645/165 — skip straight to the bridge stages (otherwise the
-                // loop waypoint can land inside the river and the troop never crosses).
-                let ownP = (this.tm === 0) ? (laneX < W / 2 ? g.t1L : g.t1R) : (laneX < W / 2 ? g.t2L : g.t2R);
-                let canLoop = ownP && ownP.hp > 0 && g.ents.includes(ownP) &&
-                    ((this.tm === 0) ? pY > RIV_Y + 40 : pY < RIV_Y - 40);
-                if (canLoop && dyToP > 10) {
-                    // BEHIND/BELOW the princess: come up its near face on our approach
-                    // side, staying outside the hitbox (loop step 1 → 2).
-                    tx = laneX + side * off; ty = pY + ((this.tm === 0) ? 1 : -1) * (dyToP > off ? off * 0.5 : 6);
-                } else if (canLoop && !past) {
-                    // BESIDE the princess: slide forward to its FRONT (toward the bridge).
-                    tx = laneX + side * off; ty = pY + ((this.tm === 0) ? -1 : 1) * off * 0.7;
-                } else if ((this.tm === 0 && this.y > RIV_Y + 14) || (this.tm === 1 && this.y < RIV_Y - 14)) {
-                    tx = bx; ty = (this.tm === 0) ? RIV_Y + 14 : RIV_Y - 14; // → closest bridge point
-                } else {
-                    tx = bx; ty = (this.tm === 0) ? RIV_Y - 45 : RIV_Y + 45; // cross
-                }
+            let tx = gx, ty = gy;
+            if (this.fly) {
+                // Fliers ignore the river and all obstacles — straight line.
+                this.path = [{ x: gx, y: gy }];
             } else {
-                // Same side as the target: attack a tower/building from its FRONT (the
-                // face toward our home) so troops gather UNDER it, not off to the side.
-                let cn = this.currentTarget.constructor.name;
-                if (cn === "Tower" || cn === "Building") {
-                    tx = this.currentTarget.x;
-                    ty = this.currentTarget.y + ((this.tm === 0) ? 1 : -1) * this.currentTarget.rad * 0.7;
+                // PROCEDURAL WAYPOINTS (A* on the nav grid): the route bends around the
+                // river — crossing at whichever bridge is on the shortest path — and
+                // around tower/building footprints. The bridge is NOT a special waypoint;
+                // it just falls out of the grid. Recompute periodically, when the path is
+                // used up, or when the goal has moved a lot, so it stays short & current.
+                this.pathTick = (this.pathTick || 0) - 1;
+                let goalMoved = !this._lastGoal || Math.hypot(this._lastGoal.x - gx, this._lastGoal.y - gy) > 45;
+                if (this.pathTick <= 0 || !this.path || this.path.length === 0 || goalMoved) {
+                    this.path = g.computePath(this.x, this.y, gx, gy, false);
+                    this._lastGoal = { x: gx, y: gy };
+                    this.pathTick = 9 + Math.floor(g.random() * 8); // stagger recomputes across troops
                 }
-                // A FRIENDLY building/tower (not our target) across the path: steer
-                // around its side (handled by the collision otherwise).
-                if (!this.fly) {
-                    let obs = this.getBlockingObstacle(g, this.x, this.y, tx, ty);
-                    if (obs && obs !== this.currentTarget) {
-                        let off = obs.rad * 0.92 + g.getHitboxRadius(this) + 8;
-                        let s = (this.x >= obs.x) ? 1 : -1;
-                        tx = obs.x + s * off; ty = obs.y;
-                    }
+                // Drop waypoints we've essentially reached.
+                while (this.path.length > 1 && Math.hypot(this.path[0].x - this.x, this.path[0].y - this.y) < 16) {
+                    this.path.shift();
                 }
+                let wp = this.path[0] || { x: gx, y: gy };
+                tx = wp.x; ty = wp.y;
             }
-
-            // A troop right behind our own (wide) KING can't push through it — guide it
-            // out to the nearer flank until it clears the king's width, then the normal
-            // lane logic takes back over.
-            if (!this.fly && !this.atk && !g.sandboxNoRiver && (this.y < RIV_Y) !== (this.currentTarget.y < RIV_Y)) {
-                let kx = W / 2, ky = (this.tm === 0) ? 735 : 75;
-                let kHalf = 50 * 0.92 + g.getHitboxRadius(this);
-                let behind = (this.tm === 0) ? (this.y > ky - 10) : (this.y < ky + 10);
-                if (behind && Math.abs(this.x - kx) < kHalf) {
-                    let kside = (this.x >= kx) ? 1 : -1;
-                    tx = kx + kside * (kHalf + 12);
-                    ty = this.y + ((this.tm === 0) ? -1 : 1) * 18; // ease up the flank
-                }
-            }
-            this.path = [{ x: tx, y: ty }]; // debug path shows only the next step
 
             this.moveTarget = { x: tx, y: ty };
-            let dx = this.moveTarget.x - this.x;
-            let dy = this.moveTarget.y - this.y;
+            let dx = tx - this.x, dy = ty - this.y;
             let dist = Math.hypot(dx, dy);
-
-            if (!this.atk && dist > 1) {
-                let movedDist = Math.hypot(this.x - this.lastPos.x, this.y - this.lastPos.y);
-                if (movedDist < 0.5 * this.c.s) this.stuckTimer++;
-                else {
-                    this.stuckTimer = 0;
-                    this.isStuck = false;
-                }
-                this.lastPos = { x: this.x, y: this.y };
-
-                if (this.stuckTimer > 40) {
-                    this.isStuck = true;
-                    if (this.stuckDir === 0) this.stuckDir = (g.random() < 0.5) ? 1 : -1;
-                }
-            } else {
-                this.stuckTimer = 0;
-                this.isStuck = false;
-                this.stuckDir = 0;
-            }
-
-            if (this.isStuck) {
-                // On the bridge, never sidestep (that pushes units off into the
-                // river and gets them stuck) — steer to the bridge centre and
-                // keep pressing forward so the queue files across.
-                if (Math.abs(this.y - RIV_Y) < 50) {
-                    let bridgeX = (this.x < W / 2) ? W / 4 : W * 3 / 4;
-                    let fwd = (this.tm === 0 ? -1 : 1);
-                    dx = (bridgeX - this.x) * 0.15;
-                    dy = fwd;
-                    let m = Math.hypot(dx, dy) || 1;
-                    dx /= m; dy /= m;
-                } else {
-                    dx = this.stuckDir;
-                    dy = 0;
-                    if (this.stuckTimer > 80) {
-                        this.stuckDir *= -1;
-                        this.stuckTimer = 41;
-                    }
-                }
-            } else {
-                if (dist > 0) {
-                    dx /= dist;
-                    dy /= dist;
-                }
-            }
+            if (dist > 0) { dx /= dist; dy /= dist; }
 
             if (!this.atk) {
                 // Dash speed: 2x for the Princes and Evo Royal Recruits alike.
@@ -633,6 +606,19 @@ export default class Troop extends Entity {
         // Spirits do NOT burst on death — their splash only happens when they
         // actually jump onto a target (the hop landing). A spirit shot down on
         // the way just dies. (Wall Breakers likewise only explode on contact.)
+        if (this.c.n === "Balloon") {
+            // Shot down: drops a bomb that falls onto the balloon's shadow and
+            // detonates after a 1.5s fuse for area DEATH damage to ground enemies
+            // & structures (no instant blast).
+            g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 52, 242, this.tm, false).asDeathBomb());
+        }
+        if (this.c.n === "Lumberjack") {
+            // Drops a bottle of Rage where it falls — smaller / shorter than the
+            // spell (it lands instantly, no wind-up).
+            let p = new Proj(this.x, this.y, this.x, this.y, null, 0, false, 72, 140, this.tm, false).asRage(72, 240);
+            p.rageWindup = 1; p.rageMax = 1; // drop activates almost immediately
+            g.projs.push(p);
+        }
         if (this.c.n === "Golem") {
             this.spawnDeathTroops(g, g.getCard("Golemite") || { n: "Golemite", hp: 1039, ms: 25, fl: false, ar: false }, 2, 10);
             let p = new Proj(this.x, this.y, this.x, this.y, null, 0, false, 60, 320, this.tm, false);
@@ -849,6 +835,23 @@ export default class Troop extends Entity {
         return this.c.rn + myHitbox + targetHitbox + 2 + archer;
     }
 
+    // A non-flying MELEE troop can't strike a target on the FAR side of the river —
+    // straight-line range would otherwise let it stand on the bank "attacking" across
+    // the water and never path across. It must reach the same bank (via a bridge)
+    // first. Ranged units (rn > 30) may fire across.
+    blockedByRiver(g, lk) {
+        if (this.fly || g.sandboxNoRiver) return false;
+        if (this.jp || this.preJump > 0) return false; // jumping troops ignore the river
+        if (this.c.rn > 30) return false;
+        const RIV_Y = g.RIV_Y || 405;
+        if ((this.y < RIV_Y) === (lk.y < RIV_Y)) return false; // same bank — fight
+        // Opposite banks: only blocked while the RIVER is between us (then we cross).
+        // Once we've met at the bridge we FIGHT — troops don't have to cross; they can
+        // duke it out on the bridge.
+        let reach = g.getHitboxRadius(this) + g.getHitboxRadius(lk) + 8;
+        return this.dist(lk) > reach;
+    }
+
     findTarget(g) {
         const towers = [g.t1L, g.t1R, g.t1K, g.t2L, g.t2R, g.t2K];
         const isTower = e => towers.includes(e);
@@ -866,6 +869,12 @@ export default class Troop extends Entity {
         // troops see 5x further, so they hunt down the next troop instead of idling.
         const anyEnemyTower = g.ents.some(e => e.constructor.name === "Tower" && e.tm !== this.tm && e.hp > 0);
         const sight = anyEnemyTower ? this.sightRange : this.sightRange * 5;
+        // Building-targeters (Giant, Hog, Balloon…) normally ignore troops. But once
+        // there are NO enemy towers OR buildings left to attack, the "towers are no
+        // longer an aspect" — they hunt the nearest enemy TROOP instead of stalling at
+        // the bridge with nothing to path to.
+        const anyEnemyStruct = g.ents.some(e => e.tm !== this.tm && e.hp > 0 &&
+            (e.constructor.name === "Tower" || e.constructor.name === "Building"));
 
         // 1. Nearest valid enemy non-tower (unit or building) in sight.
         let distraction = null;
@@ -873,8 +882,8 @@ export default class Troop extends Entity {
         for (let e of g.ents) {
             if (e.tm === this.tm || e.hp <= 0 || isTower(e)) continue;
             let isBldg = e.constructor.name === "Building";
-            if (this.c.t === 1 && !isBldg) continue; // building-targeters ignore units
-            if (e.fly && !this.air) continue;
+            if (this.c.t === 1 && !isBldg && anyEnemyStruct) continue; // building-targeters ignore units WHILE a structure stands
+            if (e.fly && !this.air && !e.jp) continue; // a unit mid-LEAP can still be hit by ground troops
             let d = this.dist(e);
             if (d < minDist) { minDist = d; distraction = e; }
         }
@@ -904,7 +913,7 @@ export default class Troop extends Entity {
         // leaves sight, or a notably closer one appears (avoids flip-flopping).
         const cur = this.currentTarget;
         const curOK = cur && cur.hp > 0 && cur.rad !== 0 && cur.tm !== this.tm &&
-            !isTower(cur) && !(cur.fly && !this.air) && this.dist(cur) <= sight;
+            !isTower(cur) && !(cur.fly && !this.air && !cur.jp) && this.dist(cur) <= sight;
 
         // Compare against the tower's EDGE, not its (far) centre — towers are large,
         // so a troop right next to one should attack it, not get pulled to a unit
@@ -921,6 +930,10 @@ export default class Troop extends Entity {
             // the path veto is skipped — the staged movement routes over a bridge.
             target = distraction;
         } else {
+            // No tower, building, or enemy troop anywhere to chase: nothing to do.
+            // (With NO enemy on the board at all, the troop simply idles — it doesn't
+            // wander off across the bridge. Any enemy that exists is found above via
+            // the 5x sight scan and chased, towers or not.)
             target = primary;
         }
 

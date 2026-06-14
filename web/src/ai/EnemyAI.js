@@ -77,9 +77,17 @@ export default class EnemyAI {
         const mode = this.computeMode();
         const threats = this.getThreats();
 
-        // 1) Defend only GENUINE threats (a real push), so we don't blow elixir on a
-        //    lone weak card the tower can handle by itself.
-        if (threats.length > 0 && this.significantThreat(threats) && this.p.elx >= 2 && this.defend(threats, mode)) { this.actCd = 24; return; }
+        // 1) Respond to EVERY push on our half. A STRONG push (worth > 6 elixir, or a
+        //    Rage combo, or a tank/win-con) gets a real counter and is never ignored; a
+        //    small one at least gets a cheap troop (Skeletons) thrown in front of it.
+        if (threats.length > 0) {
+            // A Raged combo is fast and concentrated — try to answer the whole knot
+            // with a damage spell first (lower cluster threshold than usual).
+            if (this.isRagedPush(threats) && this.castValueSpell(mode, 2)) { this.actCd = 26; return; }
+            const strong = this.pushValue(threats) > 6 || this.isRagedPush(threats) || this.significantThreat(threats);
+            if (strong && this.p.elx >= 2 && this.defend(threats, mode)) { this.actCd = 24; return; }
+            if (this.chipDefend(threats)) { this.actCd = 16; return; }
+        }
         // 2) Spend spells on value (clusters) or chip the weak tower when ahead.
         if (this.castValueSpell(mode)) { this.actCd = 30; return; }
         // 3) Offense: keep loading SUPPORT behind a live heavy tank (Giant / Golem /
@@ -90,11 +98,45 @@ export default class EnemyAI {
         if (this.p.elx >= 9.3 && this.forcePlay()) { this.actCd = 18; return; }
     }
 
-    // A push worth spending elixir on: several troops, or a tank / win condition.
-    // A single weak troop is left to the towers (saves elixir).
+    // A push worth a FULL counter: several troops, a tank / win condition, or a Rage
+    // combo. Small pushes still get a cheap chip troop (see chipDefend).
     significantThreat(threats) {
         if (threats.length >= 3) return true;
+        if (this.isRagedPush(threats)) return true;
         return threats.some(t => t.hp > 800 || (t.tags && (t.tags.includes("WinCon") || t.tags.includes("Tank"))));
+    }
+
+    // Approximate elixir spent on the incoming push: each DISTINCT card counted once
+    // (so a 15-skeleton swarm is ~3, not 15), plus 2 if it's been Raged. > 6 = strong.
+    pushValue(threats) {
+        let names = new Set(), sum = 0;
+        for (let t of threats) {
+            if (t.c && !names.has(t.c.n)) { names.add(t.c.n); sum += (t.c.c || 0); }
+        }
+        if (this.isRagedPush(threats)) sum += 2;
+        return sum;
+    }
+
+    // The Rage + troop combo: any threatening troop currently buffed by Rage, or an
+    // active Rage zone the player dropped on our half.
+    isRagedPush(threats) {
+        if (threats.some(t => t.ragedTime > 0)) return true;
+        return this.g.projs.some(p => p.isRage && (p.rageWindup || 0) <= 0 && p.tm === 0 && p.y < 540);
+    }
+
+    // Never fully ignore a push: if it isn't worth a full counter, at least throw the
+    // cheapest distraction troop (prefer Skeletons / a cheap swarm) in front of it.
+    chipDefend(threats) {
+        const threat = threats[0];
+        let cheap = this.affordable().filter(c => c.t === 0 && c.c <= 3);
+        if (!cheap.length) return false;
+        cheap.sort((a, b) => a.c - b.c);
+        let pick = cheap.find(c => c.n === "Skeletons")
+            || cheap.find(c => c.tags.includes("Swarm"))
+            || cheap[0];
+        let px = Math.max(40, Math.min(500, threat.x));
+        let py = Math.max(30, Math.min(this.g.RIV_Y - 20, threat.y - 30));
+        return this.playAI(pick, px, py);
     }
 
     // Strategy mode from the tower score: ahead -> pressure, behind -> defend.
@@ -187,7 +229,7 @@ export default class EnemyAI {
         return best;
     }
 
-    castValueSpell(mode) {
+    castValueSpell(mode, minCount = 3) {
         // Damage spell on a tight cluster of player troops — but never if it would
         // splash the player's still-asleep king tower (waking it helps the player).
         const dmg = this.affordable().find(c => ["Fireball", "Arrows", "Poison"].includes(c.n));
@@ -196,7 +238,7 @@ export default class EnemyAI {
             const shape = this.g.getSpellRadius(dmg);
             const sr = (shape && shape.val) ? shape.val : 70;
             const cl = this.cluster(sr);
-            if (cl && cl.count >= 3) {
+            if (cl && cl.count >= minCount) {
                 // Lead by the spell's ACTUAL travel time so it lands where the group
                 // will be. Fireball arcs from the king tower at speed 4.5; Arrows/
                 // Poison drop near-instantly onto the target tile.
@@ -299,17 +341,40 @@ export default class EnemyAI {
 
     pickCounter(threat) {
         // analyze threat tags
-        let isWinCon = threat.tags && threat.tags.includes("WinCon");
-        let isTank = threat.tags && threat.tags.includes("Tank");
-        let isSwarm = threat.tags && threat.tags.includes("Swarm");
-        let isAir = threat.fl;
+        const tags = threat.tags || [];
+        let isWinCon = tags.includes("WinCon");
+        let isTank = tags.includes("Tank");
+        let isSwarm = tags.includes("Swarm");
+        let isAir = threat.fly;                  // entities expose .fly (NOT .fl)
+        const name = threat.c ? threat.c.n : "";
 
         // Available cards
         let available = this.p.h.filter(c => c.c <= this.p.elx);
 
-        // 1. Air Threat
+        // BALLOON / heavy air win-con: shoot it down with air-targeting DPS or a flyer;
+        // a building also drags it off the tower. Never answer it with ground-only units.
+        if (name === "Balloon" || (isAir && isWinCon)) {
+            return available.find(c => c.ar && c.tags.includes("DamageDealer"))
+                || available.find(c => c.fl && c.tags.includes("DamageDealer"))
+                || available.find(c => c.ar && c.rn > 40)
+                || available.find(c => c.tags.includes("Building"))
+                || available.find(c => c.ar || c.fl);
+        }
+
+        // 1. Air Threat (Minions / Baby Dragon / …): needs an air-targeting answer.
         if (isAir) {
-            return available.find(c => c.fl || c.rn > 20 || (c.tags && c.tags.includes("Building"))); // Ranged or Building or Flying
+            return available.find(c => c.ar && (c.tags.includes("DamageDealer") || c.tags.includes("AOE")))
+                || available.find(c => c.fl || c.ar)
+                || available.find(c => c.tags.includes("Building"));
+        }
+
+        // LUMBERJACK (fast melee glass-cannon that drops Rage on death): block it with a
+        // TANK to soak its hits, or a hard DamageDealer to trade it down before it lands.
+        if (name === "Lumberjack") {
+            return available.find(c => c.tags.includes("Tank"))
+                || available.find(c => c.tags.includes("DamageDealer"))
+                || available.find(c => c.tags.includes("Swarm"))
+                || available.sort((a, b) => a.c - b.c)[0];
         }
 
         // 2. Swarm Threat
@@ -339,10 +404,10 @@ export default class EnemyAI {
         }
 
         // 5. Generic Counters
-        // Tank distracts DMG Dealer
-        if (threat.tags && threat.tags.includes("DamageDealer")) {
-            let tank = available.find(c => c.tags && (c.tags.includes("Tank") || c.tags.includes("Swarm")));
-            if (tank) return tank;
+        // A DamageDealer: a Tank soaks it, a Swarm overwhelms it, or our own DPS trades.
+        if (tags.includes("DamageDealer")) {
+            let c = available.find(c => c.tags.includes("Tank") || c.tags.includes("Swarm") || c.tags.includes("DamageDealer"));
+            if (c) return c;
         }
 
         // Default: Cheapest effective card

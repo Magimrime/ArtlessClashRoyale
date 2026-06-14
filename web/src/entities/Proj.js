@@ -100,6 +100,20 @@ export default class Proj {
     // Placed spell that falls from the sky as a symbol, then resolves on impact.
     asSpellDrop(kind, col, life = 30) { this.isSpellDrop = true; this.dropKind = kind; this.flashCol = col; this.life = life; this.dropMax = life; return this; }
     asIceNova() { this.isIceNova = true; this.life = 5; return this; }
+    // Rage: a bottle hops up (~0.45s wind-up) then splashes into a buff zone that
+    // lasts `dur` ticks. d carries the small activation splash damage.
+    asRage(rad, dur = 300) {
+        this.isRage = true; this.rad = rad; this.rageDur = dur;
+        this.rageWindup = 28; this.rageMax = 28; this.life = 28 + dur;
+        return this;
+    }
+    // Balloon bomb: dropped on a target, sparks for ~0.5s, then explodes for area
+    // damage (dmg/rad set on the Proj). Ground-only blast.
+    asBomb() { this.isBomb = true; this.bombFuse = 48; this.bombMax = 48; this.life = 48; return this; }
+    // Balloon DEATH bomb: when the balloon is shot down it drops a plain black
+    // bomb that falls onto its shadow (dropFall ticks) and detonates after a
+    // 1.5s (90-tick) fuse. Reuses the isBomb explosion path.
+    asDeathBomb() { this.isBomb = true; this.isDeathBomb = true; this.bombFuse = 90; this.bombMax = 90; this.life = 90; this.dropFall = 16; this.dropMax = 16; return this; }
     // Ground-slam shockwave (Mega Knight spawn / jump landing): pure visual —
     // an expanding dust ring; rad is the blast radius it grows to.
     asShockwave() { this.isShockwave = true; this.life = 18; this.shockMax = 18; return this; }
@@ -154,11 +168,19 @@ export default class Proj {
                 if (this.shouldStun) e.st = this.stunDuration;
                 if (this.isRoot) e.rt = 84;
                 if (this.isFreeze) e.fr = 240;
+                // Fireball: the slow chain (50% 0.6s -> 80% 1s) begins 0.3s after the
+                // hit. The knockback is a SINGLE, larger shove at impact (below).
+                if (this.spellKind === "fireball" && e instanceof Troop && !(e instanceof Tower) && !(e instanceof Building)) {
+                    e.fbSlowDelay = 18;
+                }
                 if (this.hasKnockback && e instanceof Troop && !(e instanceof Tower) && !(e instanceof Building)) {
-                    if (!["Mega Knight", "P.E.K.K.A", "Golem"].includes(e.c.n)) {
-                        let ang = Math.atan2(e.y - this.ty, e.x - this.tx);
-                        e.kbTime = 12; e.kbMax = 12; e.kbX = Math.cos(ang) * 4.0; e.kbY = Math.sin(ang) * 4.0; // smaller, eases out
-                    }
+                    // A Fireball shoves EVERY troop it hits — ground OR air — into a
+                    // friction slide (heavies resist, handled in applyKnockback). Other
+                    // knockback spells push a little less.
+                    let ang = Math.atan2(e.y - this.ty, e.x - this.tx);
+                    // A Fireball shoves even the Hopper back (hopperToo); lesser knockback
+                    // spells leave the Hopper planted.
+                    e.applyKnockback(ang, (this.spellKind === "fireball") ? 42 : 28, false, this.spellKind === "fireball");
                 }
             }
         }
@@ -204,6 +226,50 @@ export default class Proj {
                 let a = Math.atan2(this.ty - this.y, this.tx - this.x);
                 this.x += Math.cos(a) * this.spd;
                 this.y += Math.sin(a) * this.spd;
+            }
+            return;
+        }
+
+        if (this.isBomb) {
+            this.life--;
+            if (this.dropFall > 0) this.dropFall--; // death bomb falls onto the shadow first
+            if (this.bombFuse > 0) {
+                this.bombFuse--;
+                if (this.bombFuse === 0) {
+                    // Explode: ground-only area damage + a visible blast (shockwave +
+                    // fire flash) that renders ABOVE the tower.
+                    for (let e of g.ents) {
+                        if (e.tm !== this.tm && e.hp > 0 && !e.fly &&
+                            Math.hypot(this.x - e.x, this.y - e.y) < this.rad + (g.getHitboxRadius ? g.getHitboxRadius(e) : e.rad))
+                            e.hp -= this.dmg;
+                    }
+                    g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, this.rad, 0, this.tm, false).asShockwave());
+                }
+            }
+            return;
+        }
+
+        if (this.isRage) {
+            this.life--;
+            if (this.rageWindup > 0) {
+                this.rageWindup--;
+                if (this.rageWindup === 0) {
+                    // Bottle landed: small activation splash to enemies, splash visual.
+                    for (let e of g.ents) {
+                        if (e.tm !== this.tm && e.hp > 0 && Math.hypot(this.x - e.x, this.y - e.y) < this.rad + (g.getHitboxRadius ? g.getHitboxRadius(e) : e.rad))
+                            e.hp -= this.dmg;
+                    }
+                    g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, this.rad, 0, this.tm, false).asShockwave());
+                }
+                return;
+            }
+            // Active buff zone: rage every friendly TROOP currently in range (NOT
+            // towers or buildings). Set to 2 (not a long timer) so the buff drops the
+            // moment a unit leaves the pool or the pool expires — no lingering rage.
+            for (let e of g.ents) {
+                if (e.tm === this.tm && e.hp > 0 && e.constructor.name === "Troop" &&
+                    Math.hypot(this.x - e.x, this.y - e.y) < this.rad + (g.getHitboxRadius ? g.getHitboxRadius(e) : e.rad))
+                    e.ragedTime = 2;
             }
             return;
         }
@@ -288,11 +354,7 @@ export default class Proj {
                         if (e.tm !== this.tm && Math.hypot(this.x - e.x, this.y - e.y) < this.rad + e.rad) {
                             e.hp -= this.dmg;
                             if (this.hasKnockback && e instanceof Troop && !(e instanceof Tower) && !(e instanceof Building)) {
-                                if (["Mega Knight", "P.E.K.K.A", "Golem"].includes(e.c.n)) continue;
-                                let angle = Math.atan2(e.y - this.y, e.x - this.x);
-                                e.kbTime = 12; e.kbMax = 12;
-                                e.kbX = Math.cos(angle) * 4.0;
-                                e.kbY = Math.sin(angle) * 4.0;
+                                e.applyKnockback(Math.atan2(e.y - this.y, e.x - this.x), 26);
                             }
                         }
                     }
@@ -302,20 +364,27 @@ export default class Proj {
 
             this.life--;
             if (this.life === 5) {
-                for (let e of g.ents) {
-                    if (e.tm !== this.tm && Math.hypot(this.x - e.x, this.y - e.y) < this.rad + e.rad) {
-                        e.hp -= this.hitDmg(e);
-                        if (this.shouldStun) e.st = this.stunDuration;
-                        if (this.isRoot) e.rt = 84;
-                        // Vines roots, marks the unit (green outline) and pulls any
-                        // flying unit down to the ground for the duration.
-                        if (this.isVines) {
-                            e.vinedTime = 84;
-                            if (e.fly && e.constructor.name === "Troop") {
-                                e.fly = false; e.wasFlying = true; e.groundedTime = 84;
-                            }
+                if (this.isVines) {
+                    // Vines entangle only the 3 CLOSEST enemy units in the area: root +
+                    // ground them and start the 3-pulse escalating DoT (the engine deals
+                    // it per-tick). No instant hit — all the damage is in the pulses.
+                    const hb = e => (g.getHitboxRadius ? g.getHitboxRadius(e) : e.rad);
+                    let inRange = g.ents.filter(e => e.tm !== this.tm && e.hp > 0 &&
+                        Math.hypot(this.x - e.x, this.y - e.y) < this.rad + hb(e));
+                    inRange.sort((a, b) => Math.hypot(this.x - a.x, this.y - a.y) - Math.hypot(this.x - b.x, this.y - b.y));
+                    for (let e of inRange.slice(0, 3)) {
+                        e.rt = 84;                                  // rooted
+                        e.vinedTime = 42; e.vineTick = 0; e.vinePulse = 0; // 3 escalating damage pulses
+                        if (e.fly && e.constructor.name === "Troop") { e.fly = false; e.wasFlying = true; e.groundedTime = 42; }
+                    }
+                } else {
+                    for (let e of g.ents) {
+                        if (e.tm !== this.tm && Math.hypot(this.x - e.x, this.y - e.y) < this.rad + e.rad) {
+                            e.hp -= this.hitDmg(e);
+                            if (this.shouldStun) e.st = this.stunDuration;
+                            if (this.isRoot) e.rt = 84;
+                            if (this.isFreeze) e.fr = 240;
                         }
-                        if (this.isFreeze) e.fr = 240;
                     }
                 }
             }
@@ -365,13 +434,10 @@ export default class Proj {
                     if (hit) {
                         e.hp -= this.hitDmg(e);
                         this.hitEntities.push(e);
-                        if (!this.barbBarrelLog && e.mass <= 300 && !(e instanceof Tower) && !(e instanceof Building)) {
-                            if (e instanceof Troop) {
-                                e.kbTime = 10;
-                                let kbSpeed = 6.0 * (1.0 - (e.mass / 350.0));
-                                e.kbX = Math.cos(a) * kbSpeed;
-                                e.kbY = Math.sin(a) * kbSpeed;
-                            }
+                        if (!this.barbBarrelLog && e.mass <= 300 && e instanceof Troop) {
+                            // Lighter units skid farther (mass-scaled), with friction. The
+                            // Log rolls even the Hopper back (hopperToo).
+                            e.applyKnockback(a, 34 * (1.0 - e.mass / 350.0), false, true);
                         }
                     }
                 }

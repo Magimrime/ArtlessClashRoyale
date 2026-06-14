@@ -78,7 +78,7 @@ export default class Building extends Entity {
             } else {
                 g.projs.push(new Proj(this.x, this.y, this.lk.x, this.lk.y, this.lk, 8, false, 4, this.c.d, this.tm, false));
             }
-            this.cd = this.c.rt;
+            this.cd = (this.ragedTime > 0) ? Math.max(1, Math.round(this.c.rt * 0.8)) : this.c.rt; // Rage: +20% hit speed
         } else {
             this.atk = false;
             this.infernoTick = 0;

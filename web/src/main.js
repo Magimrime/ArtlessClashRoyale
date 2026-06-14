@@ -113,8 +113,8 @@ class Main {
         this.sandboxSpeed = 1;          // 0.5–3x sim speed
         this.sbSpeedSteps = [0.5, 1, 1.5, 2, 3];
         this.sbSpeedAcc = 0;
-        this.sbMaps = ['default', 'tower', 'open', 'heist'];
-        this.sbMapNames = { default: 'Default', tower: 'Tower', open: 'Open', heist: 'Heist' };
+        this.sbMaps = ['default', 'tower', 'open', 'heist', 'river', 'blank'];
+        this.sbMapNames = { default: 'Default', tower: 'Tower', open: 'Open', heist: 'Heist', river: 'River', blank: 'Blank' };
 
         this.cardRects = [];
         this.nextCardRect = { x: W - 80, y: H - 110, w: 68, h: 90 }; // recomputed with the card row below
@@ -189,23 +189,89 @@ class Main {
         this.resize();
         window.addEventListener('resize', () => this.resize());
 
-        canvas.addEventListener('mousedown', (e) => this.handleInput(e));
-        canvas.addEventListener('mousemove', (e) => {
+        // Vertically-scrollable card lists: the two deck builders and the sandbox
+        // card picker. Shared by the wheel, mouse-drag and touch-drag handlers.
+        const scrollableState = () =>
+            this.state === State.DECK || this.state === State.ENEMY_DECK ||
+            (this.state === State.SANDBOX && this.sandboxDeckOpen);
+        const maxScrollFor = () => {
+            let listSize = (this.state === State.DECK) ? this.eng.unlockedCards.length : this.eng.allCards.length;
+            return Math.max(0, (Math.floor(listSize / 3) + 2) * 80 + 150 - H);
+        };
+        const clampScroll = () => { this.scrollY = Math.max(0, Math.min(maxScrollFor(), this.scrollY)); };
+        const evtPos = (e) => {
             const rect = canvas.getBoundingClientRect();
-            const mx = (e.clientX - rect.left) * (W / rect.width);
-            const my = (e.clientY - rect.top) * (H / rect.height);
-            this.mouse = { x: mx, y: my };
+            return { x: (e.clientX - rect.left) * (W / rect.width), y: (e.clientY - rect.top) * (H / rect.height) };
+        };
+
+        let mouseDown = null;
+        canvas.addEventListener('mousedown', (e) => {
+            const p = evtPos(e);
+            mouseDown = { x: p.x, y: p.y, scroll: this.scrollY, moved: false, handled: false };
+            // Outside a scrollable list, act on press (unchanged feel). Inside one,
+            // wait for release so a press-drag scrolls instead of selecting.
+            if (!scrollableState()) { this.handle(p.x, p.y); mouseDown.handled = true; }
         });
-        canvas.addEventListener('wheel', (e) => {
-            let sbPicker = this.state === State.SANDBOX && this.sandboxDeckOpen;
-            if (this.state === State.DECK || this.state === State.ENEMY_DECK || sbPicker) {
-                this.scrollY += Math.sign(e.deltaY) * 20;
-                let listSize = (this.state === State.DECK) ? this.eng.unlockedCards.length : this.eng.allCards.length;
-                let maxScroll = Math.max(0, (Math.floor(listSize / 3) + 2) * 80 + 150 - H);
-                if (this.scrollY < 0) this.scrollY = 0;
-                if (this.scrollY > maxScroll) this.scrollY = maxScroll;
+        canvas.addEventListener('mousemove', (e) => {
+            const p = evtPos(e);
+            this.mouse = { x: p.x, y: p.y };
+            if (mouseDown) {
+                if (Math.hypot(p.x - mouseDown.x, p.y - mouseDown.y) > 6) mouseDown.moved = true;
+                if (scrollableState()) { this.scrollY = mouseDown.scroll - (p.y - mouseDown.y); clampScroll(); }
             }
         });
+        canvas.addEventListener('mouseup', (e) => {
+            if (!mouseDown) return;
+            const p = evtPos(e);
+            // A click that didn't drag still selects a card in a list; a drag scrolled.
+            if (scrollableState() && !mouseDown.handled && !mouseDown.moved) this.handle(p.x, p.y);
+            mouseDown = null;
+        });
+        canvas.addEventListener('mouseleave', () => { mouseDown = null; });
+        canvas.addEventListener('wheel', (e) => {
+            if (scrollableState()) { this.scrollY += Math.sign(e.deltaY) * 20; clampScroll(); }
+        });
+
+        // ---- Touch support (phones/tablets) ---------------------------------
+        // Reuses evtPos/scrollableState/clampScroll defined above for the mouse.
+        let touchStart = null;
+        canvas.addEventListener('touchstart', (e) => {
+            if (!e.touches.length) return;
+            e.preventDefault();
+            const p = evtPos(e.touches[0]);
+            this.mouse = { x: p.x, y: p.y };           // ghost follows the finger
+            touchStart = { x: p.x, y: p.y, scroll: this.scrollY, moved: false };
+            // Live match: touching a hand card picks it up immediately so you can drag
+            // it straight onto the field in one motion. handle() only SELECTS in the
+            // hand row (y > H-150) — it never deploys there — so this can't drop a troop.
+            if (this.state === State.PLAY && p.y > H - 150) this.handle(p.x, p.y);
+        }, { passive: false });
+        canvas.addEventListener('touchmove', (e) => {
+            if (!e.touches.length || !touchStart) return;
+            e.preventDefault();
+            const p = evtPos(e.touches[0]);
+            this.mouse = { x: p.x, y: p.y };
+            const dx = p.x - touchStart.x, dy = p.y - touchStart.y;
+            if (Math.hypot(dx, dy) > 8) touchStart.moved = true;
+            if (scrollableState()) {
+                // Drag to scroll the card list (finger up = list up).
+                this.scrollY = touchStart.scroll - dy;
+                clampScroll();
+            }
+        }, { passive: false });
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (!touchStart) return;
+            // A drag inside a scrollable list just scrolls (no click). Everywhere else
+            // (and any tap that didn't move) acts at the lift point: letting go over the
+            // FIELD releases the troop; letting go back over the hand/deck row only
+            // re-selects, so the troop is NOT released there.
+            if (!scrollableState() || !touchStart.moved) {
+                this.handle(this.mouse.x, this.mouse.y);
+            }
+            this.mouse = { x: -100, y: -100 };          // hide the ghost until the next touch
+            touchStart = null;
+        }, { passive: false });
 
         // Key Listener for Code Entry (Simple version)
         window.addEventListener('keydown', (e) => {
@@ -1044,18 +1110,8 @@ class Main {
                 if (this.eng.sel.t !== 2) this.drawHoverCell(this.eng.sel);
             } // Close Invalid Area Logic
 
-            // Sandbox with a CHOSEN side (and rules on): tint the forbidden half red —
-            // but NOT for spells that may be cast anywhere (only the ground-restricted
-            // Log / Barb Barrel / Royale Delivery keep the tint).
-            if (this.state === State.SANDBOX && this.eng.sel && !this.eng.sandboxNoRules &&
-                this.eng.sandboxMap !== 'open' && // open map: no restrictions, no tint
-                (this.eng.sel.t !== 2 || ["The Log", "Barbarian Barrel", "Royale Delivery"].includes(this.eng.sel.n)) &&
-                (this.eng.sandboxSide === 0 || this.eng.sandboxSide === 1)) {
-                const RY = this.eng.RIV_Y || RIV_Y;
-                ctx.fillStyle = "rgba(255, 0, 0, 0.28)";
-                if (this.eng.sandboxSide === 0) ctx.fillRect(0, 0, W, RY - 15);
-                else ctx.fillRect(0, RY + 15, W, 810 - RY - 15);
-            }
+            // (Sandbox has no placement red zone — you may drop anything anywhere
+            // except on top of a tower/building, so no forbidden-half tint is drawn.)
 
             // Entity bodies are drawn below in layered passes
             // (shadows/effects -> ground units -> projectiles -> flying units).
@@ -1065,6 +1121,9 @@ class Main {
                 let c = this.eng.sel;
                 let spellShape = this.eng.getSpellRadius(c);
                 let canAfford = this.eng.sandbox || this.eng.p1.elx >= c.c; // sandbox: no elixir
+                // Validity is from the placing TEAM's view — in sandbox that's the
+                // chosen side (red mirrors the rules), otherwise the player (team 0).
+                let ghostTeam = (this.eng.sandbox && this.eng.sandboxSide === 1) ? 1 : 0;
                 // Spells snap to the same tile grid as troops.
                 let gm = this.snapToGrid(this.mouse.x, this.mouse.y);
 
@@ -1074,7 +1133,7 @@ class Main {
                     let time = Date.now() / 50; // Speed of animation
 
                     // Placement-restricted spells turn RED where they can't be placed.
-                    let rollValid = !["The Log", "Barbarian Barrel", "Royale Delivery"].includes(c.n) || this.eng.isValid(gm.y, gm.x, c, 0);
+                    let rollValid = !["The Log", "Barbarian Barrel", "Royale Delivery"].includes(c.n) || this.eng.isValid(gm.y, gm.x, c, ghostTeam);
                     let ghostFill = !rollValid ? "rgba(255,70,70,0.3)" : (canAfford ? "rgba(255, 255, 255, 0.2)" : "rgba(100, 100, 100, 0.2)");
                     ctx.fillStyle = ghostFill;
                     ctx.strokeStyle = rollValid ? "white" : "#ff5a5a";
@@ -1131,7 +1190,7 @@ class Main {
                     let gx = snap.x, gy = snap.y;
                     let effR = this.effectRadius(c);          // splash for hop/suicide units
                     let range = effR > 0 ? 0 : (c.rn || 0);   // …otherwise the attack range
-                    let valid = canAfford && this.eng.isValid(gy, gx, c, 0) && this.mouse.y < H - 150;
+                    let valid = canAfford && this.eng.isValid(gy, gx, c, ghostTeam) && this.mouse.y < H - 150;
                     let col = valid ? this.getUnitColor(c.n) : "#8a8a8a";
                     let outline = valid ? "#ffffff" : "#ff6a6a";
                     let isBuilding = c.t === 3;
@@ -1181,6 +1240,66 @@ class Main {
             // drawProj instead, so return for those.
             const drawGroundProj = (p) => {
                 if (p.isArrows || p.isSpellArc || p.isLog || p.isSpellDrop || p.isVines) return;
+                if (p.isDeathBomb) {
+                    // Balloon's crash bomb: just a black circle that falls onto the
+                    // balloon's shadow, then sits ticking until it detonates (1.5s).
+                    let drop = (p.dropFall && p.dropMax) ? (p.dropFall / p.dropMax) * 22 : 0;
+                    // Ground shadow grows as the bomb nears the ground.
+                    let sh = 5 + (1 - (drop / 22)) * 4;
+                    ctx.fillStyle = "rgba(0,0,0,0.28)";
+                    ctx.beginPath(); ctx.ellipse(p.x, p.y + 7, sh, sh * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+                    let by = p.y - drop;
+                    ctx.fillStyle = "#000000";
+                    ctx.beginPath(); ctx.arc(p.x, by, 11, 0, Math.PI * 2); ctx.fill();
+                    return;
+                }
+                if (p.isBomb) {
+                    // A dark bomb with a burning, shrinking fuse + spark.
+                    let f = p.bombFuse / (p.bombMax || 30);
+                    ctx.fillStyle = "rgba(0,0,0,0.22)";
+                    ctx.beginPath(); ctx.ellipse(p.x, p.y + 6, 7, 3, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = "#262629";
+                    ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = "rgba(255,255,255,0.25)";
+                    ctx.beginPath(); ctx.arc(p.x - 2, p.y - 2, 2, 0, Math.PI * 2); ctx.fill();
+                    // fuse + spark (burns down as the fuse runs out)
+                    ctx.strokeStyle = "#8a6a3a"; ctx.lineWidth = 1.5;
+                    ctx.beginPath(); ctx.moveTo(p.x + 3, p.y - 5); ctx.lineTo(p.x + 5 + f * 3, p.y - 9 - f * 3); ctx.stroke();
+                    let blink = Math.floor(Date.now() / 60) % 2 === 0;
+                    ctx.fillStyle = blink ? "#ffd24d" : "#ff7a1e";
+                    ctx.beginPath(); ctx.arc(p.x + 5 + f * 3, p.y - 9 - f * 3, 2.2, 0, Math.PI * 2); ctx.fill();
+                    ctx.lineWidth = 1;
+                    return;
+                }
+                if (p.isRage) {
+                    if (p.rageWindup > 0) {
+                        // A pink circle springs UP then back DOWN to splash (sin arc).
+                        let prog = 1 - p.rageWindup / (p.rageMax || 28);
+                        let hop = Math.sin(prog * Math.PI) * 34;
+                        let by = p.y - hop;
+                        // landing shadow
+                        ctx.fillStyle = "rgba(0,0,0,0.25)";
+                        ctx.beginPath(); ctx.ellipse(p.x, p.y, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
+                        // pink bottle — a perfect circle, no cap
+                        let cr = 8;
+                        ctx.fillStyle = "#ff5fb0";
+                        ctx.beginPath(); ctx.arc(p.x, by - 5, cr, 0, Math.PI * 2); ctx.fill();
+                        ctx.fillStyle = "rgba(255,255,255,0.5)";
+                        ctx.beginPath(); ctx.arc(p.x - 2.6, by - 7.5, 2.2, 0, Math.PI * 2); ctx.fill(); // highlight
+                        ctx.strokeStyle = "rgba(150,30,90,0.5)"; ctx.lineWidth = 1.2;
+                        ctx.beginPath(); ctx.arc(p.x, by - 5, cr, 0, Math.PI * 2); ctx.stroke();
+                        ctx.lineWidth = 1;
+                    } else {
+                        // Active rage pool — translucent PINK disc that gently pulses.
+                        let pulse = 0.16 + 0.06 * Math.sin(Date.now() / 160);
+                        ctx.fillStyle = `rgba(255,95,176,${pulse})`;
+                        ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.fill();
+                        ctx.strokeStyle = "rgba(255,130,195,0.6)"; ctx.lineWidth = 2;
+                        ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.stroke();
+                        ctx.lineWidth = 1;
+                    }
+                    return;
+                }
                 if (p.shockBeams) {
                     // Electro Giant: near-straight electric beams that FLICKER (each
                     // blinks on/off rapidly).
@@ -1691,8 +1810,10 @@ class Main {
                 let rects = this.sandboxWorldRects();
                 popupBg("World Edit", rects[0].y - 26); // leave room for the info line
                 for (const o of rects) this.drawBtn(o, o.label, o.color);
-                this.drawCenteredString(`River y: ${this.eng.RIV_Y} · Bridges: ${Math.round(this.eng.bridgeXs[0])} / ${Math.round(this.eng.bridgeXs[1])}`,
-                    W / 2, rects[0].y - 16, "600 12px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.75)");
+                if (!this.eng.sandboxNoRiver) {
+                    this.drawCenteredString(`River y: ${this.eng.RIV_Y} · Bridges: ${Math.round(this.eng.bridgeXs[0])} / ${Math.round(this.eng.bridgeXs[1])}`,
+                        W / 2, rects[0].y - 16, "600 12px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.75)");
+                }
             }
 
             // ---- Full-screen ALL-cards picker (mirrors the deck-builder look) ----
@@ -1747,6 +1868,11 @@ class Main {
     } // End render()
 
     drawEntityBody(e) {
+        // A unit at 0 HP is gone visually — it may still linger a few ticks in the
+        // engine (the dying delay that lets mutual kills draw), but it must DISAPPEAR
+        // immediately on screen, with no leftover body or health bar (so a one-shot
+        // kill never flashes a bar).
+        if (e.hp <= 0) return;
 
         let x = e.x;
         let y = e.y;
@@ -1760,14 +1886,10 @@ class Main {
             radius *= 1.1;
         }
 
-        // Jump offset (kept low — just enough to hop the river)
-        if (e instanceof Troop && e.jp) {
-            let jumpHeight = 0;
-            if (e.jt) {
-                let progress = 1.0 - (e.dist(e.jt) / (e.jd || 1));
-                jumpHeight = 22.0 * Math.sin(progress * Math.PI);
-            }
-            y -= jumpHeight;
+        // Jump offset — arc height from progress toward the FIXED landing point.
+        if (e instanceof Troop && e.jp && e.jdx !== undefined) {
+            let progress = 1.0 - (Math.hypot(e.jdx - e.x, e.jdy - e.y) / (e.jd || 1));
+            y -= 22.0 * Math.sin(progress * Math.PI);
         }
 
         // Spirit hop onto the enemy — arc up (the ground shadow stays put, showing
@@ -1794,10 +1916,11 @@ class Main {
             if (e.c && e.c.isFake) color = "#c4e3a6"; // fake (decoy) goblins: pale, washed-out green
         }
 
-        // Freeze/Slow status tints temporarily override the identity color.
+        // Freeze/Slow status tints temporarily override the identity color. A Fireball
+        // slow (slowMul 0.5) leaves NO tint — only icy slows (0.65x) read blue.
         if (e instanceof Troop) {
             if (e.fr > 0) color = "#bfe8ff";
-            else if (e.sl > 0) color = "#9ad2f5";
+            else if (e.sl > 0 && !(e.slowMul > 0 && e.slowMul < 0.6)) color = "#9ad2f5"; // Fireball slows (0.5/0.2) leave no tint
         }
 
         // While deploying, the body is a touch translucent (the per-card clock
@@ -1886,6 +2009,45 @@ class Main {
             ctx.rect(x - radius, y - radius, radius * 2, radius * 2);
             ctx.fill();
             ctx.stroke();
+        } else if (e.c && e.c.n === "Balloon") {
+            // A dark-red hot-air-balloon: the round envelope sits ABOVE the bomb
+            // basket, ropes connecting the two.
+            let R = radius;
+            let ey = y - R * 0.35;                       // envelope centre (raised up)
+            let by = y + R * 1.0;                        // basket centre (below)
+            let bw = R * 0.72, bh = R * 0.5;
+            // ropes from envelope to basket
+            ctx.strokeStyle = "rgba(40,22,12,0.7)"; ctx.lineWidth = 1.3;
+            ctx.beginPath();
+            ctx.moveTo(x - R * 0.55, ey + R * 0.55); ctx.lineTo(x - bw / 2, by - bh / 2);
+            ctx.moveTo(x + R * 0.55, ey + R * 0.55); ctx.lineTo(x + bw / 2, by - bh / 2);
+            ctx.stroke();
+            // envelope
+            ctx.fillStyle = color;
+            ctx.beginPath(); ctx.ellipse(x, ey, R, R * 1.06, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5; ctx.stroke();
+            // panel seams
+            ctx.strokeStyle = "rgba(255,255,255,0.16)"; ctx.lineWidth = 1.3;
+            ctx.beginPath();
+            ctx.moveTo(x - R * 0.45, ey - R * 0.7); ctx.lineTo(x - R * 0.45, ey + R * 0.7);
+            ctx.moveTo(x + R * 0.45, ey - R * 0.7); ctx.lineTo(x + R * 0.45, ey + R * 0.7);
+            ctx.stroke();
+            // skull face on the envelope
+            ctx.fillStyle = "#efe8d8";
+            ctx.beginPath(); ctx.arc(x, ey - R * 0.05, R * 0.4, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#241616";
+            ctx.beginPath(); ctx.arc(x - R * 0.15, ey - R * 0.09, R * 0.1, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(x + R * 0.15, ey - R * 0.09, R * 0.1, 0, Math.PI * 2); ctx.fill();
+            ctx.fillRect(x - R * 0.16, ey + R * 0.11, R * 0.32, R * 0.1); // teeth band
+            // basket + bomb
+            ctx.fillStyle = "#7a4a22";
+            this.drawRoundRect(x - bw / 2, by - bh / 2, bw, bh, 2, true, false);
+            ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1;
+            this.drawRoundRect(x - bw / 2, by - bh / 2, bw, bh, 2, false, false); ctx.stroke();
+            ctx.fillStyle = "#2b2b2b";
+            ctx.beginPath(); ctx.arc(x, by, R * 0.2, 0, Math.PI * 2); ctx.fill();
+            ctx.lineWidth = 1;
+            ctx.beginPath(); // keep the generic stroke below happy (no-op path)
         } else {
             ctx.arc(x, y, radius, 0, Math.PI * 2);
             ctx.fill();
@@ -1894,18 +2056,42 @@ class Main {
         ctx.globalAlpha = 1;
         ctx.lineWidth = 1;
 
+        // Faint SIDE outline (blue = yours, red = enemy) so you can tell sides apart at
+        // a glance — replaces colouring the unit's name.
+        if (e instanceof Troop) {
+            ctx.strokeStyle = isFriend ? "rgba(90,165,255,0.5)" : "rgba(255,95,95,0.5)";
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(x, y, radius + 1.5, 0, Math.PI * 2); ctx.stroke();
+            ctx.lineWidth = 1;
+        }
+
         // Evolution marker: evolved troops carry a small round purple gem on the body.
         if (e instanceof Troop && e.c && e.c.isEvo) {
             this.drawEvoGem(x, y, Math.min(7, Math.max(4, radius * 0.45)), true);
         }
 
+        // Raged: a pulsing pink aura ring + little spark ticks.
+        if (e.ragedTime > 0) {
+            let t = Date.now() / 120;
+            ctx.strokeStyle = `rgba(255,120,190,${0.55 + 0.3 * Math.sin(t)})`;
+            ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.arc(x, y, radius + 3, 0, Math.PI * 2); ctx.stroke();
+            ctx.fillStyle = "rgba(255,170,210,0.9)";
+            for (let i = 0; i < 4; i++) {
+                let a = t * 1.5 + i * Math.PI / 2;
+                ctx.beginPath(); ctx.arc(x + Math.cos(a) * (radius + 4), y + Math.sin(a) * (radius + 4), 1.6, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.lineWidth = 1;
+        }
+
         // Mega Knight wind-up: a contracting golden ring telegraphs the jump
-        // during its pre-jump crouch.
-        if (e instanceof Troop && e.preJump > 0 && e.c.n === "Mega Knight") {
+        // during its pre-jump crouch. The Hopper plays the same animation, smaller.
+        if (e instanceof Troop && e.preJump > 0 && (e.c.n === "Mega Knight" || e.c.n === "Hopper")) {
             let t = e.preJump / 45; // 1 → 0 as the jump nears
+            let sm = e.c.n === "Hopper" ? 0.45 : 1; // the Hopper telegraphs a smaller crouch
             ctx.strokeStyle = `rgba(255,210,80,${0.35 + 0.55 * (1 - t)})`;
-            ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.arc(x, y, radius + 4 + 16 * t, 0, Math.PI * 2); ctx.stroke();
+            ctx.lineWidth = 3 * sm + 0.5;
+            ctx.beginPath(); ctx.arc(x, y, radius + (4 + 16 * t) * sm, 0, Math.PI * 2); ctx.stroke();
             ctx.lineWidth = 1;
         }
 
@@ -1938,7 +2124,8 @@ class Main {
         e._barW = (e instanceof Tower) ? 42 : Math.max(24, radius * 1.9);
         e._barFriend = isFriend;
 
-        // Unit name
+        // Unit name (white). The friend/foe side is shown by the body's faint colored
+        // outline (see drawEntityBody) and the health-bar colour, not the name.
         if (name && name.length > 0) {
             let fontSize = Math.max(9, Math.min(13, 8 + radius * 0.4));
             ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
@@ -1965,11 +2152,12 @@ class Main {
             "Wizard": "#ff7043", "Witch": "#8e4fb0", "Mega Minion": "#2f4f6e",
             "Minion Horde": "#356b6b", "Baby Dragon": "#79c267", "Inferno Dragon": "#ff5a2c",
             "Golem": "#8a6a4a", "Lava Hound": "#cf5a3c", "Elixir Golem": "#d56ab5",
-            "Elite Barbarians": "#e0934a", "Zappies": "#ffd24d", "Sparky": "#ffb13c",
+            "Elite Barbarians": "#e0934a", "Zappies": "#ffd24d", "Sparky": "#64c8ff",
             "Wall Breakers": "#b5733a", "Royal Giant": "#e6b15a", "Electro Giant": "#46b6c4",
             "Bowler": "#7456b0", "Hog Rider": "#b07a45", "Royal Hogs": "#e89ab5",
             "Prince": "#f1c64a", "Mother Witch": "#7a3f9c", "Royal Recruits": "#b9a06a",
             "Dark Prince": "#4a3f5a", "Ice Golem": "#a9dcef", "Cannon": "#6b7079",
+            "Lumberjack": "#5a7a3a", "Balloon": "#9c2b3a", "Hopper": "#6db84a",
             "Inferno Tower": "#b5563a", "Elixir Collector": "#c46fb0", "Crate": "#9c7b4a",
             "Golemite": "#8a8a8a", "Lava Pup": "#ff8a4c", "Elixir Golemite": "#d56ab5",
             "Elixir Blob": "#d56ab5", "Cursed Hog": "#8e4fb0", "Golem": "#8a8a8a"
@@ -2026,19 +2214,25 @@ class Main {
     }
 
     // Sandbox WORLD EDIT popup: placement rules, river / bridge movers, towers.
+    // The river / bridge controls are hidden on maps that have no river.
     sandboxWorldRects() {
         const fullW = 260, halfW = 124, x0 = W / 2 - fullW / 2, y0 = H / 2 - 210, rh = 50, gap = 12;
-        const row = i => y0 + i * (rh + gap);
-        return [
-            { id: 'rules', label: this.eng.sandboxNoRules ? "RULES: OFF" : "RULES: ON", color: this.eng.sandboxNoRules ? "#e84d8a" : "#39c44e", x: x0, y: row(0), w: fullW, h: rh },
-            { id: 'rivUp', label: "RIVER ↑", color: "#3296ff", x: x0, y: row(1), w: halfW, h: rh },
-            { id: 'rivDn', label: "RIVER ↓", color: "#3296ff", x: x0 + fullW - halfW, y: row(1), w: halfW, h: rh },
-            { id: 'brIn', label: "BRIDGES →←", color: "#9c6b3a", x: x0, y: row(2), w: halfW, h: rh },
-            { id: 'brOut', label: "BRIDGES ←→", color: "#9c6b3a", x: x0 + fullW - halfW, y: row(2), w: halfW, h: rh },
-            { id: 'king', label: "+ KING TOWER", color: "#b65cd6", x: x0, y: row(3), w: fullW, h: rh },
-            { id: 'princess', label: "+ PRINCESS TOWER", color: "#b65cd6", x: x0, y: row(4), w: fullW, h: rh },
-            { id: 'close', label: "CLOSE", color: "#FF6347", x: x0, y: row(5), w: fullW, h: rh },
-        ];
+        let i = 0;
+        const row = () => y0 + (i++) * (rh + gap);
+        const out = [];
+        out.push({ id: 'rules', label: this.eng.sandboxNoRules ? "RULES: OFF" : "RULES: ON", color: this.eng.sandboxNoRules ? "#e84d8a" : "#39c44e", x: x0, y: row(), w: fullW, h: rh });
+        if (!this.eng.sandboxNoRiver) {
+            let r1 = row();
+            out.push({ id: 'rivUp', label: "RIVER ↑", color: "#3296ff", x: x0, y: r1, w: halfW, h: rh });
+            out.push({ id: 'rivDn', label: "RIVER ↓", color: "#3296ff", x: x0 + fullW - halfW, y: r1, w: halfW, h: rh });
+            let r2 = row();
+            out.push({ id: 'brIn', label: "BRIDGES →←", color: "#9c6b3a", x: x0, y: r2, w: halfW, h: rh });
+            out.push({ id: 'brOut', label: "BRIDGES ←→", color: "#9c6b3a", x: x0 + fullW - halfW, y: r2, w: halfW, h: rh });
+        }
+        out.push({ id: 'king', label: "+ KING TOWER", color: "#b65cd6", x: x0, y: row(), w: fullW, h: rh });
+        out.push({ id: 'princess', label: "+ PRINCESS TOWER", color: "#b65cd6", x: x0, y: row(), w: fullW, h: rh });
+        out.push({ id: 'close', label: "CLOSE", color: "#FF6347", x: x0, y: row(), w: fullW, h: rh });
+        return out;
     }
 
     // "#rrggbb" + alpha → an "rgba(...)" string.
@@ -2076,11 +2270,12 @@ class Main {
         let m = 10;
         const n = c.n;
         if (["Skeletons", "Bats"].includes(n)) m = 6;
-        else if (n.includes("Spirit")) m = 10;
+        else if (n.includes("Spirit")) m = 13;
         else if (["Goblins", "Archers", "Wall Breakers"].some(x => n.includes(x))) m = 8;
         else if (["Barbarians", "Elite Barbarians", "Royal Recruits"].includes(n)) m = 12;
         else if (n === "Mega Knight" || n === "P.E.K.K.A") m = 20;
         else if (n === "Sparky" || n === "Bowler") m = 18;
+        else if (n === "Balloon") m = 19;
         else if (n.includes("Dragon") || n === "Lava Hound") m = 16;
         else if (["Giant", "Golem", "Elixir Golem", "Royal Giant", "Electro Giant"].includes(n)) m = 20;
         return m * 0.88;
@@ -2095,7 +2290,8 @@ class Main {
         if (n === "Archers") return [at(-8, 0), at(8, 0)];               // almost touching
         if (n === "Wall Breakers") return [at(-15, 0), at(15, 0)];
         if (n === "Spear Goblins") return [at(-15, 0), at(15, 0), at(0, 15)];
-        if (["Skeletons", "Goblins", "Minions"].includes(n)) return [at(0, -10), at(-10, 10), at(10, 10)];
+        if (n === "Goblins") return [at(0, -12), at(-12, 0), at(12, 0), at(0, 12)];   // 4 goblins
+        if (["Skeletons", "Minions"].includes(n)) return [at(0, -10), at(-10, 10), at(10, 10)];
         if (n === "Minion Horde") return [at(-22, -12), at(0, -16), at(22, -12), at(-14, 12), at(14, 12), at(0, 4)];
         if (n === "Skeleton Army") { let a = []; for (let i = 0; i < 15; i++) { let ang = i * 2.39996, rr = Math.sqrt((i + 0.5) / 15) * 48; a.push(at(Math.cos(ang) * rr, Math.sin(ang) * rr)); } return a; }
         if (n === "Bats") return [at(-18, -8), at(0, -14), at(18, -8), at(-10, 10), at(10, 10)];
@@ -2325,7 +2521,7 @@ class Main {
     // the area spells) — these render above ground troops but below the towers.
     isSpellProj(p) {
         return !!(p.isSpellArc || p.isArrows || p.isSpellDrop || p.isLog || p.isDelivery ||
-            p.poison || p.graveyard || p.brownArea || p.isClone || p.isVines || p.chainTargets || p.shockBeams || p.isShockwave);
+            p.poison || p.graveyard || p.brownArea || p.isClone || p.isVines || p.chainTargets || p.shockBeams || p.isShockwave || p.isRage || p.isBomb);
     }
 
     drawProj(p) {
@@ -2489,9 +2685,13 @@ class Main {
     // them. Geometry was stashed on each entity by drawEntityBody this same frame.
     drawHealthBars() {
         for (let e of this.eng.ents) {
-            if (e._barY === undefined) continue;
+            if (e._barY === undefined || e.hp <= 0) continue; // dying units are already gone
+
             let x = e._barX, barY = e._barY, barW = e._barW;
-            if (e.shield > 0) {
+            // The shield has been damaged (not full)? Show the shield bar — and the
+            // health bar too, so both are visible at once.
+            let shieldDmg = e.shield > 0 && !(e.maxShield > 0 && e.shield >= e.maxShield);
+            if (shieldDmg) {
                 // Guard against a missing/zero maxShield (would make the bar infinite).
                 let shPct = e.maxShield > 0 ? Math.max(0, Math.min(1, e.shield / e.maxShield)) : 1;
                 ctx.fillStyle = "rgba(0,0,0,0.5)";
@@ -2499,7 +2699,8 @@ class Main {
                 ctx.fillStyle = "#d9b3ff";
                 ctx.fillRect(x - barW / 2, barY - 5, barW * shPct, 3);
             }
-            if (!(e instanceof Tower) || e.hp < e.mhp) {
+            // Show a health bar once the unit has taken damage OR its shield is damaged.
+            if (e.hp < e.mhp || shieldDmg) {
                 let hpPct = Math.max(0, Math.min(1, e.hp / e.mhp));
                 ctx.fillStyle = "rgba(0,0,0,0.55)";
                 ctx.fillRect(x - barW / 2 - 1, barY - 1, barW + 2, 6);

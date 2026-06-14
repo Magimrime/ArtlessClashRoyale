@@ -63,6 +63,7 @@ export default class Tower extends Entity {
             // and reach the tower — Princess every 75 ticks, King every 90.
             g.projs.push(new Proj(this.x, this.y, best.x, best.y, best, 10, false, 4, 109, this.tm, false));
             this.cd = this.kg ? 96 : 90; // King every 1.6s, Princess every 1.5s
+            if (this.ragedTime > 0) this.cd = Math.round(this.cd * 0.8); // Rage: +20% hit speed
         }
     }
 }
