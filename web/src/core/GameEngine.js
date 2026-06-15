@@ -23,7 +23,7 @@ export default class GameEngine {
 
         // Evolutions: which cards CAN evolve and how many normal plays charge the
         // evo. evoSel / enemyEvoSel hold the (≤2) card names chosen as evos per deck.
-        this.EVO_REQ = { "Barbarians": 1, "Archers": 2, "Inferno Dragon": 2, "Royal Recruits": 1, "Goblin Barrel": 2, "Musketeer": 2, "Wall Breakers": 2, "Mega Knight": 2, "Lumberjack": 1, "Witch": 2, "Skeleton Army": 2, "Skeletons": 1, "Zap": 2, "Ice Spirit": 1 };
+        this.EVO_REQ = { "Barbarians": 1, "Archers": 2, "Inferno Dragon": 2, "Royal Recruits": 1, "Goblin Barrel": 2, "Musketeer": 2, "Wall Breakers": 2, "Mega Knight": 1, "Lumberjack": 2, "Witch": 1, "Skeleton Army": 2, "Skeletons": 2, "Zap": 2, "Ice Spirit": 1, "Royal Giant": 1, "Bats": 2, "Minion Horde": 1, "Royal Hogs": 1 };
         this.evoSel = [];
         this.enemyEvoSel = [];
 
@@ -74,38 +74,39 @@ export default class GameEngine {
         // Spells/Goblin Barrel/Graveyard/Mirror/Clone/Crate/Vines keep d as their
         // effect value (Crate and Vines have no real counterpart).
         this.allCards = [
-            new Card("Knight", 3, 1766, 202, 0.5, 14, 0, 100, 72, 150, false, false),
+            new Card("Knight", 3, 1766, 202, 0.55, 14, 0, 100, 72, 150, false, false),
             new Card("Hopper", 4, 1766, 0, 0, 45, 0, 100, 30, 150, false, false),
-            new Card("Archers", 3, 304, 87, 0.5, 128, 0, 100, 54, 150, false, true),
+            new Card("Archers", 3, 304, 87, 0.55, 128, 0, 100, 54, 150, false, true),
             new Card("Giant", 5, 4091, 254, 0.375, 14, 1, 100, 90, 150, false, false),
             new Card("Fireball", 4, 0, 689, 0, 0, 2, 0, 0, 0, false, true),
             new Card("Rocket", 6, 0, 1484, 0, 0, 2, 0, 0, 0, false, true),
-            new Card("Mini PEKKA", 4, 1361, 720, 0.75, 8, 0, 100, 96, 150, false, false),
+            new Card("Mini PEKKA", 4, 1361, 720, 0.825, 8, 0, 100, 96, 150, false, false),
             new Card("Zap", 2, 0, 192, 0, 0, 2, 0, 0, 0, false, true),
-            new Card("Skeletons", 1, 30, 81, 0.75, 8, 0, 100, 60, 150, false, false),
-            new Card("Musketeer", 4, 720, 218, 0.5, 158, 0, 100, 60, 150, false, true),
-            new Card("Three Musketeers", 9, 883, 204, 0.5, 158, 0, 100, 72, 150, false, true),
+            new Card("Skeletons", 1, 30, 81, 0.825, 8, 0, 100, 60, 150, false, false),
+            new Card("Musketeer", 4, 720, 218, 0.55, 158, 0, 100, 60, 150, false, true),
+            new Card("Three Musketeers", 9, 883, 204, 0.55, 158, 0, 100, 72, 150, false, true),
             new Card("Cannon", 3, 824, 212, 0, 143, 3, 1800, 54, 165, false, false),
             new Card("Mega Knight", 7, 3993, 268, 0.5, 14, 0, 100, 102, 150, false, false),
             new Card("P.E.K.K.A", 7, 3760, 816, 0.375, 14, 0, 100, 108, 150, false, false),
-            new Card("Skeleton Army", 3, 81, 81, 0.75, 8, 0, 100, 60, 150, false, false),
-            new Card("Barbarians", 5, 715, 192, 0.5, 8, 0, 100, 78, 150, false, false),
+            new Card("Skeleton Army", 3, 81, 81, 0.825, 8, 0, 100, 60, 150, false, false),
+            new Card("Barbarians", 5, 715, 192, 0.55, 8, 0, 100, 78, 150, false, false),
             new Card("Goblin Barrel", 3, 0, 0, 0, 0, 2, 0, 0, 0, false, false),
             new Card("Royale Delivery", 3, 0, 250, 0, 0, 2, 0, 0, 0, false, false),
             new Card("Vines", 2, 0, 44, 0, 0, 2, 0, 0, 0, false, true),
             new Card("Freeze", 4, 0, 115, 0, 0, 2, 0, 0, 0, false, true),
-            new Card("Fire Spirit", 1, 230, 207, 1, 38, 0, 100, 18, 150, false, true),
-            new Card("Ice Spirit", 1, 230, 110, 1, 53, 0, 100, 18, 150, false, true),
-            new Card("Electro Spirit", 1, 230, 99, 1, 53, 0, 100, 18, 150, false, true),
-            new Card("Heal Spirit", 1, 231, 110, 1, 53, 0, 100, 18, 150, false, true),
+            new Card("Fire Spirit", 1, 230, 207, 1.2, 38, 0, 100, 18, 150, false, true),
+            new Card("Ice Spirit", 1, 230, 110, 1.2, 53, 0, 100, 18, 150, false, true),
+            new Card("Electro Spirit", 1, 230, 99, 1.2, 53, 0, 100, 18, 150, false, true),
+            new Card("Heal Spirit", 1, 231, 110, 1.2, 53, 0, 100, 18, 150, false, true),
             new Card("Arrows", 3, 0, 122, 0, 0, 2, 0, 0, 0, false, true),
             new Card("Minions", 3, 230, 117, 0.75, 26, 0, 100, 60, 150, true, true),
-            new Card("Goblins", 2, 202, 120, 0.75, 8, 0, 100, 66, 150, false, false),
-            new Card("Spear Goblins", 2, 133, 81, 0.75, 143, 0, 100, 102, 150, false, true),
+            new Card("Goblin Demolisher", 4, 1100, 130, 0.6, 120, 0, 100, 108, 150, false, true),
+            new Card("Goblins", 2, 202, 120, 0.825, 8, 0, 100, 66, 150, false, false),
+            new Card("Spear Goblins", 2, 133, 81, 0.825, 143, 0, 100, 102, 150, false, true),
             new Card("Bats", 2, 81, 81, 1, 14, 0, 100, 78, 150, true, true),
             new Card("Poison", 4, 0, 70, 0, 0, 2, 0, 0, 0, false, true),
-            new Card("Wizard", 5, 720, 281, 0.5, 143, 0, 100, 84, 150, false, true),
-            new Card("Witch", 5, 838, 134, 0.5, 143, 0, 100, 66, 150, false, true),
+            new Card("Wizard", 5, 720, 281, 0.55, 143, 0, 100, 84, 150, false, true),
+            new Card("Witch", 5, 838, 134, 0.55, 143, 0, 100, 66, 150, false, true),
             new Card("Graveyard", 5, 0, 0, 0, 0, 2, 0, 0, 0, false, true),
             new Card("Mega Minion", 3, 837, 311, 0.5, 48, 0, 100, 90, 150, true, true),
             new Card("Minion Horde", 5, 230, 117, 0.75, 26, 0, 100, 60, 150, true, true),
@@ -115,27 +116,27 @@ export default class GameEngine {
             new Card("Golem", 8, 5120, 312, 0.375, 8, 1, 100, 150, 150, false, false),
             new Card("Lava Hound", 7, 3811, 54, 0.375, 83, 1, 100, 78, 150, true, false),
             new Card("Elixir Golem", 3, 1568, 254, 0.375, 8, 1, 100, 66, 150, false, false),
-            new Card("Elite Barbarians", 6, 1341, 384, 0.75, 14, 0, 100, 84, 150, false, false),
+            new Card("Elite Barbarians", 6, 1341, 384, 0.825, 14, 0, 100, 84, 150, false, false),
             new Card("Elixir Collector", 6, 1070, 0, 0, 8, 3, 3900, 0, 0, false, false),
-            new Card("Zappies", 4, 530, 116, 0.5, 113, 0, 100, 126, 150, false, true),
-            new Card("Sparky", 6, 1452, 1331, 0.375, 128, 0, 100, 240, 150, false, false),
+            new Card("Zappies", 4, 530, 116, 0.55, 113, 0, 100, 126, 150, false, true),
+            new Card("Sparky", 6, 1452, 1331, 0.4125, 128, 0, 100, 240, 150, false, false),
             new Card("Mirror", 1, 0, 0, 0, 0, 2, 0, 0, 0, false, true),
             new Card("Clone", 3, 0, 0, 0, 0, 2, 0, 0, 0, false, true),
-            new Card("Wall Breakers", 2, 331, 392, 1, 8, 1, 100, 72, 150, false, false),
+            new Card("Wall Breakers", 2, 331, 392, 1.2, 8, 1, 100, 72, 150, false, false),
             new Card("Royal Giant", 6, 3072, 307, 0.375, 128, 1, 100, 102, 150, false, false),
             new Card("Electro Giant", 7, 3856, 163, 0.375, 14, 1, 100, 126, 150, false, false),
-            new Card("Bowler", 5, 2080, 288, 0.375, 98, 0, 100, 150, 150, false, false),
-            new Card("Hog Rider", 4, 1696, 318, 0.75, 8, 1, 100, 96, 150, false, false),
-            new Card("Royal Hogs", 5, 837, 74, 0.75, 8, 1, 100, 72, 150, false, false),
-            new Card("Prince", 5, 1920, 392, 0.5, 26, 0, 100, 84, 150, false, false),
-            new Card("Mother Witch", 4, 532, 133, 0.5, 143, 0, 100, 60, 150, false, true),
+            new Card("Bowler", 5, 2080, 288, 0.4125, 98, 0, 100, 150, 150, false, false),
+            new Card("Hog Rider", 4, 1696, 318, 0.9, 8, 1, 100, 96, 150, false, false),
+            new Card("Royal Hogs", 5, 837, 74, 0.9, 8, 1, 100, 72, 150, false, false),
+            new Card("Prince", 5, 1920, 392, 0.55, 26, 0, 100, 84, 150, false, false),
+            new Card("Mother Witch", 4, 532, 133, 0.55, 143, 0, 100, 60, 150, false, true),
             new Card("The Log", 2, 0, 290, 0, 0, 2, 0, 0, 0, false, true),
             new Card("Barbarian Barrel", 2, 0, 241, 0, 0, 2, 0, 0, 0, false, false),
-            new Card("Royal Recruits", 7, 532, 133, 0.5, 26, 0, 100, 78, 150, false, false),
-            new Card("Dark Prince", 4, 1200, 248, 0.5, 14, 0, 100, 78, 150, false, false),
+            new Card("Royal Recruits", 7, 532, 133, 0.55, 26, 0, 100, 78, 150, false, false),
+            new Card("Dark Prince", 4, 1200, 248, 0.55, 14, 0, 100, 78, 150, false, false),
             new Card("Crate", 2, 300, 0, 0, 0, 3, 1800, 0, 0, false, false),
             new Card("Ice Golem", 2, 1197, 84, 0.375, 8, 1, 100, 150, 150, false, false),
-            new Card("Lumberjack", 4, 1244, 150, 1, 14, 0, 100, 60, 150, false, false),
+            new Card("Lumberjack", 4, 1244, 150, 1.1, 14, 0, 100, 60, 150, false, false),
             new Card("Rage", 2, 0, 140, 0, 0, 2, 0, 0, 0, false, true),
             new Card("Balloon", 5, 1421, 644, 0.75, 14, 1, 100, 120, 150, true, false)
         ];
@@ -1012,7 +1013,7 @@ export default class GameEngine {
 
             let toClone = [];
             for (let e of this.ents) {
-                if (e instanceof Troop && e.tm === tm && Math.hypot(e.x - x, e.y - y) < rad && !e.isClone && !e.isRageGhost && !e.isSkeleGhost && !(e instanceof Building) && !(e instanceof Tower)) {
+                if (e instanceof Troop && e.tm === tm && Math.hypot(e.x - x, e.y - y) < rad && !e.isClone && !e.isGhosted && !(e instanceof Building) && !(e instanceof Tower)) {
                     toClone.push(e);
                 }
             }
@@ -1110,8 +1111,11 @@ export default class GameEngine {
             this.ents.push(new Troop(tm, x + 10, y + 10, c));
             if (this.isMidSplit(x)) this.splitLanes([x < this.W / 2 ? 0 : 1, 0, 1]);
         } else if (c.n === "Minion Horde") {
-            for (let i = 0; i < 6; i++)
-                this.ents.push(new Troop(tm, x + this.random() * 50 - 25, y + this.random() * 50 - 25, this.getCard("Minions")));
+            for (let i = 0; i < 6; i++) {
+                let t = new Troop(tm, x + this.random() * 50 - 25, y + this.random() * 50 - 25, this.getCard("Minions"));
+                if (c.isEvo) t.evoGhostOnHit = true; // EVO: ghosts for 3s whenever it's damaged
+                this.ents.push(t);
+            }
         } else if (c.n === "Skeleton Army") {
             // EVO: a shielded GENERAL spawns at the BACK (toward home). Every army
             // skeleton is tagged to it — they rise as ghosts when killed and only truly
@@ -1162,10 +1166,11 @@ export default class GameEngine {
             this.ents.push(new Building(tm, x, y, c));
             this.buildingGen = (this.buildingGen || 0) + 1; // a freshly placed building lets troops re-pick a building target
         } else if (c.n === "Royal Hogs") {
-            this.ents.push(new Troop(tm, x - 30, y, c));
-            this.ents.push(new Troop(tm, x - 10, y, c));
-            this.ents.push(new Troop(tm, x + 10, y, c));
-            this.ents.push(new Troop(tm, x + 30, y, c));
+            for (const ox of [-30, -10, 10, 30]) {
+                let t = new Troop(tm, x + ox, y, c);
+                if (c.isEvo) { t.fly = true; t.evoFlyHog = true; } // EVO: start AIRBORNE, crash down on the first hit
+                this.ents.push(t);
+            }
             // Centre placement: two hogs pathfind to each lane.
             if (this.isMidSplit(x)) this.splitLanes([0, 0, 1, 1]);
         } else if (c.n === "Three Musketeers") {

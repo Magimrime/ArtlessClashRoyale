@@ -126,12 +126,46 @@ export default class Troop extends Entity {
         } else {
             this._hp = val;
         }
+        // EVO Minion Horde: the FIRST time a minion takes damage (and survives) it turns
+        // into a GHOST — untargetable & translucent — for 3 seconds. This is a ONE-TIME
+        // escape: once spent, later hits no longer ghost it. (evoGhostOnHit stays set as
+        // the permanent "evo minion" marker for the crystal.)
+        if (dmg > 0 && this._hp > 0 && this.evoGhostOnHit && !this.ghostUsed) { this.ghostTime = 180; this.ghostUsed = true; }
+        // EVO Royal Hogs: the first hit while AIRBORNE knocks the hog out of the sky
+        // (the crash damage is dealt in act, which has the engine handle).
+        if (dmg > 0 && this._hp > 0 && this.evoFlyHog && this.fly) this.fallPending = true;
     }
 
     act(g) {
         // Shadow the module constant with the engine's LIVE river position so the
         // sandbox world editor can move the river (normal games keep 405).
         const RIV_Y = g.RIV_Y || 405;
+
+        if (this.ghostTime > 0) this.ghostTime--; // temporary Evo Minion Horde ghost ticking down
+
+        // EVO Royal Hogs also fall NATURALLY once they reach a tower/building — they crash
+        // down onto it instead of attacking it from the air.
+        if (this.evoFlyHog && this.fly) {
+            for (let e of g.ents) {
+                if (e.tm !== this.tm && e.hp > 0 && (e.constructor.name === "Tower" || e.constructor.name === "Building") &&
+                    this.dist(e) < g.getHitboxRadius(this) + g.getHitboxRadius(e) + 12) { this.fallPending = true; break; }
+            }
+        }
+
+        // EVO Royal Hogs: they fly in, and the FIRST hit knocks them down — they crash to
+        // the ground for a jumper's worth of area damage, then charge on as ground hogs.
+        if (this.fallPending) {
+            this.fallPending = false;
+            this.evoFlyHog = false;
+            this.fly = false;
+            for (let e of g.ents) {
+                if (e.tm !== this.tm && e.hp > 0 && this.dist(e) < 45 + g.getHitboxRadius(e)) {
+                    e.hp -= 300; // a jumper's worth of landing damage
+                    if (e.constructor.name === "Troop") e.applyKnockback(Math.atan2(e.y - this.y, e.x - this.x), 28);
+                }
+            }
+            g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 45, 0, this.tm, false).asShockwave());
+        }
 
         // EVO Lumberjack's rage-ghost lives until ITS OWN bottle of rage runs out — it
         // can roam OUT of that rage and still survive until the bottle expires. Standing
@@ -292,9 +326,9 @@ export default class Troop extends Entity {
                         // air, ground, even heavies (force = true).
                         for (let e of g.ents) {
                             if (e.tm !== this.tm && e.hp > 0 && this.dist(e) < 21 + g.getHitboxRadius(e)) {
-                                e.hp -= 272; // 80% of MK's 340 (20% less)
-                                // Shoves EVERY card (force): 1.7 tiles for normal troops,
-                                // 1.5 for another Hopper (so they leapfrog cleanly).
+                                if (!e.fly) e.hp -= 272; // GROUND only ( like a MK slam) — no damage to air
+                                // Still SHOVES every card (force), air included: 1.7 tiles for
+                                // normal troops, 1.5 for another Hopper (so they leapfrog).
                                 if (e.constructor.name === "Troop") e.applyKnockback(Math.atan2(e.y - this.y, e.x - this.x), (e.c.n === "Hopper") ? 45 : 51, true, true);
                             }
                         }
@@ -337,6 +371,7 @@ export default class Troop extends Entity {
                 let best = null, bd = 45;
                 for (let e of g.ents) {
                     if (e.tm === this.tm || e.hp <= 0 || e.constructor.name !== "Troop") continue;
+                    if (e.fly) continue; // the Hopper is GROUND-only — it never leaps at air troops
                     let d = this.dist(e);
                     if (d < bd) { bd = d; best = e; }
                 }
@@ -348,6 +383,31 @@ export default class Troop extends Entity {
         // (Spirits / Wall Breakers rush their target and explode on contact — handled
         // in the attack section below so they path via bridges and never shoot.)
 
+        // GOBLIN DEMOLISHER last stand: once its HP drops below the half-way line it
+        // STOPS lobbing dynamite and CHARGES the nearest enemy building/tower, blowing up
+        // on contact (the big death blast is dealt in die()).
+        if (this.c.n === "Goblin Demolisher") {
+            if (this.hp < this.mhp * 0.5) this.lastStand = true;
+            if (this.lastStand) {
+                let best = null, bd = Infinity;
+                for (let e of g.ents) {
+                    if (e.tm === this.tm || e.hp <= 0) continue;
+                    if (e.constructor.name !== "Tower" && e.constructor.name !== "Building") continue;
+                    let d = this.dist(e); if (d < bd) { bd = d; best = e; }
+                }
+                if (best) {
+                    this.currentTarget = best;
+                    if (this.dist(best) < g.getHitboxRadius(this) + g.getHitboxRadius(best) + 8) {
+                        this.exploded = true; this.hp = 0; return; // detonate on the structure
+                    }
+                    let a = Math.atan2(best.y - this.y, best.x - this.x);
+                    this.x += Math.cos(a) * this.c.s * 2.4; // a desperate, FAST charge
+                    this.y += Math.sin(a) * this.c.s * 2.4;
+                    return;
+                }
+            }
+        }
+
         // Find the attack target every tick. findTarget keeps the current target
         // unless it dies or a clearly closer one appears (hysteresis), so this is
         // both responsive and jitter-free. The river crossing is handled purely in
@@ -357,27 +417,27 @@ export default class Troop extends Entity {
         // Jumpers (Hog, Prince, ...) leap the river instead of using a bridge.
         if (!this.fly && !this.jp && this.currentTarget && !g.sandboxNoRiver &&
             ["Hog Rider", "Royal Hogs", "Prince", "Dark Prince"].includes(this.c.n)) {
-            if (((this.y < RIV_Y) !== (this.currentTarget.y < RIV_Y)) && Math.abs(this.y - RIV_Y) < 40) {
+            if (((this.y < RIV_Y) !== (this.currentTarget.y < RIV_Y)) && Math.abs(this.y - RIV_Y) < 34) {
                 let bxs = g.bridgeXs || [W / 4, W * 3 / 4];
                 let onBridge = bxs.some(bx => this.x >= bx - 30 && this.x <= bx + 30);
                 if (!onBridge) {
                     this.jp = true;
                     this.kbTime = 0;
                     this.fly = true;
-                    this.preJump = 0;
+                    this.preJump = 0; // NO wind-up delay — it hops the instant it reaches the river
                     if (this.c.n === "Prince" || this.c.n === "Dark Prince") {
                         this.isCharging = false;
                         this.distWalked = 0;
                     }
-                    let landingY = (this.y < RIV_Y) ? RIV_Y + 42 : RIV_Y - 42;
-                    let angle = Math.atan2(this.currentTarget.y - this.y, this.currentTarget.x - this.x);
-                    let dy = landingY - this.y;
-                    let dx = 0;
-                    if (Math.abs(Math.tan(angle)) > 0.1) dx = dy / Math.tan(angle);
-                    if (dx > 45) dx = 45;
-                    if (dx < -45) dx = -45;
-                    this.jt = { x: this.x + dx, y: landingY, hp: 1 };
-                    this.jd = this.dist(this.jt);
+                    // A short ~1.5-tile hop STRAIGHT across to the near edge of the far bank
+                    // (the shortest crossing) with a small horizontal nudge toward the target.
+                    // Arced like a Hopper jump — jdx/jdy drive the render arc.
+                    let far = (this.y < RIV_Y) ? RIV_Y + 25 : RIV_Y - 25; // land a bit deeper on the far bank
+                    let hx = Math.sign(this.currentTarget.x - this.x) * 8;
+                    this.jdx = this.x + hx;
+                    this.jdy = far;
+                    this.jd = Math.hypot(this.jdx - this.x, this.jdy - this.y);
+                    this.jt = { x: this.jdx, y: this.jdy, hp: 1 };
                 }
             }
         }
@@ -496,6 +556,17 @@ export default class Troop extends Entity {
                 let p = new Proj(this.x, this.y, this.lk.x, this.lk.y, this.lk, 9, false, 8, this.c.d, this.tm, false);
                 p.isCannonball = true; // big dark cannonball
                 g.projs.push(p);
+                // EVO: every shot also SLAMS the ground around the giant — Hopper-landing-
+                // style area damage + knockback to nearby enemies, with a shockwave.
+                if (this.c.isEvo) {
+                    for (let e of g.ents) {
+                        if (e.tm !== this.tm && e.hp > 0 && this.dist(e) < 60 + g.getHitboxRadius(e)) {
+                            e.hp -= this.c.d;
+                            if (e.constructor.name === "Troop") e.applyKnockback(Math.atan2(e.y - this.y, e.x - this.x), 30);
+                        }
+                    }
+                    g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 60, 0, this.tm, false).asShockwave());
+                }
             } else if (this.c.n === "Bowler") {
                 let angle = Math.atan2(this.lk.y - this.y, this.lk.x - this.x);
                 let dist = 140;
@@ -520,12 +591,17 @@ export default class Troop extends Entity {
                 // Bayonet: a ground target inside 1.6 tiles (48px) takes a 314-damage
                 // melee jab instead of a shot (Season-77 Three Musketeers rework).
                 this.lk.hp -= 314;
+            } else if (this.c.n === "Goblin Demolisher") {
+                // Throws a stick of DYNAMITE — it arcs to the target (with a shadow) and
+                // bursts into an area fire blast on landing.
+                g.projs.push(new Proj(this.x, srcY, this.lk.x, this.lk.y, this.lk, 0, false, 42, this.c.d, this.tm, false).asDynamite(this.c.d));
             } else if (this.c.rn > 30) {
                 let p = new Proj(this.x, srcY, this.lk.x, this.lk.y, this.lk, 8, false, 4, this.c.d, this.tm, false);
                 if (["Wizard", "Witch", "Baby Dragon"].includes(this.c.n)) {
                     p.delayedSplash = true;
                     p.spl = false;
                     p.life = 100;
+                    p.splashRad = (this.c.n === "Wizard") ? 30 : 24; // Wizard splash is a touch bigger
                 }
                 g.projs.push(p);
             } else {
@@ -545,7 +621,7 @@ export default class Troop extends Entity {
                     this.lk.hp -= this.c.d;
                 } else {
                     let dmg = this.c.d;
-                    if (this.c.n === "Prince" || this.c.n === "Dark Prince") dmg = Math.floor(dmg * 0.3);
+                    if (this.c.n === "Prince") dmg = Math.floor(dmg * 0.3);
                     if (this.isCharging) {
                         if (this.c.n === "Knight") dmg = Math.floor(dmg * 1.5);
                         else if (this.c.n === "Royal Recruits") dmg = Math.floor(dmg * 1.2); // evo dash: +20% first hit
@@ -553,7 +629,20 @@ export default class Troop extends Entity {
                         this.isCharging = false;
                         this.distWalked = 0;
                     }
-                    this.lk.hp -= dmg;
+                    if (this.c.n === "Dark Prince") {
+                        // Dark Prince deals SPLASH — its (L11 ~249, charge ~498) hit lands on
+                        // every enemy in a small area around the target.
+                        for (let e of g.ents)
+                            if (e.tm !== this.tm && e.hp > 0 && e.dist(this.lk) < 26 + g.getHitboxRadius(e))
+                                e.hp -= dmg;
+                    } else {
+                        this.lk.hp -= dmg;
+                    }
+                    // EVO Bats: every hit makes the bat tougher — it gains HP, capped at
+                    // +50% of its original max (so it tops out around 1.5x its base HP).
+                    if (this.c.n === "Bats" && this.c.isEvo && this.hp > 0) {
+                        this.hp = Math.min(this.mhp * 1.5, this.hp + 14);
+                    }
                     // EVO Skeletons: every hit RAISES another skeleton (a brief shimmer-in),
                     // up to 8 on the field at once. (Manual sandbox summons can exceed it —
                     // the cap only gates this auto-multiply.) A skeleton that's already dying
@@ -613,7 +702,15 @@ export default class Troop extends Entity {
                 this.pathTick = (this.pathTick || 0) - 1;
                 let goalMoved = !this._lastGoal || Math.hypot(this._lastGoal.x - gx, this._lastGoal.y - gy) > 45;
                 if (this.pathTick <= 0 || !this.path || this.path.length === 0 || goalMoved) {
-                    this.path = g.computePath(this.x, this.y, gx, gy, false);
+                    // STRAIGHT SHOT FIRST: if nothing interferes (no river still to cross, no
+                    // friendly structure in the way), head straight to the goal with a single
+                    // waypoint — never weave. Only when there's real interference do we run A*
+                    // to route around a tower/building or over to a bridge.
+                    if (!this.checkPathBlocked(g, this.x, this.y, gx, gy)) {
+                        this.path = [{ x: gx, y: gy }];
+                    } else {
+                        this.path = g.computePath(this.x, this.y, gx, gy, false);
+                    }
                     this._lastGoal = { x: gx, y: gy };
                     this.pathTick = 9 + Math.floor(g.random() * 8); // stagger recomputes across troops
                 }
@@ -649,15 +746,28 @@ export default class Troop extends Entity {
     }
 
     die(g) {
+        // GOBLIN DEMOLISHER death blast — a big Wall-Breaker-style explosion: heavy on
+        // the structure it dies on, half as much to nearby troops.
+        if (this.c.n === "Goblin Demolisher") {
+            for (let e of g.ents) {
+                if (e.tm !== this.tm && e.hp > 0 && this.dist(e) < 55 + g.getHitboxRadius(e)) {
+                    let isStruct = e.constructor.name === "Tower" || e.constructor.name === "Building";
+                    e.hp -= isStruct ? 470 : 235;
+                }
+            }
+            g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 55, 0, this.tm, false).asFireArea());
+        }
+
         // The rage-ghost dissolves with the same spectral burst it formed from.
         if (this.isRageGhost) {
             g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 40, 0, this.tm, false).asPhantom());
         }
 
         // EVO Witch: each of HER summoned skeletons feeds her a chunk of HP when it
-        // dies. At full HP it OVERHEALS — pushing her bar past max (rendered gold).
+        // dies. At full HP it OVERHEALS — pushing her bar past max (rendered gold) — but
+        // it's CAPPED at +50% of her original max, like the Evo Bats' HP gain.
         if (this.healWitch && this.healWitch.hp > 0 && this.healWitch.tm === this.tm) {
-            this.healWitch.hp += 70;
+            this.healWitch.hp = Math.min(this.healWitch.mhp * 1.5, this.healWitch.hp + 70);
         }
 
         // Spirits do NOT burst on death — their splash only happens when they
@@ -960,7 +1070,7 @@ export default class Troop extends Entity {
         // dies (all of which clear atk or fail the hp check below).
         if (this.atk && this.currentTarget && this.currentTarget.hp > 0 &&
             this.currentTarget.tm !== this.tm && this.currentTarget.rad !== 0 &&
-            !this.currentTarget.isRageGhost && !this.currentTarget.isSkeleGhost) {
+            !this.currentTarget.isGhosted) {
             return;
         }
 
@@ -980,7 +1090,7 @@ export default class Troop extends Entity {
         let minDist = sight;
         for (let e of g.ents) {
             if (e.tm === this.tm || e.hp <= 0 || isTower(e)) continue;
-            if (e.isRageGhost || e.isSkeleGhost) continue; // ghosts are invisible — never targeted
+            if (e.isGhosted) continue; // ghosts are invisible — never targeted
             let isBldg = e.constructor.name === "Building";
             if (this.c.t === 1 && !isBldg && anyEnemyStruct) continue; // building-targeters ignore units WHILE a structure stands
             if (e.fly && !this.air && !e.jp) continue; // a unit mid-LEAP can still be hit by ground troops
@@ -1021,7 +1131,7 @@ export default class Troop extends Entity {
         // leaves sight, or a notably closer one appears (avoids flip-flopping).
         const cur = this.currentTarget;
         const curOK = cur && cur.hp > 0 && cur.rad !== 0 && cur.tm !== this.tm &&
-            !cur.isRageGhost && !cur.isSkeleGhost &&
+            !cur.isGhosted &&
             !isTower(cur) && !(cur.fly && !this.air && !cur.jp) && this.dist(cur) <= sight;
 
         // Compare against the tower's EDGE, not its (far) centre — towers are large,
@@ -1041,10 +1151,13 @@ export default class Troop extends Entity {
                 target = (distraction && distraction !== cur && this.dist(distraction) < this.dist(cur) * 0.6) ? distraction : cur;
             }
         } else if (distraction && this.dist(distraction) < towerReach &&
-            (!primary || !this.checkPathBlocked(g, this.x, this.y, distraction.x, distraction.y))) {
+            (!primary || (!this.checkPathBlocked(g, this.x, this.y, distraction.x, distraction.y) &&
+                // Only peel off for a unit that's actually IN FRONT of the tower — on our
+                // path to it (within ~2 tiles of that line). If nothing is blocking the
+                // way to the tower, commit to the tower and never retarget to a side unit.
+                this.ptSegDist(this.x, this.y, primary.x, primary.y, distraction.x, distraction.y) < 60))) {
             // When choosing (not yet attacking): a unit closer than the lane-tower edge
-            // is preferred; otherwise head for the tower. With NO tower objective left
-            // the path veto is skipped — the staged movement routes over a bridge.
+            // and blocking the path is preferred; otherwise head for the tower.
             target = distraction;
         } else {
             // No tower, building, or enemy troop anywhere to chase: nothing to do.

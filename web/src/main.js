@@ -1952,7 +1952,7 @@ class Main {
         } else {
             color = this.getUnitColor(name);
             if (e.isClone) color = "#bce8ff"; // light tint; translucency comes from globalAlpha below
-            if (e.isRageGhost || e.isSkeleGhost) color = "#bce8ff"; // ghosts render like clones — pale glassy blue
+            if (e.isGhosted) color = "#bce8ff"; // ghosts render like clones — pale glassy blue
             if (e.c && e.c.isFake) color = "#c4e3a6"; // fake (decoy) goblins: pale, washed-out green
             if (e.isSkeleGeneral) color = "#a35cd6"; // the Skeleton Army general is purple
         }
@@ -1968,7 +1968,7 @@ class Main {
         // indicator is drawn separately, once per card — see drawDeploys).
         ctx.globalAlpha = (e instanceof Troop && e.deployTime > 0) ? 0.75 : 1;
         if (e.isClone) ctx.globalAlpha *= 0.5; // cloned troops are translucent
-        if (e.isRageGhost || e.isSkeleGhost) ctx.globalAlpha *= 0.4; // ghosts are see-through, like clones
+        if (e.isGhosted) ctx.globalAlpha *= 0.4; // ghosts are see-through, like clones
         if (e.c && e.c.isFake) ctx.globalAlpha *= 0.8; // fakes read slightly ghostly
         ctx.fillStyle = color;
         ctx.strokeStyle = "rgba(0,0,0,0.3)"; // soft outline, not harsh black
@@ -2110,13 +2110,16 @@ class Main {
         // Evolution marker: evolved troops carry a small round purple gem on the body.
         // The gem scales with the body so it stays small enough to FIT on tiny units
         // (e.g. evo Skeletons) instead of swamping them.
-        if (e instanceof Troop && ((e.c && e.c.isEvo) || e.isSkeleGeneral)) {
+        // Every evo troop carries the small crystal — incl. evo-spawned units whose card
+        // isn't itself the evo card (Minion Horde minions, the Skeleton Army general). The
+        // x/y here already include the flying offset, so it sits on the visual body.
+        if (e instanceof Troop && ((e.c && e.c.isEvo) || e.isSkeleGeneral || e.evoGhostOnHit)) {
             this.drawEvoGem(x, y, Math.min(7, Math.max(2.6, radius * 0.45)), true);
         }
 
         // Ghost troops read like SEE-THROUGH GLASS: the body fill is faint (low alpha set
         // by the caller), topped with a crisp bright rim so it looks glassy, not just dim.
-        if (e instanceof Troop && (e.isRageGhost || e.isSkeleGhost)) {
+        if (e instanceof Troop && e.isGhosted) {
             let prevA = ctx.globalAlpha;
             ctx.globalAlpha = Math.min(1, prevA + 0.5);
             ctx.strokeStyle = "rgba(228,246,255,0.9)"; ctx.lineWidth = 1.4;
@@ -2225,6 +2228,7 @@ class Main {
             "Barbarians": "#d8a24e", "Fire Spirit": "#ff7a3c", "Ice Spirit": "#9ddcef",
             "Electro Spirit": "#4f9bff", "Heal Spirit": "#76d98a", "Minions": "#356b6b",
             "Goblins": "#79b44a", "Spear Goblins": "#8cc04f", "Bats": "#6a4a78",
+            "Goblin Demolisher": "#5e9c3a",
             "Wizard": "#ff7043", "Witch": "#8e4fb0", "Mega Minion": "#2f4f6e",
             "Minion Horde": "#356b6b", "Baby Dragon": "#79c267", "Inferno Dragon": "#ff5a2c",
             "Golem": "#8a6a4a", "Lava Hound": "#cf5a3c", "Elixir Golem": "#d56ab5",
@@ -2597,12 +2601,32 @@ class Main {
     // the area spells) — these render above ground troops but below the towers.
     isSpellProj(p) {
         return !!(p.isSpellArc || p.isArrows || p.isSpellDrop || p.isLog || p.isDelivery ||
-            p.poison || p.graveyard || p.brownArea || p.isClone || p.isVines || p.chainTargets || p.shockBeams || p.isShockwave || p.isPhantom || p.isElectricRing || p.isIceCrystal || p.isRage || p.isBomb);
+            p.poison || p.graveyard || p.brownArea || p.isClone || p.isVines || p.chainTargets || p.shockBeams || p.isShockwave || p.isPhantom || p.isElectricRing || p.isIceCrystal || p.isDynamite || p.isRage || p.isBomb);
     }
 
     drawProj(p) {
         if (p.isArrows) { this.drawArrowsVolley(p); return; }
         if (p.isSpellArc) { this.drawSpellArc(p); return; }
+        if (p.isDynamite) {
+            // A red stick of dynamite arcing toward its target, with a ground shadow.
+            let d = Math.hypot(p.tx - p.x, p.ty - p.y);
+            let prog = 1 - Math.min(1, d / (p.dynTotal || 1));
+            let arc = Math.sin(prog * Math.PI) * 48; // flies high
+            // Soft circular shadow on the GROUND (matches troop shadows), so the high
+            // projectile reads as being well above it.
+            ctx.fillStyle = "rgba(0,0,0,0.20)";
+            ctx.beginPath(); ctx.arc(p.x, p.y + 4, 4.5, 0, Math.PI * 2); ctx.fill();
+            ctx.save();
+            ctx.translate(p.x, p.y - arc);
+            ctx.rotate(prog * 5 + 0.5);
+            ctx.fillStyle = "#cc2b2b"; ctx.fillRect(-2.5, -6, 5, 12);       // red stick
+            ctx.strokeStyle = "#7a1414"; ctx.lineWidth = 1; ctx.strokeRect(-2.5, -6, 5, 12);
+            ctx.fillStyle = "#f0e3b0"; ctx.fillRect(-2.5, -6, 5, 2.5);       // pale cap
+            ctx.strokeStyle = "#444"; ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(1.5, -10); ctx.stroke(); // fuse
+            ctx.fillStyle = "#ffcf3c"; ctx.beginPath(); ctx.arc(1.5, -10, 1.3, 0, Math.PI * 2); ctx.fill();   // spark
+            ctx.restore();
+            return;
+        }
         if (p.isSpellDrop) { this.drawSpellDrop(p); return; }
         if (p.isElectricRing) {
             // Expanding electric ring (Evo Zap): a smooth flickering circle, with a much
@@ -2840,7 +2864,7 @@ class Main {
     drawHealthBars() {
         for (let e of this.eng.ents) {
             if (e._barY === undefined || e.hp <= 0) continue; // dying units are already gone
-            if (e.isRageGhost || e.isSkeleGhost) continue; // phantoms show no bar
+            if (e.isGhosted) continue; // phantoms show no bar
 
             let x = e._barX, barY = e._barY, barW = e._barW;
             // The shield has been damaged (not full)? Show the shield bar — and the
@@ -2864,6 +2888,12 @@ class Main {
                 ctx.fillRect(x - barW / 2 - 1, barY - 1, barW + 2, 6);
                 ctx.fillStyle = e._barFriend ? "#2f8bff" : "#ff4d4d";
                 ctx.fillRect(x - barW / 2, barY, barW * hpPct, 4);
+                // Goblin Demolisher: a mark at the HALF-way point — below it, it goes into
+                // its last-stand charge.
+                if (e.c && e.c.n === "Goblin Demolisher") {
+                    ctx.fillStyle = "rgba(0,0,0,0.85)";
+                    ctx.fillRect(x - 1, barY - 1, 2, 6);
+                }
             } else if (e.hp > e.mhp) {
                 // OVERHEAL (Evo Witch fed by dying skeletons): full bar, plus a GOLD
                 // overcharge segment extending past the right edge (capped at +1 bar).

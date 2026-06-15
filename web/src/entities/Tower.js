@@ -41,7 +41,7 @@ export default class Tower extends Entity {
         // will help against a unit that's crossed into the other lane but is in reach.
         // SANDBOX: no half restriction — a tower placed anywhere (even deep in enemy
         // territory) fights whatever is in range, including the other side's towers.
-        const valid = e => e && e.hp > 0 && e.tm !== this.tm && g.ents.includes(e) && !e.isRageGhost && !e.isSkeleGhost &&
+        const valid = e => e && e.hp > 0 && e.tm !== this.tm && g.ents.includes(e) && !e.isGhosted &&
             (g.sandbox || (!(this.tm === 0 && e.y < RIV_Y) && !(this.tm === 1 && e.y > RIV_Y))) &&
             this.dist(e) <= RANGE + myHb + g.getHitboxRadius(e);
         if (!valid(this.lk)) {
@@ -62,7 +62,7 @@ export default class Tower extends Entity {
             // chargers (Spirits, Wall Breakers) eat at most two shots on the way in
             // and reach the tower — Princess every 75 ticks, King every 90.
             g.projs.push(new Proj(this.x, this.y, best.x, best.y, best, 10, false, 4, 109, this.tm, false));
-            this.cd = this.kg ? 96 : 90; // King every 1.6s, Princess every 1.5s
+            this.cd = this.kg ? 83 : 78; // +16% hit speed (King ~1.38s, Princess ~1.3s)
             if (this.ragedTime > 0) this.cd = Math.round(this.cd * 0.8); // Rage: +20% hit speed
         }
     }

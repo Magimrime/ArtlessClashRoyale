@@ -118,6 +118,15 @@ export default class Proj {
     // an expanding dust ring; rad is the blast radius it grows to.
     asShockwave() { this.isShockwave = true; this.life = 18; this.shockMax = 18; return this; }
 
+    // A thrown stick of DYNAMITE (Goblin Demolisher) — arcs from thrower to (tx,ty) with
+    // a ground shadow, then bursts into an area fire blast on landing.
+    asDynamite(dmg) {
+        this.isDynamite = true; this.dmg = dmg; this.spd = 2.5; // 2x slower travel
+        this.dynTotal = Math.max(1, Math.hypot(this.tx - this.x, this.ty - this.y));
+        this.life = 2000;
+        return this;
+    }
+
     // Spectral burst — a green phantom ring + rising wisps, for the Evo Lumberjack
     // rage-ghost appearing and dissolving.
     asPhantom() { this.isPhantom = true; this.life = 22; this.phantomMax = 22; return this; }
@@ -229,6 +238,24 @@ export default class Proj {
         }
         if (this.chainTargets || this.barbBreak || this.isIceNova || this.shockBeams || this.isShockwave || this.isPhantom || this.isElectricRing) {
             this.life--; // brief visual-only flashes count down and vanish
+            return;
+        }
+
+        if (this.isDynamite) {
+            // Arc toward the landing spot; burst into an area fire blast on arrival.
+            let a = Math.atan2(this.ty - this.y, this.tx - this.x);
+            let d = Math.hypot(this.tx - this.x, this.ty - this.y);
+            if (d <= this.spd) {
+                const hb = e => (g.getHitboxRadius ? g.getHitboxRadius(e) : e.rad);
+                for (let e of g.ents)
+                    if (e.tm !== this.tm && e.hp > 0 && Math.hypot(this.tx - e.x, this.ty - e.y) < 29 + hb(e))
+                        e.hp -= this.dmg * 2; // 2x stronger blast
+                g.projs.push(new Proj(this.tx, this.ty, this.tx, this.ty, null, 0, false, 29, 0, this.tm, false).asFireArea());
+                this.life = 0;
+                return;
+            }
+            this.x += Math.cos(a) * this.spd;
+            this.y += Math.sin(a) * this.spd;
             return;
         }
 
@@ -511,7 +538,7 @@ export default class Proj {
         if (d < this.spd) {
             this.life = 0;
             if (this.delayedSplash) {
-                let splash = new Proj(this.x, this.y, this.x, this.y, null, 0, true, 24, this.dmg, this.tm, false);
+                let splash = new Proj(this.x, this.y, this.x, this.y, null, 0, true, this.splashRad || 24, this.dmg, this.tm, false);
                 if (this.isLightBlue) splash.asLightBlue();
                 splash.life = 6;
                 g.projs.push(splash);

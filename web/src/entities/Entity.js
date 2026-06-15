@@ -22,6 +22,14 @@ export default class Entity {
         this.sl = 0; // slow timer
         this.ragedTime = 0; // Rage buff timer (faster attack + movement while > 0)
         this.kbVX = 0; this.kbVY = 0; // knockback velocity (friction slide)
+        this.ghostTime = 0; // temporary GHOST timer (Evo Minion Horde: ghosts on taking damage)
+    }
+
+    // A unit is "ghosted" — translucent, untargetable, no health bar — when it's any
+    // kind of ghost: a permanent one (Lumberjack rage-ghost, fallen Skeleton Army
+    // skeleton) or a temporary one (Evo Minion Horde minion, ghostTime ticking down).
+    get isGhosted() {
+        return !!(this.isRageGhost || this.isSkeleGhost || this.ghostTime > 0);
     }
 
     // Launch this unit into a FRICTION slide of ~`dist` px in direction `ang`. Instead
