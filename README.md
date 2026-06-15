@@ -2,6 +2,8 @@
 
 This is a JavaScript port of Clash Royale, playable in the browser.
 
+**See [`UPDATES.md`](UPDATES.md) for the full update timeline** — versioned `year.major.minor.patch` (e.g. `26.3.12`), where the major number restarts at 1 each year and ticks up whenever the background color changes.
+
 ## How to Play (local)
 
 The client lives in `web/` and is served by `server.js`, which also provides

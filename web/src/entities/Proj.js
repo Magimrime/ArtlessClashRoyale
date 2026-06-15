@@ -545,11 +545,19 @@ export default class Proj {
                 return;
             }
             if (this.t && !this.miniFireball) {
-                if (this.isCurse && this.t instanceof Troop) {
-                    this.t.curseTime = 300;
+                if (this.isCurse && this.t instanceof Troop && this.t.isGhosted) {
+                    // A ghost is a temporary phantom — the curse can't turn the ghost
+                    // ITSELF into a hog. It just summons a regular hog for the witch's
+                    // side, and the ghost is left untouched (alive, uncursed).
+                    let hogCard = g.getCard("Cursed Hog") || { n: "Cursed Hog", hp: 520, ms: 20, fl: false, ar: false };
+                    g.ents.push(new Troop(this.tm, this.t.x, this.t.y, hogCard));
+                } else {
+                    if (this.isCurse && this.t instanceof Troop) {
+                        this.t.curseTime = 300;
+                    }
+                    this.t.hp -= this.dmg;
+                    if (this.shouldStun) this.t.st = this.stunDuration;
                 }
-                this.t.hp -= this.dmg;
-                if (this.shouldStun) this.t.st = this.stunDuration;
             }
             if (this.spl || this.miniFireball) {
                 for (let e of g.ents) {

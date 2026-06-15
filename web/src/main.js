@@ -218,6 +218,8 @@ class Main {
             if (mouseDown) {
                 if (Math.hypot(p.x - mouseDown.x, p.y - mouseDown.y) > 6) mouseDown.moved = true;
                 if (scrollableState()) { this.scrollY = mouseDown.scroll - (p.y - mouseDown.y); clampScroll(); }
+                // Drag the eraser across the field to delete every troop you sweep over.
+                if (this.eng.sandbox && this.sandboxEraser && p.y < H - 150) this.eng.sandboxErase(p.x, p.y);
             }
         });
         canvas.addEventListener('mouseup', (e) => {
@@ -253,6 +255,8 @@ class Main {
             this.mouse = { x: p.x, y: p.y };
             const dx = p.x - touchStart.x, dy = p.y - touchStart.y;
             if (Math.hypot(dx, dy) > 8) touchStart.moved = true;
+            // Drag the eraser across the field to delete every troop you sweep over.
+            if (this.eng.sandbox && this.sandboxEraser && p.y < H - 150) this.eng.sandboxErase(p.x, p.y);
             if (scrollableState()) {
                 // Drag to scroll the card list (finger up = list up).
                 this.scrollY = touchStart.scroll - dy;
@@ -1127,7 +1131,8 @@ class Main {
             // (shadows/effects -> ground units -> projectiles -> flying units).
 
             // HOVER PREVIEW (Ghost Unit & Range)
-            if ((this.state === State.PLAY || this.state === State.CNT || this.state === State.SANDBOX) && this.eng.sel && this.mouse.y < H - 150) {
+            if ((this.state === State.PLAY || this.state === State.CNT || this.state === State.SANDBOX) && this.eng.sel && this.mouse.y < H - 150
+                && !(this.sandboxEraser || this.sandboxTowerArm)) {
                 let c = this.eng.sel;
                 let spellShape = this.eng.getSpellRadius(c);
                 let canAfford = this.eng.sandbox || this.eng.p1.elx >= c.c; // sandbox: no elixir
@@ -1251,7 +1256,10 @@ class Main {
             // delivery crate, boulders…). Arcs / arrows / drops / logs are handled by
             // drawProj instead, so return for those.
             const drawGroundProj = (p) => {
-                if (p.isArrows || p.isSpellArc || p.isLog || p.isSpellDrop || p.isVines) return;
+                // These are all drawn by drawProj — skip them here so the default circle
+                // below never leaves a stray lightgray "ghost" dot under them.
+                if (p.isArrows || p.isSpellArc || p.isLog || p.isSpellDrop || p.isVines ||
+                    p.isDynamite || p.isIceCrystal || p.isPhantom || p.isElectricRing || p.isShockwave) return;
                 if (p.isDeathBomb) {
                     // Balloon's crash bomb: just a black circle that falls onto the
                     // balloon's shadow, then sits ticking until it detonates (1.5s).
@@ -1464,7 +1472,10 @@ class Main {
                     ctx.fillStyle = p.flashCol || (p.spl ? (p.rad < 10 ? "cyan" : "orange") : "lightgray");
                 }
 
-                if (!p.fireArea && !p.poison && !p.graveyard) {
+                // chainTargets / shockBeams draw their OWN lines below, and the heal effect
+                // draws its own green ring in drawProj — none of them should ALSO drop the
+                // default circle here (that was the stray "ghost dot").
+                if (!p.fireArea && !p.poison && !p.graveyard && !p.chainTargets && !p.shockBeams && !p.isHeal) {
                     let size = p.rad * 2;
                     if (!p.spl && !p.barrel && !p.redArea && !p.brownArea && !p.isHeal && !p.barbBreak && !p.isRolling && !p.isLightBlue) size = 8;
                     ctx.beginPath(); ctx.arc(p.x, p.y, size / 2, 0, Math.PI * 2); ctx.fill();
@@ -1537,6 +1548,12 @@ class Main {
                         let s = 1 - 0.4 * Math.sin((1.0 - (e.dist(e.jt) / (e.jd || 1))) * Math.PI);
                         ctx.fillStyle = "rgba(0,0,0,0.18)";
                         ctx.beginPath(); ctx.arc(e.x, e.y + baseR * 0.5, baseR * 0.6 * s, 0, Math.PI * 2); ctx.fill();
+                    } else if (e instanceof Troop && e.sjT > 0) {
+                        // Spirit mid-hop: a soft OVAL ground shadow that shrinks as it arcs up
+                        // (reads as a real shadow, not a flat dot).
+                        let s = 1 - 0.45 * Math.sin((1 - e.sjT / (e.sjMax || 1)) * Math.PI);
+                        ctx.fillStyle = "rgba(0,0,0,0.20)";
+                        ctx.beginPath(); ctx.ellipse(e.x, e.y + baseR * 0.5, baseR * 0.72 * s, baseR * 0.32 * s, 0, 0, Math.PI * 2); ctx.fill();
                     } else {
                         ctx.fillStyle = "rgba(0,0,0,0.20)";
                         ctx.beginPath(); ctx.arc(e.x, e.y + baseR * 0.5, baseR * 0.6, 0, Math.PI * 2); ctx.fill();
@@ -2611,11 +2628,14 @@ class Main {
             // A red stick of dynamite arcing toward its target, with a ground shadow.
             let d = Math.hypot(p.tx - p.x, p.ty - p.y);
             let prog = 1 - Math.min(1, d / (p.dynTotal || 1));
-            let arc = Math.sin(prog * Math.PI) * 48; // flies high
-            // Soft circular shadow on the GROUND (matches troop shadows), so the high
-            // projectile reads as being well above it.
-            ctx.fillStyle = "rgba(0,0,0,0.20)";
-            ctx.beginPath(); ctx.arc(p.x, p.y + 4, 4.5, 0, Math.PI * 2); ctx.fill();
+            let lift = Math.sin(prog * Math.PI);
+            let arc = lift * 48; // flies high
+            // A real ground shadow: a soft OVAL that SHRINKS as the stick rises (a flat dot
+            // is what made it read wrong). Sits on the ground while the stick floats above.
+            let sh = 1 - 0.45 * lift;
+            // Flat, soft ground shadow (a wide low oval reads as a shadow, not a dot).
+            ctx.fillStyle = "rgba(0,0,0,0.18)";
+            ctx.beginPath(); ctx.ellipse(p.x, p.y + 3, 9 * sh, 2.6 * sh, 0, 0, Math.PI * 2); ctx.fill();
             ctx.save();
             ctx.translate(p.x, p.y - arc);
             ctx.rotate(prog * 5 + 0.5);

@@ -237,6 +237,26 @@ export default class Troop extends Entity {
         }
 
         if (this.curseTime > 0) this.curseTime--;
+
+        // EVO Skeletons multiply FAST on a quick timer — not just when attacking — so a
+        // lone skeleton balloons into a full swarm (up to the cap of 12) in well under a
+        // second. That lets a single evo skeleton trade with an enormous army.
+        if (this.c.n === "Skeletons" && this.c.isEvo && this.hp > 0) {
+            if (this.skeleDupT === undefined) this.skeleDupT = 10;
+            if (--this.skeleDupT <= 0) {
+                this.skeleDupT = 10;
+                let n = 0;
+                for (let e of g.ents) if (e.c && e.c.n === "Skeletons" && e.c.isEvo && e.tm === this.tm && e.hp > 0) n++;
+                if (n < 12) {
+                    let s = new Troop(this.tm, this.x + (this.tm === 0 ? -7 : 7), this.y + (this.tm === 0 ? 9 : -9), this.c);
+                    s.deployTime = 12; // subtle materialize
+                    s.skeleDupT = 10 + (n % 4) * 3; // small stagger so they don't all pop the same tick
+                    g.ents.push(s);
+                    g.projs.push(new Proj(s.x, s.y, s.x, s.y, null, 0, false, 11, 0, this.tm, false).asPhantom());
+                }
+            }
+        }
+
         // Fireball aftershock: 0.3s after the hit (the single impact shove has just
         // faded), the unit is slowed 50% for 0.6s, which then chains into another 1s of
         // a harder 80% slow.
@@ -295,15 +315,24 @@ export default class Troop extends Entity {
             {
                 let gx = (this.jdx !== undefined) ? this.jdx : (this.jt ? this.jt.x : this.x);
                 let gy = (this.jdy !== undefined) ? this.jdy : (this.jt ? this.jt.y : this.y);
+                // A leap must always END on the playable field. A landing point off the
+                // edge is what made edge-hit troops look like they "flew away" and never
+                // came back down — clamp it in.
+                gx = Math.max(6, Math.min(W - 6, gx));
+                gy = Math.max(6, Math.min(H - 150, gy));
                 let dx = gx - this.x;
                 let dy = gy - this.y;
                 let d = Math.hypot(dx, dy);
                 let jumpSpeed = 2.0;
 
-                if (d < jumpSpeed + 1) {
+                // Watchdog: a leap can never hover forever. If it runs well past the time it
+                // should take to cover its arc, force it to touch down right now.
+                this.jpAge = (this.jpAge || 0) + 1;
+                if (d < jumpSpeed + 1 || this.jpAge > (this.jd / jumpSpeed) + 50) {
                     this.x = gx; this.y = gy; // land exactly at the fixed point
                     this.jp = false;
                     this.fly = false;
+                    this.jpAge = 0;
                     this.jdx = undefined; this.jdy = undefined;
 
                     if (this.knockJump) {
@@ -346,6 +375,7 @@ export default class Troop extends Entity {
             this.preJump--;
             if (this.preJump === 0 && this.jt && this.jt.hp > 0) {
                 this.jp = true;
+                this.jpAge = 0;
                 this.kbTime = 0; this.kbVX = 0; this.kbVY = 0;
                 // Land in FRONT of the target — on the side we're leaping FROM — so we
                 // touch down just short of it and never sail OVER/behind it. Travel the
@@ -422,6 +452,7 @@ export default class Troop extends Entity {
                 let onBridge = bxs.some(bx => this.x >= bx - 30 && this.x <= bx + 30);
                 if (!onBridge) {
                     this.jp = true;
+                    this.jpAge = 0;
                     this.kbTime = 0;
                     this.fly = true;
                     this.preJump = 0; // NO wind-up delay — it hops the instant it reaches the river
@@ -644,13 +675,13 @@ export default class Troop extends Entity {
                         this.hp = Math.min(this.mhp * 1.5, this.hp + 14);
                     }
                     // EVO Skeletons: every hit RAISES another skeleton (a brief shimmer-in),
-                    // up to 8 on the field at once. (Manual sandbox summons can exceed it —
+                    // up to 12 on the field at once. (Manual sandbox summons can exceed it —
                     // the cap only gates this auto-multiply.) A skeleton that's already dying
                     // (landing its final retaliation hit) does NOT summon.
                     if (this.c.n === "Skeletons" && this.c.isEvo && this.hp > 0) {
                         let n = 0;
                         for (let e of g.ents) if (e.c && e.c.n === "Skeletons" && e.c.isEvo && e.tm === this.tm && e.hp > 0) n++;
-                        if (n < 8) {
+                        if (n < 12) {
                             let s = new Troop(this.tm, this.x + (this.tm === 0 ? -7 : 7), this.y + (this.tm === 0 ? 9 : -9), this.c);
                             s.deployTime = 12; // subtle materialize
                             g.ents.push(s);
@@ -824,7 +855,10 @@ export default class Troop extends Entity {
 
         if (this.curseTime > 0) {
             let hogCard = g.getCard("Cursed Hog") || { n: "Cursed Hog", hp: 520, ms: 20, fl: false, ar: false };
-            g.ents.push(new Troop(1 - this.tm, this.x, this.y, hogCard));
+            let hog = new Troop(1 - this.tm, this.x, this.y, hogCard);
+            // A CLONE is a 1-hp phantom — the hog it curses into is just as fragile.
+            if (this.isClone) { hog._hp = 1; hog.mhp = 1; }
+            g.ents.push(hog);
         }
 
         if (this.c.n === "Ice Golem") {
@@ -1012,6 +1046,7 @@ export default class Troop extends Entity {
         e.jdy = Math.max(12, Math.min(H - 12, e.y + fwd * dist));
         e.jd = Math.hypot(e.jdx - e.x, e.jdy - e.y) || 1;
         e.jp = true; e.fly = true;
+        e.jpAge = 0;
         e.knockJump = true;
         e.preJump = 0;
         e.kbTime = 0; e.kbVX = 0; e.kbVY = 0;
@@ -1151,13 +1186,10 @@ export default class Troop extends Entity {
                 target = (distraction && distraction !== cur && this.dist(distraction) < this.dist(cur) * 0.6) ? distraction : cur;
             }
         } else if (distraction && this.dist(distraction) < towerReach &&
-            (!primary || (!this.checkPathBlocked(g, this.x, this.y, distraction.x, distraction.y) &&
-                // Only peel off for a unit that's actually IN FRONT of the tower — on our
-                // path to it (within ~2 tiles of that line). If nothing is blocking the
-                // way to the tower, commit to the tower and never retarget to a side unit.
-                this.ptSegDist(this.x, this.y, primary.x, primary.y, distraction.x, distraction.y) < 60))) {
-            // When choosing (not yet attacking): a unit closer than the lane-tower edge
-            // and blocking the path is preferred; otherwise head for the tower.
+            (!primary || !this.checkPathBlocked(g, this.x, this.y, distraction.x, distraction.y))) {
+            // When choosing (not yet attacking): a unit/building CLOSER than the lane-tower
+            // edge is engaged — a troop never ignores a closer enemy on the way (only a
+            // friendly structure blocking the path makes it route to the tower instead).
             target = distraction;
         } else {
             // No tower, building, or enemy troop anywhere to chase: nothing to do.

@@ -1126,7 +1126,7 @@ export default class GameEngine {
                 general = new Troop(tm, x, gy, this.getCard("Skeletons"));
                 general.isSkeleGeneral = true;
                 general.skeleArmyGeneral = general; // self-ref keeps the kill-check uniform
-                general.maxShield = 260; general.shield = 260; // the general's shield
+                general.maxShield = 180; general.shield = 180; // the general's shield (a bit weaker)
                 general.rad = Math.round(general.rad * 1.45); general.mass = general.rad; // a little bigger
                 this.ents.push(general);
             }
@@ -1523,6 +1523,10 @@ export default class GameEngine {
         // it never clips through one.
         for (let u of this.ents) {
             if (u.hp <= 0 || u.fly || u instanceof Tower || u instanceof Building) continue;
+            // Keep every ground unit inside the arena — a hard knockback at the edge can't
+            // fling it off (where it would appear to "fly" away); clamp it back in.
+            u.x = Math.max(6, Math.min(this.W - 6, u.x));
+            u.y = Math.max(6, Math.min(this.H - 150, u.y));
             let uHb = this.getHitboxRadius(u);
             for (let t of this.ents) {
                 if (t.hp <= 0 || !(t instanceof Tower || t instanceof Building)) continue;
@@ -1645,9 +1649,17 @@ export default class GameEngine {
             }
         }
 
-        // Tick down deploy-time clock indicators.
+        // Tick down deploy-time clock indicators. A clock also ends the instant its unit
+        // stops deploying — whether it finished or was killed mid-deploy (a spirit / wall
+        // breaker shot down before it could rush). That stops a clock from lingering at
+        // the drop point with no unit under it (the gray/red "summon ghost" dot).
         for (let i = 0; i < this.deploys.length; i++) {
-            if (--this.deploys[i].t <= 0) { this.deploys.splice(i, 1); i--; }
+            let d = this.deploys[i];
+            d.t--;
+            let unitDeploying = this.ents.some(e => e.tm === d.tm && e instanceof Troop && e.deployTime > 0 &&
+                Math.abs(e.x - d.x) < 60 && Math.abs(e.y - d.y) < 60);
+            if (d.t <= 0 || (d.age > 4 && !unitDeploying)) { this.deploys.splice(i, 1); i--; }
+            else d.age = (d.age || 0) + 1;
         }
     }
 
