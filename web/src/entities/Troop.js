@@ -133,6 +133,17 @@ export default class Troop extends Entity {
         // sandbox world editor can move the river (normal games keep 405).
         const RIV_Y = g.RIV_Y || 405;
 
+        // EVO Lumberjack's rage-ghost lives until ITS OWN bottle of rage runs out — it
+        // can roam OUT of that rage and still survive until the bottle expires. Standing
+        // in ANY other friendly rage (e.g. a cast Rage spell) keeps it alive even longer.
+        // Only when its own rage is gone AND it's in no rage at all does it dissolve.
+        if (this.isRageGhost) {
+            let ownRageActive = this.rageSource && this.rageSource.life > 0 && g.projs.includes(this.rageSource);
+            let inAnyRage = g.projs.some(p => p.isRage && p.tm === this.tm && (p.rageWindup || 0) <= 0 &&
+                Math.hypot(p.x - this.x, p.y - this.y) < p.rad + this.rad);
+            if (!ownRageActive && !inAnyRage) { this.hp = 0; return; }
+        }
+
         // Deploy time — can't move or attack for ~1s after being placed. The dash
         // charge ("dash cooldown") does NOT run during the spawn cooldown: it stays
         // at zero and only starts building once the troop actually walks.
@@ -180,14 +191,14 @@ export default class Troop extends Entity {
 
         if (this.kbTime > 0 && (this.kbVX || this.kbVY)) {
             // FRICTION slide: a knocked-back unit keeps its velocity but the ground saps
-            // it (×0.84) every tick, so it skids and slows to a stop — never a smooth
-            // glide. (kbX/kbY are unused now; kbVX/kbVY carry the velocity.)
+            // it (×0.88) every tick, so it skids and eases to a smooth stop. A lower
+            // cut-off lets the last of the glide bleed off instead of snapping to a halt.
             this.x += this.kbVX;
             this.y += this.kbVY;
-            this.kbVX *= 0.84;
-            this.kbVY *= 0.84;
+            this.kbVX *= 0.88;
+            this.kbVY *= 0.88;
             this.kbTime--;
-            if (Math.hypot(this.kbVX, this.kbVY) < 0.25) { this.kbVX = 0; this.kbVY = 0; this.kbTime = 0; }
+            if (Math.hypot(this.kbVX, this.kbVY) < 0.12) { this.kbVX = 0; this.kbVY = 0; this.kbTime = 0; }
             this.isCharging = false; this.distWalked = 0; // a knockback stops a Prince's charge
         }
 
@@ -232,10 +243,12 @@ export default class Troop extends Entity {
         // Witch Spawn — 4 skeletons that act immediately (no deploy cooldown).
         if (this.c.n === "Witch") {
             if (this.spT-- <= 0) {
-                this.spT = 400;
+                this.spT = 640; // spawns less often (~10.7s between batches)
                 for (const [ox, oy] of [[10, 0], [-10, 0], [0, 10], [0, -10]]) {
                     let t = new Troop(this.tm, this.x + ox, this.y + oy, g.getCard("Skeletons"));
                     t.deployTime = 0;
+                    // EVO Witch: tag each summoned skelly so it feeds her HP when it dies.
+                    if (this.c.isEvo) t.healWitch = this;
                     g.ents.push(t);
                 }
             }
@@ -259,7 +272,12 @@ export default class Troop extends Entity {
                     this.fly = false;
                     this.jdx = undefined; this.jdy = undefined;
 
-                    if (this.c.n === "Mega Knight") {
+                    if (this.knockJump) {
+                        // Was launched by an Evo Mega Knight — just a landing dust puff,
+                        // never any landing damage (even if this is itself an MK/Hopper).
+                        this.knockJump = false;
+                        g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 16, 0, this.tm, false).asShockwave());
+                    } else if (this.c.n === "Mega Knight") {
                         for (let e of g.ents)
                             if (e.tm !== this.tm && !e.fly && this.dist(e) < 60) {
                                 e.hp -= 340; // jump-land area damage (real L11)
@@ -295,8 +313,16 @@ export default class Troop extends Entity {
             if (this.preJump === 0 && this.jt && this.jt.hp > 0) {
                 this.jp = true;
                 this.kbTime = 0; this.kbVX = 0; this.kbVY = 0;
-                this.jdx = this.jt.x; this.jdy = this.jt.y; // freeze the landing spot now
-                this.jd = this.dist(this.jt);
+                // Land in FRONT of the target — on the side we're leaping FROM — so we
+                // touch down just short of it and never sail OVER/behind it. Travel the
+                // gap minus both hitboxes (clamped to 0 if we're already on top of it).
+                let dx = this.jt.x - this.x, dy = this.jt.y - this.y;
+                let dd = Math.hypot(dx, dy) || 1;
+                let standoff = g.getHitboxRadius(this) + g.getHitboxRadius(this.jt);
+                let travel = Math.max(0, dd - standoff);
+                this.jdx = this.x + (dx / dd) * travel;
+                this.jdy = this.y + (dy / dd) * travel;
+                this.jd = travel || 1;
             }
             return;
         }
@@ -505,8 +531,14 @@ export default class Troop extends Entity {
             } else {
                 if (this.c.n === "Mega Knight") {
                     for (let e of g.ents)
-                        if (e.tm !== this.tm && !e.fly && e.dist(this.lk) < 60)
+                        if (e.tm !== this.tm && !e.fly && e.dist(this.lk) < 60) {
                             e.hp -= this.c.d;
+                            // EVO: the slam LAUNCHES each struck troop into a backward leap
+                            // (it arcs away and lands with a puff — no extra landing damage).
+                            if (this.c.isEvo && e.constructor.name === "Troop" && e.hp > 0 &&
+                                !e.jp && e.c.n !== "Hopper")
+                                this.launchKnockJump(g, e);
+                        }
                 } else if (this.c.n === "Balloon") {
                     // Instant hit — it's a building-targeter, so its target is always a
                     // tower/building. No bomb projectile, no troop splash.
@@ -522,6 +554,20 @@ export default class Troop extends Entity {
                         this.distWalked = 0;
                     }
                     this.lk.hp -= dmg;
+                    // EVO Skeletons: every hit RAISES another skeleton (a brief shimmer-in),
+                    // up to 8 on the field at once. (Manual sandbox summons can exceed it —
+                    // the cap only gates this auto-multiply.) A skeleton that's already dying
+                    // (landing its final retaliation hit) does NOT summon.
+                    if (this.c.n === "Skeletons" && this.c.isEvo && this.hp > 0) {
+                        let n = 0;
+                        for (let e of g.ents) if (e.c && e.c.n === "Skeletons" && e.c.isEvo && e.tm === this.tm && e.hp > 0) n++;
+                        if (n < 8) {
+                            let s = new Troop(this.tm, this.x + (this.tm === 0 ? -7 : 7), this.y + (this.tm === 0 ? 9 : -9), this.c);
+                            s.deployTime = 12; // subtle materialize
+                            g.ents.push(s);
+                            g.projs.push(new Proj(s.x, s.y, s.x, s.y, null, 0, false, 11, 0, this.tm, false).asPhantom());
+                        }
+                    }
                 }
             }
             this.cd = ["Zappies", "Sparky"].includes(this.c.n) ? 0 : rageRt(this.c.rt);
@@ -603,6 +649,17 @@ export default class Troop extends Entity {
     }
 
     die(g) {
+        // The rage-ghost dissolves with the same spectral burst it formed from.
+        if (this.isRageGhost) {
+            g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 40, 0, this.tm, false).asPhantom());
+        }
+
+        // EVO Witch: each of HER summoned skeletons feeds her a chunk of HP when it
+        // dies. At full HP it OVERHEALS — pushing her bar past max (rendered gold).
+        if (this.healWitch && this.healWitch.hp > 0 && this.healWitch.tm === this.tm) {
+            this.healWitch.hp += 70;
+        }
+
         // Spirits do NOT burst on death — their splash only happens when they
         // actually jump onto a target (the hop landing). A spirit shot down on
         // the way just dies. (Wall Breakers likewise only explode on contact.)
@@ -612,12 +669,27 @@ export default class Troop extends Entity {
             // & structures (no instant blast).
             g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 52, 242, this.tm, false).asDeathBomb());
         }
-        if (this.c.n === "Lumberjack") {
+        if (this.c.n === "Lumberjack" && !this.isRageGhost) {
             // Drops a bottle of Rage where it falls — smaller / shorter than the
-            // spell (it lands instantly, no wind-up).
+            // spell (it lands instantly, no wind-up). (The ghost below drops NOTHING.)
             let p = new Proj(this.x, this.y, this.x, this.y, null, 0, false, 72, 140, this.tm, false).asRage(72, 240);
             p.rageWindup = 1; p.rageMax = 1; // drop activates almost immediately
             g.projs.push(p);
+
+            // EVO: a translucent "ghost" lumberjack rises in the MIDDLE of that rage —
+            // invisible & undetectable (enemies can't target it), 10% faster hit speed,
+            // and alive only as long as the rage lasts. It can't drop rage or be cloned.
+            if (this.c.isEvo) {
+                let gc = Object.assign(Object.create(Object.getPrototypeOf(this.c)), this.c);
+                gc.rt = Math.max(1, Math.round(this.c.rt * 0.9)); // +10% hit speed
+                let ghost = new Troop(this.tm, this.x, this.y, gc);
+                ghost.deployTime = 0;
+                ghost.isRageGhost = true;
+                ghost.rageSource = p;
+                g.ents.push(ghost);
+                // Spectral burst as the phantom forms.
+                g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 40, 0, this.tm, false).asPhantom());
+            }
         }
         if (this.c.n === "Golem") {
             this.spawnDeathTroops(g, g.getCard("Golemite") || { n: "Golemite", hp: 1039, ms: 25, fl: false, ar: false }, 2, 10);
@@ -716,6 +788,13 @@ export default class Troop extends Entity {
                 e.hp -= this.c.d;
                 if (this.c.n === "Ice Spirit") e.fr = 60;
             }
+        // EVO Ice Spirit: plant a blue ice crystal on the troop it jumped onto; after a
+        // ~1.1s delay it crashes back down for a second damage + area re-freeze pulse.
+        if (this.c.n === "Ice Spirit" && this.c.isEvo) {
+            let tgt = (t && t.hp > 0 && t.constructor.name === "Troop") ? t : null;
+            let cx = tgt ? tgt.x : this.x, cy = tgt ? tgt.y : this.y;
+            g.projs.push(new Proj(cx, cy, cx, cy, null, 0, false, 14, this.c.d, this.tm, false).asIceCrystal(tgt, this.c.d, 66));
+        }
     }
 
     spawnDeathTroops(g, c, count, offset) {
@@ -810,6 +889,25 @@ export default class Troop extends Entity {
         }
     }
 
+    // Launch `e` into a backward LEAP, away from this unit (Evo Mega Knight slam).
+    // It arcs to a fixed landing point and touches down with a puff, no damage —
+    // reusing the jump machinery (jp / jdx / jdy / jd) with a knockJump flag so the
+    // landing code knows to skip the usual jump-land damage.
+    launchKnockJump(g, e) {
+        // Always launch the victim FORWARD — toward the Mega Knight's opponent tower
+        // (up-field for team 0, down-field for team 1) — never off to the side.
+        let dist = 55;
+        let fwd = (this.tm === 0) ? -1 : 1;
+        e.jdx = e.x;
+        e.jdy = Math.max(12, Math.min(H - 12, e.y + fwd * dist));
+        e.jd = Math.hypot(e.jdx - e.x, e.jdy - e.y) || 1;
+        e.jp = true; e.fly = true;
+        e.knockJump = true;
+        e.preJump = 0;
+        e.kbTime = 0; e.kbVX = 0; e.kbVY = 0;
+        e.isCharging = false; e.distWalked = 0;
+    }
+
     // Effective distance to the target for the in-reach test. Towers/buildings are
     // SQUARE: for melee, use Chebyshev distance (max axis), which equals the box
     // half-width anywhere on its perimeter — so a troop pressed against a CORNER
@@ -861,7 +959,8 @@ export default class Troop extends Entity {
         // longer attacking — i.e. stunned/frozen, pushed out of range, or the target
         // dies (all of which clear atk or fail the hp check below).
         if (this.atk && this.currentTarget && this.currentTarget.hp > 0 &&
-            this.currentTarget.tm !== this.tm && this.currentTarget.rad !== 0) {
+            this.currentTarget.tm !== this.tm && this.currentTarget.rad !== 0 &&
+            !this.currentTarget.isRageGhost && !this.currentTarget.isSkeleGhost) {
             return;
         }
 
@@ -881,6 +980,7 @@ export default class Troop extends Entity {
         let minDist = sight;
         for (let e of g.ents) {
             if (e.tm === this.tm || e.hp <= 0 || isTower(e)) continue;
+            if (e.isRageGhost || e.isSkeleGhost) continue; // ghosts are invisible — never targeted
             let isBldg = e.constructor.name === "Building";
             if (this.c.t === 1 && !isBldg && anyEnemyStruct) continue; // building-targeters ignore units WHILE a structure stands
             if (e.fly && !this.air && !e.jp) continue; // a unit mid-LEAP can still be hit by ground troops
@@ -909,10 +1009,19 @@ export default class Troop extends Entity {
             }
         }
 
+        // COMMIT to the TOWER we're already going for — once a troop targets a tower it
+        // never switches to a DIFFERENT tower (e.g. after drifting across the lane line);
+        // it only changes objective if that tower dies (handled above, primary = null).
+        if (this.currentTarget && isTower(this.currentTarget) &&
+            this.currentTarget.hp > 0 && this.currentTarget.tm !== this.tm) {
+            primary = this.currentTarget;
+        }
+
         // 3. Decide with hysteresis: keep the current distraction unless it dies /
         // leaves sight, or a notably closer one appears (avoids flip-flopping).
         const cur = this.currentTarget;
         const curOK = cur && cur.hp > 0 && cur.rad !== 0 && cur.tm !== this.tm &&
+            !cur.isRageGhost && !cur.isSkeleGhost &&
             !isTower(cur) && !(cur.fly && !this.air && !cur.jp) && this.dist(cur) <= sight;
 
         // Compare against the tower's EDGE, not its (far) centre — towers are large,
@@ -922,7 +1031,15 @@ export default class Troop extends Entity {
 
         let target;
         if (curOK) {
-            target = (distraction && distraction !== cur && this.dist(distraction) < this.dist(cur) * 0.6) ? distraction : cur;
+            // Same rule for BUILDINGS — never abandon the building we're going for for a
+            // DIFFERENT building, UNLESS a new building was just placed (buildingGen bump).
+            let curBldg = cur.constructor.name === "Building";
+            let distBldg = distraction && distraction.constructor.name === "Building";
+            if (curBldg && distBldg && distraction !== cur && (g.buildingGen || 0) === this.targetGen) {
+                target = cur;
+            } else {
+                target = (distraction && distraction !== cur && this.dist(distraction) < this.dist(cur) * 0.6) ? distraction : cur;
+            }
         } else if (distraction && this.dist(distraction) < towerReach &&
             (!primary || !this.checkPathBlocked(g, this.x, this.y, distraction.x, distraction.y))) {
             // When choosing (not yet attacking): a unit closer than the lane-tower edge
@@ -936,6 +1053,10 @@ export default class Troop extends Entity {
             // the 5x sight scan and chased, towers or not.)
             target = primary;
         }
+
+        // Remember the building "generation" we committed to, so a later new-building
+        // placement (which bumps buildingGen) is what re-opens building re-targeting.
+        if (target && target.constructor && target.constructor.name === "Building") this.targetGen = (g.buildingGen || 0);
 
         if (target !== this.currentTarget) {
             this.currentTarget = target;

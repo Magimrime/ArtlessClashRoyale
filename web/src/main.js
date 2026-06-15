@@ -568,7 +568,14 @@ class Main {
             }
             if (this.sandboxMapOpen) {
                 for (const o of this.sandboxMapRects()) {
-                    if (this.contains(o, x, y)) { this.eng.setupSandbox(o.map); break; }
+                    if (this.contains(o, x, y)) {
+                        // setupSandbox wipes the board (and clears sel) — but the armed
+                        // card + its evo should survive a map switch, so save/restore them.
+                        let keepSel = this.eng.sel, keepEvo = this.sandboxEvoSel;
+                        this.eng.setupSandbox(o.map);
+                        this.eng.sel = keepSel; this.sandboxEvoSel = keepEvo;
+                        break;
+                    }
                 }
                 this.sandboxMapOpen = false;
                 return;
@@ -578,7 +585,10 @@ class Main {
                     if (!this.contains(o, x, y)) continue;
                     if (o.id === 'eraser') {
                         this.sandboxEraser = !this.sandboxEraser;
-                        if (this.sandboxEraser) { this.eng.sel = null; this.sandboxTowerArm = null; }
+                        // The eraser is a TEMPORARY overlay — a field tap erases instead of
+                        // placing (see the tap handler). Keep the armed card + its evo so
+                        // turning the eraser back off resumes placing the same card.
+                        if (this.sandboxEraser) this.sandboxTowerArm = null;
                     } else if (o.id === 'clear') {
                         this.eng.sandboxClearTroops();
                     }
@@ -1142,23 +1152,25 @@ class Main {
                     ctx.lineDashOffset = -time; // Animate march
 
                     if (["The Log", "Barbarian Barrel"].includes(c.n)) {
-                        // Draw Arrow for rolling spells
+                        // Draw Arrow for rolling spells — it rolls AWAY from the caster's
+                        // side: up-field for blue (team 0), down-field for red (team 1).
+                        let dir = (ghostTeam === 1) ? 1 : -1;
                         let dist = (c.n === "The Log") ? 280 : 101;
-                        let ey = gm.y - dist;
+                        let ey = gm.y + dir * dist;
                         ctx.beginPath();
                         ctx.moveTo(gm.x, gm.y);
                         ctx.lineTo(gm.x, ey);
 
-                        // Arrowhead
-                        ctx.lineTo(gm.x - 10, ey + 15);
+                        // Arrowhead (points in the roll direction)
+                        ctx.lineTo(gm.x - 10, ey - dir * 15);
                         ctx.moveTo(gm.x, ey);
-                        ctx.lineTo(gm.x + 10, ey + 15);
+                        ctx.lineTo(gm.x + 10, ey - dir * 15);
                         ctx.stroke();
 
                         // Also fill rect for body width
                         let w = (c.n === "The Log") ? 70 : 44;
                         ctx.fillStyle = ghostFill;
-                        ctx.fillRect(gm.x - w / 2, ey, w, dist);
+                        ctx.fillRect(gm.x - w / 2, Math.min(gm.y, ey), w, dist);
                     } else if (spellShape.type === 'circle') {
                         ctx.beginPath();
                         ctx.arc(gm.x, gm.y, spellShape.val, 0, Math.PI * 2);
@@ -1279,15 +1291,37 @@ class Main {
                         let by = p.y - hop;
                         // landing shadow
                         ctx.fillStyle = "rgba(0,0,0,0.25)";
-                        ctx.beginPath(); ctx.ellipse(p.x, p.y, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
-                        // pink bottle — a perfect circle, no cap
-                        let cr = 8;
+                        ctx.beginPath(); ctx.ellipse(p.x, p.y, 8, 3, 0, 0, Math.PI * 2); ctx.fill();
+                        // A rounded-trapezoid GLASS bottle (wider at the base) with pink
+                        // rage filling the lower part — plus a small cork.
+                        let cx = p.x, cy0 = by - 5;
+                        let topW = 13, botW = 21, bh = 15, r = 4;
+                        let tY = cy0 - bh / 2, bY = cy0 + bh / 2;
+                        const trap = (tw, bw, t0, b0) => {
+                            ctx.beginPath();
+                            ctx.moveTo(cx, t0);
+                            ctx.arcTo(cx + tw / 2, t0, cx + bw / 2, b0, r);
+                            ctx.arcTo(cx + bw / 2, b0, cx - bw / 2, b0, r);
+                            ctx.arcTo(cx - bw / 2, b0, cx - tw / 2, t0, r);
+                            ctx.arcTo(cx - tw / 2, t0, cx + tw / 2, t0, r);
+                            ctx.closePath();
+                        };
+                        // cork
+                        ctx.fillStyle = "#9a6a35";
+                        ctx.fillRect(cx - 3.5, tY - 4, 7, 4);
+                        // translucent glass body
+                        ctx.fillStyle = "rgba(216,232,242,0.42)";
+                        trap(topW, botW, tY, bY); ctx.fill();
+                        // pink rage filling the lower ~60% (width interpolated to fit inside)
+                        let midY = cy0 - 1;
+                        let midW = topW + (botW - topW) * ((midY - tY) / bh);
                         ctx.fillStyle = "#ff5fb0";
-                        ctx.beginPath(); ctx.arc(p.x, by - 5, cr, 0, Math.PI * 2); ctx.fill();
-                        ctx.fillStyle = "rgba(255,255,255,0.5)";
-                        ctx.beginPath(); ctx.arc(p.x - 2.6, by - 7.5, 2.2, 0, Math.PI * 2); ctx.fill(); // highlight
-                        ctx.strokeStyle = "rgba(150,30,90,0.5)"; ctx.lineWidth = 1.2;
-                        ctx.beginPath(); ctx.arc(p.x, by - 5, cr, 0, Math.PI * 2); ctx.stroke();
+                        trap(midW - 3, botW - 3, midY, bY - 1.5); ctx.fill();
+                        // glass outline + a bright highlight streak (the shine)
+                        ctx.strokeStyle = "rgba(150,30,90,0.35)"; ctx.lineWidth = 1.2;
+                        trap(topW, botW, tY, bY); ctx.stroke();
+                        ctx.strokeStyle = "rgba(255,255,255,0.55)"; ctx.lineWidth = 1.4;
+                        ctx.beginPath(); ctx.moveTo(cx - topW / 2 + 3, tY + 3); ctx.lineTo(cx - botW / 2 + 4, bY - 3); ctx.stroke();
                         ctx.lineWidth = 1;
                     } else {
                         // Active rage pool — translucent PINK disc that gently pulses.
@@ -1551,8 +1585,12 @@ class Main {
                 ctx.lineCap = "butt"; ctx.lineWidth = 1;
             }
 
-            // Ground troops + buildings (NOT towers).
-            for (let e of this.eng.ents) if (!e.fly && !(e instanceof Tower)) this.drawEntityBody(e);
+            // Ground troops + buildings (NOT towers). Ghosts (Lumberjack rage-ghost, and
+            // fallen Evo Skeleton Army skeletons) render as faint translucent phantoms.
+            // Depth-sorted (by y) so a unit lower on screen always draws IN FRONT — two
+            // troops never render ambiguously on top of each other.
+            const groundBodies = this.eng.ents.filter(e => !e.fly && !(e instanceof Tower)).sort((a, b) => a.y - b.y);
+            for (let e of groundBodies) this.drawEntityBody(e);
 
             // Only the rolling Log / Barbarian Barrel render here — above ground troops
             // but BELOW the towers.
@@ -1562,7 +1600,8 @@ class Main {
             for (let e of this.eng.ents) if (!e.fly && (e instanceof Tower)) this.drawEntityBody(e);
 
             // Flying troops.
-            for (let e of this.eng.ents) if (e.fly) this.drawEntityBody(e);
+            const flyBodies = this.eng.ents.filter(e => e.fly).sort((a, b) => a.y - b.y);
+            for (let e of flyBodies) this.drawEntityBody(e);
 
             // Deploy-time clocks (one per card, above the units)
             this.drawDeploys();
@@ -1913,7 +1952,9 @@ class Main {
         } else {
             color = this.getUnitColor(name);
             if (e.isClone) color = "#bce8ff"; // light tint; translucency comes from globalAlpha below
+            if (e.isRageGhost || e.isSkeleGhost) color = "#bce8ff"; // ghosts render like clones — pale glassy blue
             if (e.c && e.c.isFake) color = "#c4e3a6"; // fake (decoy) goblins: pale, washed-out green
+            if (e.isSkeleGeneral) color = "#a35cd6"; // the Skeleton Army general is purple
         }
 
         // Freeze/Slow status tints temporarily override the identity color. A Fireball
@@ -1927,6 +1968,7 @@ class Main {
         // indicator is drawn separately, once per card — see drawDeploys).
         ctx.globalAlpha = (e instanceof Troop && e.deployTime > 0) ? 0.75 : 1;
         if (e.isClone) ctx.globalAlpha *= 0.5; // cloned troops are translucent
+        if (e.isRageGhost || e.isSkeleGhost) ctx.globalAlpha *= 0.4; // ghosts are see-through, like clones
         if (e.c && e.c.isFake) ctx.globalAlpha *= 0.8; // fakes read slightly ghostly
         ctx.fillStyle = color;
         ctx.strokeStyle = "rgba(0,0,0,0.3)"; // soft outline, not harsh black
@@ -2066,8 +2108,42 @@ class Main {
         }
 
         // Evolution marker: evolved troops carry a small round purple gem on the body.
-        if (e instanceof Troop && e.c && e.c.isEvo) {
-            this.drawEvoGem(x, y, Math.min(7, Math.max(4, radius * 0.45)), true);
+        // The gem scales with the body so it stays small enough to FIT on tiny units
+        // (e.g. evo Skeletons) instead of swamping them.
+        if (e instanceof Troop && ((e.c && e.c.isEvo) || e.isSkeleGeneral)) {
+            this.drawEvoGem(x, y, Math.min(7, Math.max(2.6, radius * 0.45)), true);
+        }
+
+        // Ghost troops read like SEE-THROUGH GLASS: the body fill is faint (low alpha set
+        // by the caller), topped with a crisp bright rim so it looks glassy, not just dim.
+        if (e instanceof Troop && (e.isRageGhost || e.isSkeleGhost)) {
+            let prevA = ctx.globalAlpha;
+            ctx.globalAlpha = Math.min(1, prevA + 0.5);
+            ctx.strokeStyle = "rgba(228,246,255,0.9)"; ctx.lineWidth = 1.4;
+            ctx.beginPath(); ctx.arc(x, y, radius + 0.5, 0, Math.PI * 2); ctx.stroke();
+            ctx.globalAlpha = 0.18;
+            ctx.strokeStyle = "rgba(255,255,255,0.9)"; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.arc(x - radius * 0.3, y - radius * 0.3, radius * 0.5, Math.PI * 0.9, Math.PI * 1.7); ctx.stroke();
+            ctx.globalAlpha = prevA; ctx.lineWidth = 1;
+        }
+
+        // Evo Skeleton Army GENERAL: a gold ring + crown marks the one unit you must
+        // kill to end the (otherwise self-reviving) army.
+        if (e instanceof Troop && e.isSkeleGeneral) {
+            ctx.strokeStyle = "rgba(255,205,70,0.95)"; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(x, y, radius + 3, 0, Math.PI * 2); ctx.stroke();
+            ctx.lineWidth = 1;
+            ctx.fillStyle = "#ffcf3c";
+            let cyC = y - radius - 6, cw = 9;
+            ctx.beginPath();
+            ctx.moveTo(x - cw / 2, cyC + 4);
+            ctx.lineTo(x - cw / 2, cyC);
+            ctx.lineTo(x - cw / 4, cyC + 2.5);
+            ctx.lineTo(x, cyC - 2);
+            ctx.lineTo(x + cw / 4, cyC + 2.5);
+            ctx.lineTo(x + cw / 2, cyC);
+            ctx.lineTo(x + cw / 2, cyC + 4);
+            ctx.closePath(); ctx.fill();
         }
 
         // Raged: a pulsing pink aura ring + little spark ticks.
@@ -2521,13 +2597,91 @@ class Main {
     // the area spells) — these render above ground troops but below the towers.
     isSpellProj(p) {
         return !!(p.isSpellArc || p.isArrows || p.isSpellDrop || p.isLog || p.isDelivery ||
-            p.poison || p.graveyard || p.brownArea || p.isClone || p.isVines || p.chainTargets || p.shockBeams || p.isShockwave || p.isRage || p.isBomb);
+            p.poison || p.graveyard || p.brownArea || p.isClone || p.isVines || p.chainTargets || p.shockBeams || p.isShockwave || p.isPhantom || p.isElectricRing || p.isIceCrystal || p.isRage || p.isBomb);
     }
 
     drawProj(p) {
         if (p.isArrows) { this.drawArrowsVolley(p); return; }
         if (p.isSpellArc) { this.drawSpellArc(p); return; }
         if (p.isSpellDrop) { this.drawSpellDrop(p); return; }
+        if (p.isElectricRing) {
+            // Expanding electric ring (Evo Zap): a smooth flickering circle, with a much
+            // thinner faintly-jagged overlay for the crackle — not a hard zig-zag.
+            let prog = 1 - p.life / (p.ringMax || 30);
+            let r = Math.max(4, p.rad * prog);
+            let fade = 1 - prog;
+            let col = p.flashCol || "#d98cff";
+            let flick = (Math.floor(Date.now() / 45) % 4 === 0) ? 0.55 : 1;
+            ctx.save();
+            // smooth main ring
+            ctx.strokeStyle = col;
+            ctx.globalAlpha = 0.8 * fade * flick;
+            ctx.lineWidth = 2.5 * fade + 1;
+            ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
+            // thin, only slightly jagged crackle overlay
+            ctx.globalAlpha = 0.6 * fade * flick;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 0; i <= 28; i++) {
+                let a = (i / 28) * Math.PI * 2;
+                let jr = r + (i % 2 === 0 ? 0 : 2.5);
+                let px = p.x + Math.cos(a) * jr, py = p.y + Math.sin(a) * jr;
+                i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+            }
+            ctx.closePath(); ctx.stroke();
+            ctx.restore();
+            ctx.globalAlpha = 1; ctx.lineWidth = 1;
+            return;
+        }
+        if (p.isIceCrystal) {
+            // A blue ice DIAMOND hovering above the frozen troop, bobbing gently up and
+            // down until it crashes back down (Evo Ice Spirit).
+            let bob = Math.sin(Date.now() / 260) * 3;
+            let w = 6, h = 9;
+            ctx.save();
+            ctx.translate(p.x, p.y - 20 + bob);
+            // faint drop-shadow on the troop
+            ctx.globalAlpha = 0.2;
+            ctx.fillStyle = "#3a78b0";
+            ctx.beginPath(); ctx.ellipse(0, 20 - bob, 5, 2, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha = 1;
+            // diamond body
+            ctx.fillStyle = "#bfe8ff";
+            ctx.strokeStyle = "#5fb6ff"; ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.moveTo(0, -h); ctx.lineTo(w, 0); ctx.lineTo(0, h); ctx.lineTo(-w, 0); ctx.closePath();
+            ctx.fill(); ctx.stroke();
+            // facet highlights
+            ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(0, -h); ctx.lineTo(0, h); ctx.moveTo(-w, 0); ctx.lineTo(w, 0); ctx.stroke();
+            ctx.restore();
+            ctx.globalAlpha = 1; ctx.lineWidth = 1;
+            return;
+        }
+        if (p.isPhantom) {
+            // Spectral burst — green ring + rising wisps as the rage-ghost forms/fades.
+            let prog = 1 - p.life / (p.phantomMax || 22);
+            let r = Math.max(4, p.rad * prog);
+            let fade = 1 - prog;
+            ctx.save();
+            ctx.globalAlpha = 0.30 * fade;
+            ctx.fillStyle = "#7ce39a";
+            ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha = 0.65 * fade;
+            ctx.strokeStyle = "#9ff5b6"; ctx.lineWidth = 3.5 * fade + 1;
+            ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
+            ctx.globalAlpha = 0.8 * fade;
+            ctx.fillStyle = "#e6fff0";
+            for (let i = 0; i < 6; i++) {
+                let a = i * Math.PI / 3 + prog * 2.2;
+                let wx = p.x + Math.cos(a) * r * 0.85;
+                let wy = p.y + Math.sin(a) * r * 0.85 - prog * 12;
+                ctx.beginPath(); ctx.arc(wx, wy, 2.4 * fade + 0.8, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.restore();
+            ctx.globalAlpha = 1; ctx.lineWidth = 1;
+            return;
+        }
         if (p.isShockwave) {
             // Ground-slam shockwave: an expanding dust ring with a bright leading
             // edge and a fading inner haze (Mega Knight spawn / jump landing).
@@ -2686,11 +2840,14 @@ class Main {
     drawHealthBars() {
         for (let e of this.eng.ents) {
             if (e._barY === undefined || e.hp <= 0) continue; // dying units are already gone
+            if (e.isRageGhost || e.isSkeleGhost) continue; // phantoms show no bar
 
             let x = e._barX, barY = e._barY, barW = e._barW;
             // The shield has been damaged (not full)? Show the shield bar — and the
-            // health bar too, so both are visible at once.
+            // health bar too, so both are visible at once. `shieldHurt` also covers a
+            // shield that was broken clean off (shield now 0) so the HP bar still appears.
             let shieldDmg = e.shield > 0 && !(e.maxShield > 0 && e.shield >= e.maxShield);
+            let shieldHurt = e.maxShield > 0 && e.shield < e.maxShield;
             if (shieldDmg) {
                 // Guard against a missing/zero maxShield (would make the bar infinite).
                 let shPct = e.maxShield > 0 ? Math.max(0, Math.min(1, e.shield / e.maxShield)) : 1;
@@ -2699,13 +2856,26 @@ class Main {
                 ctx.fillStyle = "#d9b3ff";
                 ctx.fillRect(x - barW / 2, barY - 5, barW * shPct, 3);
             }
-            // Show a health bar once the unit has taken damage OR its shield is damaged.
-            if (e.hp < e.mhp || shieldDmg) {
+            // Show a health bar once the unit has taken damage OR its shield is at all hurt
+            // (damaged or fully broken — even a one-shot shield break reveals the HP bar).
+            if (e.hp < e.mhp || shieldHurt) {
                 let hpPct = Math.max(0, Math.min(1, e.hp / e.mhp));
                 ctx.fillStyle = "rgba(0,0,0,0.55)";
                 ctx.fillRect(x - barW / 2 - 1, barY - 1, barW + 2, 6);
                 ctx.fillStyle = e._barFriend ? "#2f8bff" : "#ff4d4d";
                 ctx.fillRect(x - barW / 2, barY, barW * hpPct, 4);
+            } else if (e.hp > e.mhp) {
+                // OVERHEAL (Evo Witch fed by dying skeletons): full bar, plus a GOLD
+                // overcharge segment extending past the right edge (capped at +1 bar).
+                ctx.fillStyle = "rgba(0,0,0,0.55)";
+                ctx.fillRect(x - barW / 2 - 1, barY - 1, barW + 2, 6);
+                ctx.fillStyle = e._barFriend ? "#2f8bff" : "#ff4d4d";
+                ctx.fillRect(x - barW / 2, barY, barW, 4);
+                let ov = Math.min(1, (e.hp - e.mhp) / e.mhp);
+                ctx.fillStyle = "rgba(0,0,0,0.55)";
+                ctx.fillRect(x + barW / 2, barY - 1, barW * ov + 1, 6);
+                ctx.fillStyle = "#ffd23c";
+                ctx.fillRect(x + barW / 2, barY, barW * ov, 4);
             }
             // EVO Musketeer: remaining sniper shots as purple pips above the bar.
             if (e.sniperShots > 0) {
@@ -2812,7 +2982,7 @@ class Main {
                 let jit = (i === 0 || i === segs) ? 0 : Math.sin(i * 9.3 + Math.floor(Date.now() / 55)) * 13;
                 pts.push([p.x + jit, yy]);
             }
-            ctx.strokeStyle = "#7fdcff"; ctx.lineWidth = 4;
+            ctx.strokeStyle = p.flashCol || "#7fdcff"; ctx.lineWidth = 4; // purple for evo Zap
             ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
             ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.4;
             ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
@@ -2820,7 +2990,7 @@ class Main {
         } else {
             let a = Math.max(0, p.life / 5);
             ctx.globalAlpha = 0.5 * a + 0.12;
-            ctx.fillStyle = "#cdf3ff";
+            ctx.fillStyle = p.flashCol || "#cdf3ff";
             ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.fill();
             ctx.globalAlpha = 1;
         }

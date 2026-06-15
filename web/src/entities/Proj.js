@@ -118,6 +118,22 @@ export default class Proj {
     // an expanding dust ring; rad is the blast radius it grows to.
     asShockwave() { this.isShockwave = true; this.life = 18; this.shockMax = 18; return this; }
 
+    // Spectral burst — a green phantom ring + rising wisps, for the Evo Lumberjack
+    // rage-ghost appearing and dissolving.
+    asPhantom() { this.isPhantom = true; this.life = 22; this.phantomMax = 22; return this; }
+
+    // Expanding electric ring (Evo Zap) in the given colour — expands slowly (same max
+    // radius, but reached over 3x the time).
+    asElectricRing(col) { this.isElectricRing = true; this.flashCol = col || "#d98cff"; this.life = 90; this.ringMax = 90; return this; }
+
+    // A blue ice crystal that LINGERS on the troop an Evo Ice Spirit jumped on, then
+    // SPLASHES down again after `delay` ticks for extra damage + an area re-freeze.
+    asIceCrystal(target, dmg, delay) {
+        this.isIceCrystal = true; this.iceTarget = target; this.dmg = dmg;
+        this.iceDelay = delay; this.iceMax = delay; this.life = delay + 6;
+        return this;
+    }
+
     asLog() { this.isLog = true; this.asRolling(); this.life = 110; return this; }
     asBarbBarrelLog() { this.isLog = true; this.barbBarrelLog = true; this.asRolling(); return this; }
 
@@ -211,8 +227,24 @@ export default class Proj {
             if (this.chainHit.length >= this.chainMax) this.life = Math.min(this.life, 8);
             return;
         }
-        if (this.chainTargets || this.barbBreak || this.isIceNova || this.shockBeams || this.isShockwave) {
+        if (this.chainTargets || this.barbBreak || this.isIceNova || this.shockBeams || this.isShockwave || this.isPhantom || this.isElectricRing) {
             this.life--; // brief visual-only flashes count down and vanish
+            return;
+        }
+
+        if (this.isIceCrystal) {
+            // Ride the target it was planted on (if still alive), then re-splash.
+            if (this.iceTarget && this.iceTarget.hp > 0) { this.x = this.iceTarget.x; this.y = this.iceTarget.y; }
+            this.life--;
+            if (this.iceDelay-- <= 0) {
+                for (let e of g.ents)
+                    if (e.tm !== this.tm && e.hp > 0 && Math.hypot(this.x - e.x, this.y - e.y) < 55 + (g.getHitboxRadius ? g.getHitboxRadius(e) : e.rad)) {
+                        e.hp -= this.dmg;
+                        e.fr = 72; // a longer area re-freeze
+                    }
+                g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 60, 0, this.tm, false).asIceNova());
+                this.life = 0;
+            }
             return;
         }
 
@@ -386,6 +418,16 @@ export default class Proj {
                             if (this.isFreeze) e.fr = 240;
                         }
                     }
+                }
+                // EVO Zap: after the first strike, throw an expanding electric ring and a
+                // delayed SECOND zap at a slightly larger radius.
+                if (this.isEvoZap) {
+                    g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, this.rad * 1.5, 0, this.tm, false).asElectricRing("#d98cff"));
+                    let z2 = new Proj(this.x, this.y, this.x, this.y, null, 0, true, this.rad * 1.3, this.dmg, this.tm, false);
+                    z2.crownMult = this.crownMult;
+                    z2.asStun(this.stunDuration);
+                    z2.asSpellDrop("zap", "#d98cff", 65); // 4x slower than the first strike
+                    g.projs.push(z2);
                 }
             }
             return;

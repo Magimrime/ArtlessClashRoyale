@@ -35,7 +35,7 @@ export default class Entity {
         if (!hopperToo && this.c && this.c.n === "Hopper") return;
         // Heavies resist most pushes — unless `force` (the Hopper shoves EVERYTHING).
         if (!force && this.c && ["Mega Knight", "P.E.K.K.A", "Golem", "Elixir Golem", "Lava Hound"].includes(this.c.n)) dist *= 0.25;
-        const FRICTION = 0.84;
+        const FRICTION = 0.88; // gentler decay → a longer, smoother glide to a stop
         let v = dist * (1 - FRICTION); // geometric sum v/(1-FRICTION) ≈ dist
         this.kbVX = Math.cos(ang) * v;
         this.kbVY = Math.sin(ang) * v;

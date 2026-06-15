@@ -153,7 +153,7 @@ export default class EnemyAI {
     // Player troops on our half / crossing, most dangerous (closest) first.
     getThreats() {
         return this.g.ents
-            .filter(e => e.tm === 0 && e instanceof Troop && e.hp > 0 && e.y < 520)
+            .filter(e => e.tm === 0 && e instanceof Troop && e.hp > 0 && e.y < 520 && !e.isRageGhost && !e.isSkeleGhost)
             .sort((a, b) => a.y - b.y);
     }
 

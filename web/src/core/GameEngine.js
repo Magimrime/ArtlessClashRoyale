@@ -23,7 +23,7 @@ export default class GameEngine {
 
         // Evolutions: which cards CAN evolve and how many normal plays charge the
         // evo. evoSel / enemyEvoSel hold the (≤2) card names chosen as evos per deck.
-        this.EVO_REQ = { "Barbarians": 1, "Archers": 2, "Inferno Dragon": 2, "Royal Recruits": 1, "Goblin Barrel": 2, "Musketeer": 2, "Wall Breakers": 2 };
+        this.EVO_REQ = { "Barbarians": 1, "Archers": 2, "Inferno Dragon": 2, "Royal Recruits": 1, "Goblin Barrel": 2, "Musketeer": 2, "Wall Breakers": 2, "Mega Knight": 2, "Lumberjack": 1, "Witch": 2, "Skeleton Army": 2, "Skeletons": 1, "Zap": 2, "Ice Spirit": 1 };
         this.evoSel = [];
         this.enemyEvoSel = [];
 
@@ -814,7 +814,7 @@ export default class GameEngine {
         if (c.n === "Arrows") return { type: 'circle', val: 91 };
         if (c.n === "Poison") return { type: 'circle', val: 95 };
         if (c.n === "Graveyard") return { type: 'circle', val: 92 };
-        if (c.n === "Rage") return { type: 'circle', val: 88 };
+        if (c.n === "Rage") return { type: 'circle', val: 72 }; // matches the Lumberjack's dropped rage
         if (c.n === "Freeze") return { type: 'circle', val: 67 };
         if (c.n === "Vines") return { type: 'circle', val: 52 };
         if (c.n === "Zap") return { type: 'circle', val: 55 };
@@ -1012,7 +1012,7 @@ export default class GameEngine {
 
             let toClone = [];
             for (let e of this.ents) {
-                if (e instanceof Troop && e.tm === tm && Math.hypot(e.x - x, e.y - y) < rad && !e.isClone && !(e instanceof Building) && !(e instanceof Tower)) {
+                if (e instanceof Troop && e.tm === tm && Math.hypot(e.x - x, e.y - y) < rad && !e.isClone && !e.isRageGhost && !e.isSkeleGhost && !(e instanceof Building) && !(e instanceof Tower)) {
                     toClone.push(e);
                 }
             }
@@ -1066,7 +1066,13 @@ export default class GameEngine {
                 // Placed spells fall from the sky as a symbol, then resolve.
                 let p = new Proj(x, y, x, y, null, 0, true, rad, dmg, tm, false);
                 p.crownMult = crown;
-                if (c.n === "Zap") { p.asStun(); p.asSpellDrop("zap", "#7fdcff", 20); }
+                if (c.n === "Zap") {
+                    p.asStun();
+                    // EVO Zap: PURPLE/pink lightning that strikes, throws out an expanding
+                    // electric ring, then zaps a SECOND time at a slightly larger radius.
+                    p.asSpellDrop("zap", c.isEvo ? "#d98cff" : "#7fdcff", 20);
+                    if (c.isEvo) p.isEvoZap = true;
+                }
                 else if (c.n === "Vines") { p.isRoot = true; p.isVines = true; p.life = 12; } // root + ground fliers, no visual
                 else if (c.n === "Freeze") { p.isFreeze = true; p.flashCol = "#bfe8ff"; p.life = 12; } // instant, no snowflake
                 else { p.life = 26; } // any other placed spell still gets a short wind-up
@@ -1107,11 +1113,26 @@ export default class GameEngine {
             for (let i = 0; i < 6; i++)
                 this.ents.push(new Troop(tm, x + this.random() * 50 - 25, y + this.random() * 50 - 25, this.getCard("Minions")));
         } else if (c.n === "Skeleton Army") {
+            // EVO: a shielded GENERAL spawns at the BACK (toward home). Every army
+            // skeleton is tagged to it — they rise as ghosts when killed and only truly
+            // die once the general falls (handled in the death pass).
+            let general = null;
+            if (c.isEvo) {
+                let gy = y + (tm === 0 ? 30 : -30);
+                general = new Troop(tm, x, gy, this.getCard("Skeletons"));
+                general.isSkeleGeneral = true;
+                general.skeleArmyGeneral = general; // self-ref keeps the kill-check uniform
+                general.maxShield = 260; general.shield = 260; // the general's shield
+                general.rad = Math.round(general.rad * 1.45); general.mass = general.rad; // a little bigger
+                this.ents.push(general);
+            }
             // Spread the 15 skeletons across a wide disk (like the real game).
             for (let i = 0; i < 15; i++) {
                 let ang = i * 2.39996;
                 let rr = Math.sqrt((i + 0.5) / 15) * 48;
-                this.ents.push(new Troop(tm, x + Math.cos(ang) * rr, y + Math.sin(ang) * rr, this.getCard("Skeletons")));
+                let s = new Troop(tm, x + Math.cos(ang) * rr, y + Math.sin(ang) * rr, this.getCard("Skeletons"));
+                if (general) s.skeleArmyGeneral = general;
+                this.ents.push(s);
             }
         } else if (c.n === "Bats") {
             for (let i = 0; i < 5; i++)
@@ -1139,6 +1160,7 @@ export default class GameEngine {
             this.projs.push(new Proj(x, y, x, y, null, 0, false, 100, 0, tm, false).asShockwave());
         } else if (c.t === 3) {
             this.ents.push(new Building(tm, x, y, c));
+            this.buildingGen = (this.buildingGen || 0) + 1; // a freshly placed building lets troops re-pick a building target
         } else if (c.n === "Royal Hogs") {
             this.ents.push(new Troop(tm, x - 30, y, c));
             this.ents.push(new Troop(tm, x - 10, y, c));
@@ -1383,9 +1405,10 @@ export default class GameEngine {
             for (let j = i + 1; j < this.ents.length; j++) {
                 let b = this.ents[j];
                 if (a.fly !== b.fly || b.hp <= 0) continue;
-                // A unit mid-LEAP is airborne and passes through everything (incl. another
-                // leaper) — so each completes its full arc and deals its own landing splash.
-                if (a.jp || b.jp) continue;
+                // Exactly ONE unit mid-leap is airborne and passes over the grounded one.
+                // (Two leapers that MEET are handled in the overlap block below — they cut
+                // their jumps short and land where they met, instead of sailing past.)
+                if (a.jp !== b.jp) continue;
 
                 let aIsStruct = a instanceof Tower || a instanceof Building;
                 let bIsStruct = b instanceof Tower || b instanceof Building;
@@ -1439,8 +1462,17 @@ export default class GameEngine {
                         let ang = this.random() * Math.PI * 2;
                         dx = Math.cos(ang); dy = Math.sin(ang); d = 1; // unit vector
                     }
-                    // Mass-weighted separation: the lighter unit moves more, the heavier
-                    // one barely budges. A Hopper is IMMOVABLE — nothing can push past it.
+                    // Two leapers meet mid-air: cut both jumps SHORT — land them right here
+                    // (a smaller jump) so neither hovers or sails past, and each still does
+                    // its own jump-land next tick.
+                    if (a.jp && b.jp) {
+                        a.jdx = a.x; a.jdy = a.y;
+                        b.jdx = b.x; b.jdy = b.y;
+                        continue;
+                    }
+                    // Mass-weighted separation (UNCHANGED — smooth, no swarm jitter): the
+                    // lighter unit moves more, the heavier barely budges. A Hopper is
+                    // IMMOVABLE — nothing pushes past it.
                     let overlap = r - d;
                     let nx = dx / d, ny = dy / d;
                     let aHop = a.c && a.c.n === "Hopper", bHop = b.c && b.c.n === "Hopper";
@@ -1451,6 +1483,50 @@ export default class GameEngine {
                     if (bHop && !aHop) aMove = Math.min(overlap, 5);
                     a.x += nx * aMove; a.y += ny * aMove;
                     b.x -= nx * bMove; b.y -= ny * bMove;
+
+                    // Plus a GENTLE sideways nudge in ONE narrow case: a heavier-or-equal
+                    // MOVING troop works a LOCKED (attacking, planted) troop out of its lane
+                    // so it can squeeze past. Small and one-sided, so it never makes swarms
+                    // shake — and a mover that simply can't get through isn't shoved hard.
+                    if (!aHop && !bHop) {
+                        let blocker = null, mover = null;
+                        if (a.atk && !b.atk && b.mass >= a.mass) { blocker = a; mover = b; }
+                        else if (b.atk && !a.atk && a.mass >= b.mass) { blocker = b; mover = a; }
+                        if (blocker) {
+                            let hx = mover.currentTarget ? mover.currentTarget.x - mover.x : mover.x - mover.lx;
+                            let hy = mover.currentTarget ? mover.currentTarget.y - mover.y : mover.y - mover.ly;
+                            let hl = Math.hypot(hx, hy);
+                            if (hl > 0.05) {
+                                hx /= hl; hy /= hl;
+                                let cross = hx * (blocker.y - mover.y) - hy * (blocker.x - mover.x);
+                                let s;
+                                if (Math.abs(cross) < 0.5) {
+                                    if (blocker.pushSide === undefined) blocker.pushSide = this.random() < 0.5 ? 1 : -1;
+                                    s = blocker.pushSide;
+                                } else s = cross >= 0 ? 1 : -1;
+                                let nudge = Math.min(overlap * 0.5, 1.2);
+                                blocker.x += -hy * s * nudge; blocker.y += hx * s * nudge;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // FINAL guard: a shove from another troop can push a unit INTO a tower/building.
+        // After all pushing, eject any ground unit fully back out of every structure so
+        // it never clips through one.
+        for (let u of this.ents) {
+            if (u.hp <= 0 || u.fly || u instanceof Tower || u instanceof Building) continue;
+            let uHb = this.getHitboxRadius(u);
+            for (let t of this.ents) {
+                if (t.hp <= 0 || !(t instanceof Tower || t instanceof Building)) continue;
+                let half = t.rad * 0.88 + uHb;
+                let dx = u.x - t.x, dy = u.y - t.y;
+                if (Math.abs(dx) < half && Math.abs(dy) < half) {
+                    let penX = half - Math.abs(dx), penY = half - Math.abs(dy);
+                    if (penX <= penY) u.x += (dx < 0 ? -1 : 1) * penX;
+                    else u.y += (dy < 0 ? -1 : 1) * penY;
                 }
             }
         }
@@ -1515,6 +1591,24 @@ export default class GameEngine {
         for (let i = 0; i < this.ents.length; i++) {
             let e = this.ents[i];
             if (e.hp <= 0) {
+                // EVO Skeleton Army: a fallen army skeleton RISES again as a translucent
+                // ghost instead of dying — for as long as its shielded GENERAL lives.
+                let gen = e.skeleArmyGeneral;
+                if (gen && gen !== e && gen.hp > 0 && this.ents.includes(gen)) {
+                    e.shield = 0; e.maxShield = 0;
+                    e._hp = e.mhp;          // rise (bypass the shield setter)
+                    e.dyingTime = 0;
+                    if (!e.isSkeleGhost) { // first fall — a subtle puff as it turns ghostly
+                        e.isSkeleGhost = true;
+                        this.projs.push(new Proj(e.x, e.y, e.x, e.y, null, 0, false, 16, 0, e.tm, false).asPhantom());
+                    }
+                    continue;
+                }
+                // The GENERAL fell — only the GHOSTS dissolve. The still-living skeletons
+                // fight on (but, with no general, can no longer rise again when killed).
+                if (e.isSkeleGeneral) {
+                    for (let m of this.ents) if (m !== e && m.skeleArmyGeneral === e && m.isSkeleGhost) m._hp = 0;
+                }
                 // Combat deaths get the 3-tick draw delay; SUICIDE units (spirits / wall
                 // breakers that exploded) and towers/buildings die instantly — they have
                 // nothing left to strike back with.
