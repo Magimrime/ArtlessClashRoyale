@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.4.8** — here's the whole road there.
+We're currently on **26.4.9** — here's the whole road there.
 
 ---
 
@@ -61,6 +61,7 @@ A new whole-game look: the field flips from the green grass to a **deep ocean bl
 
 - **26.4.0** — The blue repaint, riding in on the new **card faces** and the **river-as-a-wall** pathfinding. The look is now a **choice**: a **gear button in the top-left** opens a dedicated **Settings screen** where you pick **Ocean / Grass / Indigo** (each option tinted with its own colour; your pick is saved), so the classic green arena is one tap away. **Bats** now spawn in a fixed **3-over-2 formation** instead of scattering. Card art got a consistency pass: every **trio** reads as the same **triangle** the skeletons use, **spell** cards show the **effect itself** (a coloured blast, a rolling log, a snowflake/bolt) instead of the dashed placement ring, and the **NEW CARD unlocked** screen uses the real card face. A Mother-Witch **curse on a flying unit** now renders on its **body**, not its ground shadow.
 - **26.4.8** — **The game becomes a real desktop app.** An Electron shell wraps the exact same client and `server.js` (now importable as a module), and `npm run dist` builds a one-click **Windows installer** with its own gold-crown icon and a desktop shortcut. Saves live in the per-user app-data folder, launching a second copy just focuses the first, and the **Baloo 2 font is now self-hosted** in `web/fonts/` — so the installed game runs fully **offline** and still looks right.
+- **26.4.9** — **…and a phone app too.** The site is now a **PWA**: open it on a phone and *Add to Home Screen* installs it with the crown icon, running **fullscreen portrait** like a real app. A service worker **precaches the whole game**, so once installed it plays fully **offline** (saves and multiplayer still need a connection); it always picks up the newest deploy when online.
 
 ---
 

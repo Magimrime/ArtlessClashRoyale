@@ -25,6 +25,21 @@ Installed saves live in `%APPDATA%/Artless Clash Royale/save.json`.
 > The installer is unsigned, so Windows SmartScreen may warn on first run —
 > click "More info" → "Run anyway".
 
+## Phone App (PWA)
+
+The deployed site is an installable **Progressive Web App**. On a phone,
+open the game's URL and:
+
+- **Android (Chrome):** tap the **Install app** prompt (or menu ⋮ → *Add to
+  Home screen*).
+- **iPhone/iPad (Safari):** tap **Share** → **Add to Home Screen**.
+
+It installs with the crown icon, runs fullscreen in portrait like a native
+app, and — thanks to the service worker (`web/sw.js`) — **plays offline**
+once installed. When online it always fetches the newest deploy. Progress
+saves to the phone's localStorage; multiplayer still needs a reachable
+backend (see below).
+
 ## How to Play (local)
 
 The client lives in `web/` and is served by `server.js`, which also provides

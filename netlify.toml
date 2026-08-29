@@ -8,3 +8,10 @@
   for = "/src/*"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
+
+# The service worker must revalidate on every check, or an old worker could
+# pin players to a stale build long after a deploy.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
