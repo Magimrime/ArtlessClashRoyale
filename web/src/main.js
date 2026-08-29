@@ -57,8 +57,9 @@ const State = {
 
 // Faux-3D look: the game is still drawn flat top-down, but bodies get lit radial shading,
 // a ground contact shadow, and a small specular highlight so everything reads as rounded &
-// raised. Flip this to false to instantly return to the old flat look.
-const FAUX3D = true;
+// raised. OFF — troops and buildings wear the classic flat look. Flip to true to bring
+// the raised/shaded look back.
+const FAUX3D = false;
 
 class Main {
     constructor() {
@@ -1850,13 +1851,17 @@ class Main {
                     let time = (Date.now() - this.eng.gameStart) / 1000;
                     let remaining = 180 - time;
                     if (remaining < 0) remaining = 0; // Overtime handled by state
+                    // Both banners want centre screen; when they're up at the same time
+                    // (tiebreaker starts while the elixir banner is still fading) they
+                    // stack instead of drawing on top of each other.
+                    const bothBanners = this.eng.tiebreaker && this.eng.doubleElixirAnim > 0;
                     if (this.eng.tiebreaker) {
-                        this.drawCenteredString("TIEBREAKER!", W / 2, H / 2, "bold 40px 'Baloo 2', 'Segoe UI', sans-serif", "red");
+                        this.drawCenteredString("TIEBREAKER!", W / 2, bothBanners ? H / 2 - 32 : H / 2, "bold 40px 'Baloo 2', 'Segoe UI', sans-serif", "red");
                     }
 
                     if (this.eng.doubleElixirAnim > 0) {
                         ctx.globalAlpha = this.eng.doubleElixirAnim / 100;
-                        this.drawCenteredString("2x ELIXIR", W / 2, H / 2, "bold 50px 'Baloo 2', 'Segoe UI', sans-serif", "magenta");
+                        this.drawCenteredString("2x ELIXIR", W / 2, bothBanners ? H / 2 + 36 : H / 2, "bold 50px 'Baloo 2', 'Segoe UI', sans-serif", "magenta");
                         ctx.globalAlpha = 1.0;
                     }
 
@@ -2958,22 +2963,21 @@ class Main {
         ctx.restore();
     }
 
-    // A full card FACE — the same look used in your hand and in the deck builder.
-    // Back to the classic plain look: white body, centred NAME, elixir badge —
-    // no unit art. (Selection / evo chrome is added by the caller.)
+    // A full card FACE — the same look used in your hand and in the deck builder:
+    // white body, NAME across the top, the unit VISUAL filling the area beneath it,
+    // and the elixir badge. (Selection / evo chrome is added by the caller.)
     drawCardFace(cx, cy, w, h, c, bg = "#ffffff", isEvo = false) {
         ctx.fillStyle = bg;
         this.drawRoundRect(cx, cy, w, h, Math.min(10, w * 0.09), true, false);
-        const words = c.n.split(' ');
-        if (words.length <= 1) {
-            this.drawCenteredString(c.n, cx + w / 2, cy + h / 2 + 5, "700 12px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
-        } else {
-            // Long names wrap onto two centred lines so they stay inside the card.
-            const mid = Math.ceil(words.length / 2);
-            this.drawCenteredString(words.slice(0, mid).join(' '), cx + w / 2, cy + h / 2 - 2, "700 11px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
-            this.drawCenteredString(words.slice(mid).join(' '), cx + w / 2, cy + h / 2 + 11, "700 11px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
-        }
-        this.drawElixirCost(cx + 13, cy + 14, c.c);
+        this.drawCardName(c.n, cx, cy, w);
+        let top = cy + 28, bot = cy + h - 9;
+        // Cards are STATIC: freeze Date.now() so the reused in-game renderers (zap flicker,
+        // barrel tumble, log bands, …) draw a fixed frame instead of animating in the deck.
+        const _now = Date.now;
+        Date.now = () => 1000;
+        try { this.drawCardVisual(cx + 4, top, w - 8, bot - top, c, isEvo); }
+        finally { Date.now = _now; }
+        this.drawElixirCost(cx + 13, cy + 13, c.c); // top-left corner
     }
 
     drawDeckCard(cx, cy, w, h, c, selected, isEvo = false) {
