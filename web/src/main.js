@@ -164,6 +164,8 @@ class Main {
         this.sandboxBtn = { x: W / 2 - 60, y: H / 2 + 220 - 150, w: 120, h: 50 };
         this.settingsBtn = { x: 12, y: 12, w: 46, h: 46 };           // top-left gear → settings screen
         this.settingsBackBtn = { x: W / 2 - 60, y: H - 120, w: 120, h: 50 };
+        // Cheat/debug entry lives on the Settings screen (below the style options).
+        this.settingsCheatBtn = { x: W / 2 - 110, y: H / 2 + 140, w: 220, h: 46 };
         // Sandbox bottom bar: row 1 (4 wide buttons) + row 2 (5 narrow buttons),
         // all inside the H-150 HUD strip so the field grid is untouched.
         this.sbDeckBtn = { x: 12, y: H - 140, w: 120, h: 40 };
@@ -449,16 +451,21 @@ class Main {
                 this.state = State.SANDBOX;
             } else if (this.contains(this.settingsBtn, x, y)) {
                 this.state = State.SETTINGS;
-            } else if (!this.eng.cheatPressed && x > W - 53 && y < 26) {
-                this.eng.cheatPressed = true;
-                this.eng.saveProgress();
-                this.state = State.CHEAT;
-            } else if (this.eng.cheated && x > W - 53 && y < 26) {
-                this.state = State.DEBUG_MENU;
             }
         } else if (this.state === State.SETTINGS) {
             for (const o of this.settingsStyleRects()) {
                 if (this.contains(o, x, y)) { this.setTheme(o.key); return; }
+            }
+            // Cheat/debug moved here from the title screen's hidden corner.
+            if (this.contains(this.settingsCheatBtn, x, y)) {
+                if (!this.eng.cheatPressed) {
+                    this.eng.cheatPressed = true;
+                    this.eng.saveProgress();
+                    this.state = State.CHEAT;
+                } else if (this.eng.cheated) {
+                    this.state = State.DEBUG_MENU;
+                }
+                return;
             }
             if (this.contains(this.settingsBackBtn, x, y)) this.state = State.TITLE;
         } else if (this.state === State.MP_MENU) {
@@ -491,7 +498,7 @@ class Main {
                 this.state = State.DECK;
             } else if (this.contains(this.noBtn, x, y)) {
                 this.cheatOptionVisible = false;
-                this.state = State.TITLE;
+                this.state = State.SETTINGS; // came from the Settings screen
             }
         } else if (this.state === State.DECK) {
             // ... (Deck logic unchanged)
@@ -955,13 +962,6 @@ class Main {
             this.drawCenteredString(`Cards Unlocked: ${this.eng.unlockedCards.length} / ${this.eng.allCards.length}`, W / 2, H - 270, "600 15px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.82)");
             this.drawCenteredString(`Wins ${this.eng.gamesWon}   ·   Matches ${this.eng.gamesPlayed}`, W / 2, H - 246, "600 15px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.82)");
 
-            ctx.textAlign = "right";
-            ctx.fillStyle = "rgba(255,255,255,0.4)";
-            ctx.font = "600 11px 'Baloo 2', 'Segoe UI', sans-serif";
-            if (!this.eng.cheatPressed) ctx.fillText("cheat", W - 10, 18);
-            else if (this.eng.cheated) ctx.fillText("debug", W - 10, 18);
-            ctx.textAlign = "center";
-
             this.drawCenteredString("by Oliver Zhou", W / 2, H - 22, "600 11px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.45)");
             return;
         }
@@ -974,6 +974,13 @@ class Main {
                 let active = this.themeKey === o.key;
                 // Each option is tinted with its OWN field colour so you preview the look.
                 this.drawBtn(o, o.name + (active ? "   ✓" : ""), this.themes[o.key].field);
+            }
+            // Cheat entry (formerly a hidden corner of the title screen). Once used and
+            // declined it stays gone; once accepted it becomes the debug menu.
+            if (!this.eng.cheatPressed) {
+                this.drawBtn(this.settingsCheatBtn, "CHEAT", "#8a6bbf");
+            } else if (this.eng.cheated) {
+                this.drawBtn(this.settingsCheatBtn, "DEBUG MENU", "#8a6bbf");
             }
             this.drawBtn(this.settingsBackBtn, "BACK", "#FF6347");
             return;
@@ -2460,30 +2467,31 @@ class Main {
         }));
     }
 
-    // Top-left settings button: just a small gear (no background), opens the Settings screen.
+    // Top-left settings button: a small gear (no background), opens the Settings screen.
     drawSettingsButton() {
         const b = this.settingsBtn;
         const hover = this.contains(b, this.mouse.x, this.mouse.y);
-        this.drawGearIcon(b.x + b.w / 2, b.y + b.h / 2, hover ? 9.5 : 9);
+        this.drawGearIcon(b.x + b.w / 2, b.y + b.h / 2, hover ? 7.5 : 7);
     }
 
-    // A simple, clean line-art cog: a white ring, eight short teeth ticks, and a centre dot.
+    // A small SOLID cog: filled gear silhouette (8 squared teeth) with a punched
+    // centre hole (even-odd fill, so the background shows through the middle).
     drawGearIcon(cx, cy, r) {
         ctx.save();
         ctx.translate(cx, cy);
-        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2; ctx.lineCap = "round";
-        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
-        for (let i = 0; i < 8; i++) {
-            let a = i * Math.PI / 4;
-            ctx.beginPath();
-            ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
-            ctx.lineTo(Math.cos(a) * (r + 3), Math.sin(a) * (r + 3));
-            ctx.stroke();
+        ctx.fillStyle = "rgba(255,255,255,0.92)";
+        ctx.beginPath();
+        const teeth = 8, inner = r * 0.74, half = (Math.PI / teeth) * 0.45;
+        for (let i = 0; i < teeth * 2; i++) {
+            const a = (i * Math.PI) / teeth;
+            const rad = i % 2 === 0 ? r : inner;
+            ctx.lineTo(Math.cos(a - half) * rad, Math.sin(a - half) * rad);
+            ctx.lineTo(Math.cos(a + half) * rad, Math.sin(a + half) * rad);
         }
-        ctx.fillStyle = "#ffffff";
-        ctx.beginPath(); ctx.arc(0, 0, r * 0.34, 0, Math.PI * 2); ctx.fill();
+        ctx.closePath();
+        ctx.arc(0, 0, r * 0.36, 0, Math.PI * 2, true); // the hole
+        ctx.fill("evenodd");
         ctx.restore();
-        ctx.lineWidth = 1; ctx.lineCap = "butt";
     }
 
     // Flat solid menu colour in the chosen style.
@@ -2950,21 +2958,22 @@ class Main {
         ctx.restore();
     }
 
-    // A full card FACE — the same look used in your hand and in the deck builder:
-    // white body, NAME across the top, the unit VISUAL filling the area beneath it,
-    // and the elixir badge. (Selection / evo chrome is added by the caller.)
+    // A full card FACE — the same look used in your hand and in the deck builder.
+    // Back to the classic plain look: white body, centred NAME, elixir badge —
+    // no unit art. (Selection / evo chrome is added by the caller.)
     drawCardFace(cx, cy, w, h, c, bg = "#ffffff", isEvo = false) {
         ctx.fillStyle = bg;
         this.drawRoundRect(cx, cy, w, h, Math.min(10, w * 0.09), true, false);
-        this.drawCardName(c.n, cx, cy, w);
-        let top = cy + 28, bot = cy + h - 9;
-        // Cards are STATIC: freeze Date.now() so the reused in-game renderers (zap flicker,
-        // barrel tumble, log bands, …) draw a fixed frame instead of animating in the deck.
-        const _now = Date.now;
-        Date.now = () => 1000;
-        try { this.drawCardVisual(cx + 4, top, w - 8, bot - top, c, isEvo); }
-        finally { Date.now = _now; }
-        this.drawElixirCost(cx + 13, cy + 13, c.c); // top-left corner
+        const words = c.n.split(' ');
+        if (words.length <= 1) {
+            this.drawCenteredString(c.n, cx + w / 2, cy + h / 2 + 5, "700 12px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
+        } else {
+            // Long names wrap onto two centred lines so they stay inside the card.
+            const mid = Math.ceil(words.length / 2);
+            this.drawCenteredString(words.slice(0, mid).join(' '), cx + w / 2, cy + h / 2 - 2, "700 11px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
+            this.drawCenteredString(words.slice(mid).join(' '), cx + w / 2, cy + h / 2 + 11, "700 11px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
+        }
+        this.drawElixirCost(cx + 13, cy + 14, c.c);
     }
 
     drawDeckCard(cx, cy, w, h, c, selected, isEvo = false) {

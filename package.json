@@ -1,7 +1,7 @@
 {
     "name": "artless-clash-royale",
     "productName": "Artless Clash Royale",
-    "version": "26.4.9",
+    "version": "26.4.10",
     "description": "An artless JavaScript port of Clash Royale — canvas graphics, real card game.",
     "author": "Oliver Zhou",
     "main": "desktop/main.js",
@@ -28,7 +28,8 @@
             "server.js",
             "web/**/*",
             "!web/bin/**",
-            "build/icon.png"
+            "build/icon.png",
+            "build/icon.ico"
         ],
         "win": {
             "target": "squirrel",
@@ -36,7 +37,8 @@
         },
         "squirrelWindows": {
             "customSquirrelVendorDir": "node_modules/electron-winstaller/vendor",
-            "artifactName": "Artless-Clash-Royale-Setup-${version}.${ext}"
+            "artifactName": "Artless-Clash-Royale-Setup-${version}.${ext}",
+            "iconUrl": "https://cdn.jsdelivr.net/gh/Magimrime/ArtlessClashRoyale@main/build/icon.ico"
         }
     }
 }
