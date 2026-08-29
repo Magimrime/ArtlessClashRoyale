@@ -4,6 +4,27 @@ This is a JavaScript port of Clash Royale, playable in the browser.
 
 **See [`UPDATES.md`](UPDATES.md) for the full update timeline** — versioned `year.major.minor.patch` (e.g. `26.3.12`), where the major number restarts at 1 each year and ticks up whenever the background color changes.
 
+## Desktop App (Windows)
+
+The game ships as an installable Electron app. It embeds `server.js` on
+`127.0.0.1`, so saves, ES modules, and the multiplayer menu behave exactly like
+the local-server setup — and it works fully offline (the Baloo 2 font is
+self-hosted in `web/fonts/`).
+
+**Build the installer:**
+
+1. `npm install`
+2. `npm run dist`
+3. Run `dist/squirrel-windows/Artless-Clash-Royale-Setup-<version>.exe` — it
+   installs to `%LOCALAPPDATA%\artless-clash-royale` and puts shortcuts on the
+   desktop and Start Menu (uninstall from Windows "Installed apps" as usual).
+
+`npm start` runs the desktop app directly without installing (for development).
+Installed saves live in `%APPDATA%/Artless Clash Royale/save.json`.
+
+> The installer is unsigned, so Windows SmartScreen may warn on first run —
+> click "More info" → "Run anyway".
+
 ## How to Play (local)
 
 The client lives in `web/` and is served by `server.js`, which also provides

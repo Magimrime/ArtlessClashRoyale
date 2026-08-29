@@ -92,6 +92,8 @@ export default class Troop extends Entity {
 
         if (c.n === "Princess") this.sightRange = 400;
         if (c.n === "Prince") this.rad = 12;
+        // Size / collision tweak: spirits read a touch smaller.
+        if (c.n.includes("Spirit")) this.rad = 8;  // down from 10
         // EVO Musketeer: 3 global-range sniper shots (never spent on towers).
         if (c.n === "Musketeer" && c.isEvo) this.sniperShots = 3;
         // EVO Wall Breakers: a bomb SHIELD (second health bar) with the same HP as
@@ -231,32 +233,20 @@ export default class Troop extends Entity {
             this.y += this.kbVY;
             this.kbVX *= 0.88;
             this.kbVY *= 0.88;
+            // If the skid reaches an arena WALL, pin it exactly at the edge and bleed the
+            // INTO-the-wall velocity off hard, so it decelerates smoothly against the wall
+            // instead of overshooting past it and being snapped back in (a teleport).
+            const minX = 6, maxX = W - 6, minY = 6, maxY = H - 150;
+            if (this.x < minX) { this.x = minX; if (this.kbVX < 0) this.kbVX *= -0.15; }
+            else if (this.x > maxX) { this.x = maxX; if (this.kbVX > 0) this.kbVX *= -0.15; }
+            if (this.y < minY) { this.y = minY; if (this.kbVY < 0) this.kbVY *= -0.15; }
+            else if (this.y > maxY) { this.y = maxY; if (this.kbVY > 0) this.kbVY *= -0.15; }
             this.kbTime--;
             if (Math.hypot(this.kbVX, this.kbVY) < 0.12) { this.kbVX = 0; this.kbVY = 0; this.kbTime = 0; }
             this.isCharging = false; this.distWalked = 0; // a knockback stops a Prince's charge
         }
 
         if (this.curseTime > 0) this.curseTime--;
-
-        // EVO Skeletons multiply FAST on a quick timer — not just when attacking — so a
-        // lone skeleton balloons into a full swarm (up to the cap of 12) in well under a
-        // second. That lets a single evo skeleton trade with an enormous army.
-        if (this.c.n === "Skeletons" && this.c.isEvo && this.hp > 0) {
-            if (this.skeleDupT === undefined) this.skeleDupT = 10;
-            if (--this.skeleDupT <= 0) {
-                this.skeleDupT = 10;
-                let n = 0;
-                for (let e of g.ents) if (e.c && e.c.n === "Skeletons" && e.c.isEvo && e.tm === this.tm && e.hp > 0) n++;
-                if (n < 12) {
-                    let s = new Troop(this.tm, this.x + (this.tm === 0 ? -7 : 7), this.y + (this.tm === 0 ? 9 : -9), this.c);
-                    s.deployTime = 12; // subtle materialize
-                    s.skeleDupT = 10 + (n % 4) * 3; // small stagger so they don't all pop the same tick
-                    g.ents.push(s);
-                    g.projs.push(new Proj(s.x, s.y, s.x, s.y, null, 0, false, 11, 0, this.tm, false).asPhantom());
-                }
-            }
-        }
-
         // Fireball aftershock: 0.3s after the hit (the single impact shove has just
         // faded), the unit is slowed 50% for 0.6s, which then chains into another 1s of
         // a harder 80% slow.
@@ -638,7 +628,7 @@ export default class Troop extends Entity {
             } else {
                 if (this.c.n === "Mega Knight") {
                     for (let e of g.ents)
-                        if (e.tm !== this.tm && !e.fly && e.dist(this.lk) < 60) {
+                        if (e.tm !== this.tm && !e.fly && e.dist(this.lk) < 26 + g.getHitboxRadius(e)) { // melee splash now matches the Dark Prince's tight radius (was 60)
                             e.hp -= this.c.d;
                             // EVO: the slam LAUNCHES each struck troop into a backward leap
                             // (it arcs away and lands with a puff — no extra landing damage).
@@ -675,15 +665,18 @@ export default class Troop extends Entity {
                         this.hp = Math.min(this.mhp * 1.5, this.hp + 14);
                     }
                     // EVO Skeletons: every hit RAISES another skeleton (a brief shimmer-in),
-                    // up to 12 on the field at once. (Manual sandbox summons can exceed it —
-                    // the cap only gates this auto-multiply.) A skeleton that's already dying
-                    // (landing its final retaliation hit) does NOT summon.
-                    if (this.c.n === "Skeletons" && this.c.isEvo && this.hp > 0) {
+                    // up to 8 on the field at once. (Manual sandbox summons can exceed it —
+                    // the cap only gates this auto-multiply.) The hit summons even if THIS
+                    // skeleton is landing its dying retaliation blow — so when two armies
+                    // trade kills, each fatal hit still leaves a replacement behind.
+                    if (this.c.n === "Skeletons" && this.c.isEvo) {
                         let n = 0;
                         for (let e of g.ents) if (e.c && e.c.n === "Skeletons" && e.c.isEvo && e.tm === this.tm && e.hp > 0) n++;
-                        if (n < 12) {
+                        if (n < 8) {
                             let s = new Troop(this.tm, this.x + (this.tm === 0 ? -7 : 7), this.y + (this.tm === 0 ? 9 : -9), this.c);
-                            s.deployTime = 12; // subtle materialize
+                            s.deployTime = 0; // appears instantly...
+                            s.cd = 0;         // ...and can strike right away, so the swarm keeps
+                            // itself going even when it's being focus-fired or trading kills
                             g.ents.push(s);
                             g.projs.push(new Proj(s.x, s.y, s.x, s.y, null, 0, false, 11, 0, this.tm, false).asPhantom());
                         }
@@ -759,10 +752,28 @@ export default class Troop extends Entity {
             if (dist > 0) { dx /= dist; dy /= dist; }
 
             if (!this.atk) {
+                let preY = this.y;
                 // Dash speed: 2x for the Princes and Evo Royal Recruits alike.
                 let chargeSpd = this.isCharging ? 2.0 : 1.0;
                 this.x += dx * this.c.s * chargeSpd * speedMult;
                 this.y += dy * this.c.s * chargeSpd * speedMult;
+
+                // The river is a WALL. A ground troop that can't leap it never sets foot in
+                // the water off a bridge — if a step would, it's held at the near bank (its
+                // whole body kept clear of the water) so it must walk to a bridge to cross.
+                // The nav grid already routes it there; this is the hard guarantee.
+                const riverJumper = ["Hog Rider", "Royal Hogs", "Prince", "Dark Prince"].includes(this.c.n);
+                if (!this.fly && !this.jp && !riverJumper && !g.sandboxNoRiver) {
+                    const RY = g.RIV_Y || RIV_Y;
+                    const band = 17 + g.getHitboxRadius(this); // half-band: keeps the body fully out of the water
+                    const bxs = g.bridgeXs || [W / 4, W * 3 / 4];
+                    if (Math.abs(this.y - RY) < band) {
+                        // Same bridge width the pathfinder uses (checkPathBlocked / nav grid),
+                        // so a troop is never told to cross at an x the clamp then blocks.
+                        let onBridge = bxs.some(bx => Math.abs(this.x - bx) <= 30);
+                        if (!onBridge) this.y = (preY <= RY) ? Math.min(this.y, RY - band) : Math.max(this.y, RY + band);
+                    }
+                }
             }
 
             // Princes charge/dash — and so do EVO Royal Recruits. A unit being knocked

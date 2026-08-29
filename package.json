@@ -1,0 +1,42 @@
+{
+    "name": "artless-clash-royale",
+    "productName": "Artless Clash Royale",
+    "version": "26.4.8",
+    "description": "An artless JavaScript port of Clash Royale — canvas graphics, real card game.",
+    "author": "Oliver Zhou",
+    "main": "desktop/main.js",
+    "scripts": {
+        "start": "electron .",
+        "serve": "node server.js",
+        "dist": "electron-builder --win"
+    },
+    "devDependencies": {
+        "electron": "33.4.11",
+        "electron-builder": "^26.0.12"
+    },
+    "build": {
+        "appId": "com.oliverzhou.artlessclashroyale",
+        "productName": "Artless Clash Royale",
+        "electronVersion": "33.4.11",
+        "electronDist": "node_modules/electron/dist",
+        "directories": {
+            "buildResources": "build",
+            "output": "dist"
+        },
+        "files": [
+            "desktop/**/*",
+            "server.js",
+            "web/**/*",
+            "!web/bin/**",
+            "build/icon.png"
+        ],
+        "win": {
+            "target": "squirrel",
+            "icon": "build/icon.ico"
+        },
+        "squirrelWindows": {
+            "customSquirrelVendorDir": "node_modules/electron-winstaller/vendor",
+            "artifactName": "Artless-Clash-Royale-Setup-${version}.${ext}"
+        }
+    }
+}

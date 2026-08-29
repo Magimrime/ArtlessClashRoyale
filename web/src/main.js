@@ -51,14 +51,30 @@ const State = {
     MP_MENU: 'MP_MENU',
     MP_HOST: 'MP_HOST',
     MP_JOIN: 'MP_JOIN',
-    SANDBOX: 'SANDBOX'
+    SANDBOX: 'SANDBOX',
+    SETTINGS: 'SETTINGS'
 };
+
+// Faux-3D look: the game is still drawn flat top-down, but bodies get lit radial shading,
+// a ground contact shadow, and a small specular highlight so everything reads as rounded &
+// raised. Flip this to false to instantly return to the old flat look.
+const FAUX3D = true;
 
 class Main {
     constructor() {
         this.state = State.TITLE;
         this.t0 = 0;
         this.scrollY = 0;
+        // Background STYLE themes — the player picks one on the title screen; saved locally.
+        this.themes = {
+            ocean: { name: "Ocean", field: "#2e7da0", menu: "#236480", deck: "#152c3a", band: "rgba(255,255,255,0.03)", enemy: "rgba(10,30,55,0.10)" },
+            grass: { name: "Grass", field: "#5cb356", menu: "#3a9d5e", deck: "#23362a", band: "rgba(255,255,255,0.025)", enemy: "rgba(20,45,75,0.06)" },
+            indigo: { name: "Indigo", field: "#4b3f86", menu: "#3a3168", deck: "#221c3a", band: "rgba(255,255,255,0.035)", enemy: "rgba(8,4,40,0.14)" },
+        };
+        this.themeOrder = ["ocean", "grass", "indigo"];
+        let savedTheme = null;
+        try { savedTheme = localStorage.getItem("acr_theme"); } catch (e) { }
+        this.themeKey = (savedTheme && this.themes[savedTheme]) ? savedTheme : "ocean";
         this.eng = new GameEngine();
         this.mp = new MultiplayerManager(this.eng); // Pass Engine
 
@@ -107,11 +123,15 @@ class Main {
         this.sandboxMapOpen = false;    // map chooser popup
         this.sandboxToolsOpen = false;  // tools popup (eraser, clear)
         this.sandboxWorldOpen = false;  // world-edit popup
+        this.sandboxSpeedOpen = false;  // speed-slider popup
         this.sandboxEvoSel = false;     // armed card was picked via its evo crystal
         this.sandboxEraser = false;     // tool: tap a troop to delete it
         this.sandboxTowerArm = null;    // world edit: 'king' | 'princess' tower stamp
-        this.sandboxSpeed = 1;          // 0.5–3x sim speed
-        this.sbSpeedSteps = [0.5, 1, 1.5, 2, 3];
+        this.sandboxSpeed = 1;          // 0.5–10x sim speed (draggable slider)
+        this.sbSpeedMin = 0.5;
+        this.sbSpeedMax = 10;
+        this.sbSpeedTicks = [1, 2, 3, 5, 10]; // labelled marks on the slider
+        this.sbSpeedDrag = false;
         this.sbSpeedAcc = 0;
         this.sbMaps = ['default', 'tower', 'open', 'heist', 'river', 'blank'];
         this.sbMapNames = { default: 'Default', tower: 'Tower', open: 'Open', heist: 'Heist', river: 'River', blank: 'Blank' };
@@ -128,6 +148,12 @@ class Main {
         this.eraserImg.onerror = () => { this.eraserImgLoaded = false; };
         this.eraserImg.src = "images/eraser.png";
 
+        // Animated sprite sheets — each a vertical column of 16x16 frames (frame count is
+        // auto-detected from the image height). Add more with addSprite("name","images/x.png").
+        this.sprites = {};
+        this.addSprite("zap", "images/zap.png");
+        this.addSprite("evozap", "images/evo_zap.png");
+
         this.init();
     }
 
@@ -136,6 +162,8 @@ class Main {
         this.deckBtn = { x: W / 2 - 60, y: H / 2 + 100 - 150, w: 120, h: 50 };
         this.mpBtn = { x: W / 2 - 60, y: H / 2 + 160 - 150, w: 120, h: 50 };
         this.sandboxBtn = { x: W / 2 - 60, y: H / 2 + 220 - 150, w: 120, h: 50 };
+        this.settingsBtn = { x: 12, y: 12, w: 46, h: 46 };           // top-left gear → settings screen
+        this.settingsBackBtn = { x: W / 2 - 60, y: H - 120, w: 120, h: 50 };
         // Sandbox bottom bar: row 1 (4 wide buttons) + row 2 (5 narrow buttons),
         // all inside the H-150 HUD strip so the field grid is untouched.
         this.sbDeckBtn = { x: 12, y: H - 140, w: 120, h: 40 };
@@ -196,7 +224,7 @@ class Main {
             (this.state === State.SANDBOX && this.sandboxDeckOpen);
         const maxScrollFor = () => {
             let listSize = (this.state === State.DECK) ? this.eng.unlockedCards.length : this.eng.allCards.length;
-            return Math.max(0, (Math.floor(listSize / 3) + 2) * 80 + 150 - H);
+            return Math.max(0, (Math.floor(listSize / 4) + 2) * 160 + 150 - H);
         };
         const clampScroll = () => { this.scrollY = Math.max(0, Math.min(maxScrollFor(), this.scrollY)); };
         const evtPos = (e) => {
@@ -219,17 +247,20 @@ class Main {
                 if (Math.hypot(p.x - mouseDown.x, p.y - mouseDown.y) > 6) mouseDown.moved = true;
                 if (scrollableState()) { this.scrollY = mouseDown.scroll - (p.y - mouseDown.y); clampScroll(); }
                 // Drag the eraser across the field to delete every troop you sweep over.
-                if (this.eng.sandbox && this.sandboxEraser && p.y < H - 150) this.eng.sandboxErase(p.x, p.y);
+                if (this.eng.sandbox && this.sandboxEraser && !this.sbSpeedDrag && !this.sandboxSpeedOpen && p.y < H - 150) this.eng.sandboxErase(p.x, p.y);
+                // Drag along the speed slider to scrub the sim speed.
+                if (this.sbSpeedDrag) this.setSandboxSpeedFromX(p.x);
             }
         });
         canvas.addEventListener('mouseup', (e) => {
+            this.sbSpeedDrag = false;
             if (!mouseDown) return;
             const p = evtPos(e);
             // A click that didn't drag still selects a card in a list; a drag scrolled.
             if (scrollableState() && !mouseDown.handled && !mouseDown.moved) this.handle(p.x, p.y);
             mouseDown = null;
         });
-        canvas.addEventListener('mouseleave', () => { mouseDown = null; });
+        canvas.addEventListener('mouseleave', () => { mouseDown = null; this.sbSpeedDrag = false; });
         canvas.addEventListener('wheel', (e) => {
             if (scrollableState()) { this.scrollY += Math.sign(e.deltaY) * 20; clampScroll(); }
         });
@@ -256,7 +287,9 @@ class Main {
             const dx = p.x - touchStart.x, dy = p.y - touchStart.y;
             if (Math.hypot(dx, dy) > 8) touchStart.moved = true;
             // Drag the eraser across the field to delete every troop you sweep over.
-            if (this.eng.sandbox && this.sandboxEraser && p.y < H - 150) this.eng.sandboxErase(p.x, p.y);
+            if (this.eng.sandbox && this.sandboxEraser && !this.sbSpeedDrag && !this.sandboxSpeedOpen && p.y < H - 150) this.eng.sandboxErase(p.x, p.y);
+            // Drag along the speed slider to scrub the sim speed.
+            if (this.sbSpeedDrag) this.setSandboxSpeedFromX(p.x);
             if (scrollableState()) {
                 // Drag to scroll the card list (finger up = list up).
                 this.scrollY = touchStart.scroll - dy;
@@ -265,6 +298,7 @@ class Main {
         }, { passive: false });
         canvas.addEventListener('touchend', (e) => {
             e.preventDefault();
+            this.sbSpeedDrag = false;
             if (!touchStart) return;
             // A drag inside a scrollable list just scrolls (no click). Everywhere else
             // (and any tap that didn't move) acts at the lift point: letting go over the
@@ -413,6 +447,8 @@ class Main {
                 this.sandboxPaused = false;
                 this.sandboxDeckOpen = false;
                 this.state = State.SANDBOX;
+            } else if (this.contains(this.settingsBtn, x, y)) {
+                this.state = State.SETTINGS;
             } else if (!this.eng.cheatPressed && x > W - 53 && y < 26) {
                 this.eng.cheatPressed = true;
                 this.eng.saveProgress();
@@ -420,6 +456,11 @@ class Main {
             } else if (this.eng.cheated && x > W - 53 && y < 26) {
                 this.state = State.DEBUG_MENU;
             }
+        } else if (this.state === State.SETTINGS) {
+            for (const o of this.settingsStyleRects()) {
+                if (this.contains(o, x, y)) { this.setTheme(o.key); return; }
+            }
+            if (this.contains(this.settingsBackBtn, x, y)) this.state = State.TITLE;
         } else if (this.state === State.MP_MENU) {
             if (this.contains(this.backBtn, x, y)) {
                 this.state = State.TITLE;
@@ -458,10 +499,10 @@ class Main {
                 this.state = State.TITLE;
                 this.scrollY = 0;
             } else {
-                let cols = 3;
+                let cols = 4;
                 let margin = 20;
                 let cardW = (W - (cols + 1) * margin) / cols;
-                let cardH = 60;
+                let cardH = 140;
                 for (let i = 0; i < this.eng.unlockedCards.length; i++) {
                     let row = Math.floor(i / cols);
                     let col = i % cols;
@@ -511,10 +552,10 @@ class Main {
             if (this.contains(this.backBtn, x, y)) {
                 this.state = State.DEBUG_MENU;
             } else {
-                let cols = 3;
+                let cols = 4;
                 let margin = 20;
                 let cardW = (W - (cols + 1) * margin) / cols;
-                let cardH = 60;
+                let cardH = 140;
                 for (let i = 0; i < this.eng.allCards.length; i++) {
                     let c = this.eng.allCards[i];
                     let selected = this.eng.enemyDeckSelection.includes(c);
@@ -547,7 +588,7 @@ class Main {
             if (this.sandboxDeckOpen) {
                 // Full-screen ALL-cards picker (same grid as the deck builder).
                 if (this.contains(this.backBtn, x, y)) { this.sandboxDeckOpen = false; return; }
-                let cols = 3, margin = 20, cardW = (W - 4 * margin) / 3, cardH = 60;
+                let cols = 4, margin = 20, cardW = (W - 5 * margin) / 4, cardH = 140;
                 for (let i = 0; i < this.eng.allCards.length; i++) {
                     let row = Math.floor(i / cols), col = i % cols;
                     let cx = margin + col * (cardW + margin), cy = 100 + row * (cardH + margin) - this.scrollY;
@@ -621,6 +662,22 @@ class Main {
                 if (!hit) this.sandboxWorldOpen = false;
                 return;
             }
+            if (this.sandboxSpeedOpen) {
+                const t = this.speedTrack();
+                // Tap (or start a drag) anywhere on/near the slider to scrub the speed;
+                // tapping a preset jumps to it; tapping elsewhere closes the popup.
+                if (x >= t.x - 18 && x <= t.x + t.w + 18 && y >= t.y - 22 && y <= t.y + 22) {
+                    this.sbSpeedDrag = true;
+                    this.setSandboxSpeedFromX(x);
+                    return;
+                }
+                for (const p of this.sbSpeedTicks) {
+                    let pxc = t.x + (p - this.sbSpeedMin) / (this.sbSpeedMax - this.sbSpeedMin) * t.w;
+                    if (Math.abs(x - pxc) < 22 && Math.abs(y - (t.y + 34)) < 16) { this.sandboxSpeed = p; return; }
+                }
+                this.sandboxSpeedOpen = false;
+                return;
+            }
             if (this.contains(this.sbDeckBtn, x, y)) { this.sandboxDeckOpen = true; this.scrollY = 0; }
             else if (this.contains(this.sbSideBtn, x, y)) {
                 // BLUE ↔ RED. Your side fixes the team you summon for AND applies
@@ -630,10 +687,7 @@ class Main {
             else if (this.contains(this.sbMapBtn, x, y)) this.sandboxMapOpen = true;
             else if (this.contains(this.sbToolsBtn, x, y)) this.sandboxToolsOpen = true;
             else if (this.contains(this.sbWorldBtn, x, y)) this.sandboxWorldOpen = true;
-            else if (this.contains(this.sbSpeedBtn, x, y)) {
-                let i = this.sbSpeedSteps.indexOf(this.sandboxSpeed);
-                this.sandboxSpeed = this.sbSpeedSteps[(i + 1) % this.sbSpeedSteps.length];
-            }
+            else if (this.contains(this.sbSpeedBtn, x, y)) this.sandboxSpeedOpen = true;
             else if (this.contains(this.sbPauseBtn, x, y)) this.sandboxPaused = !this.sandboxPaused;
             else if (this.contains(this.sbBackBtn, x, y)) {
                 this.eng.sandbox = false;
@@ -873,7 +927,7 @@ class Main {
                 ctx.fillStyle = "rgba(255,255,255,0.5)";
                 ctx.font = "600 12px 'Baloo 2', 'Segoe UI', sans-serif";
                 ctx.textAlign = "left";
-                ctx.fillText(`${this.visitorCount} plays`, 12, 22);
+                ctx.fillText(`${this.visitorCount} plays`, 66, 40); // beside the gear button
             }
             ctx.textAlign = "center";
 
@@ -896,6 +950,7 @@ class Main {
             this.drawBtn(this.deckBtn, "DECK", "#FFA500");
             this.drawBtn(this.mpBtn, "MULTIPLAYER", "#3296ff");
             this.drawBtn(this.sandboxBtn, "SANDBOX", "#b65cd6");
+            this.drawSettingsButton();
 
             this.drawCenteredString(`Cards Unlocked: ${this.eng.unlockedCards.length} / ${this.eng.allCards.length}`, W / 2, H - 270, "600 15px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.82)");
             this.drawCenteredString(`Wins ${this.eng.gamesWon}   ·   Matches ${this.eng.gamesPlayed}`, W / 2, H - 246, "600 15px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.82)");
@@ -908,6 +963,19 @@ class Main {
             ctx.textAlign = "center";
 
             this.drawCenteredString("by Oliver Zhou", W / 2, H - 22, "600 11px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.45)");
+            return;
+        }
+
+        if (this.state === State.SETTINGS) {
+            this.menuBg();
+            this.drawCenteredString("Settings", W / 2, 96, "bold 40px 'Baloo 2', 'Segoe UI', sans-serif", "white");
+            this.drawCenteredString("Background Style", W / 2, H / 2 - 110, "700 18px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.88)");
+            for (const o of this.settingsStyleRects()) {
+                let active = this.themeKey === o.key;
+                // Each option is tinted with its OWN field colour so you preview the look.
+                this.drawBtn(o, o.name + (active ? "   ✓" : ""), this.themes[o.key].field);
+            }
+            this.drawBtn(this.settingsBackBtn, "BACK", "#FF6347");
             return;
         }
 
@@ -977,11 +1045,11 @@ class Main {
         }
 
         if (this.state === State.DECK) {
-            this.paintBg("#23362a");
-            let cols = 3;
+            this.paintBg(this.theme().deck);
+            let cols = 4;
             let margin = 20;
             let cardW = (W - (cols + 1) * margin) / cols;
-            let cardH = 60;
+            let cardH = 140;
 
             for (let i = 0; i < this.eng.unlockedCards.length; i++) {
                 let c = this.eng.unlockedCards[i];
@@ -991,7 +1059,7 @@ class Main {
                 let cx = margin + col * (cardW + margin);
                 let cy = 100 + row * (cardH + margin) - this.scrollY;
                 if (cy > H || cy + cardH < 0) continue;
-                this.drawDeckCard(cx, cy, cardW, cardH, c, selected);
+                this.drawDeckCard(cx, cy, cardW, cardH, c, selected, this.eng.evoSel.includes(c.n));
                 // Evo gem on EVERY evo-capable card so you can see (and tap) it. Selected
                 // evos glow + get a purple frame; the rest show a dim "available" gem.
                 if (this.eng.isEvoCapable(c.n)) {
@@ -1031,11 +1099,11 @@ class Main {
 
         if (this.state === State.ENEMY_DECK) {
             // Mirrors the player's "Build Your Deck" screen exactly.
-            this.paintBg("#23362a");
-            let cols = 3;
+            this.paintBg(this.theme().deck);
+            let cols = 4;
             let margin = 20;
             let cardW = (W - (cols + 1) * margin) / cols;
-            let cardH = 60;
+            let cardH = 140;
 
             for (let i = 0; i < this.eng.allCards.length; i++) {
                 let c = this.eng.allCards[i];
@@ -1045,7 +1113,7 @@ class Main {
                 let cx = margin + col * (cardW + margin);
                 let cy = 100 + row * (cardH + margin) - this.scrollY;
                 if (cy > H || cy + cardH < 0) continue;
-                this.drawDeckCard(cx, cy, cardW, cardH, c, selected);
+                this.drawDeckCard(cx, cy, cardW, cardH, c, selected, this.eng.enemyEvoSel.includes(c.n));
                 if (this.eng.isEvoCapable(c.n)) {
                     let isE = this.eng.enemyEvoSel.includes(c.n), req = this.eng.EVO_REQ[c.n];
                     if (isE) { ctx.strokeStyle = "#b13bff"; ctx.lineWidth = 2.5; this.drawRoundRect(cx, cy, cardW, cardH, 10, false, false); ctx.stroke(); ctx.lineWidth = 1; }
@@ -1072,22 +1140,21 @@ class Main {
         }
 
         if (this.state === State.NEW_CARD) {
-            // (Unchanged new card render)
-            ctx.fillStyle = "#e0f0e0";
-            ctx.fillRect(0, 0, W, H);
-            this.drawCenteredString("NEW CARD", W / 2, 150, "bold 30px 'Baloo 2', 'Segoe UI', sans-serif", "#006400");
-            this.drawCenteredString("UNLOCKED!", W / 2, 190, "bold 30px 'Baloo 2', 'Segoe UI', sans-serif", "#006400");
+            this.menuBg();
+            this.drawCenteredString("NEW CARD", W / 2, 150, "bold 34px 'Baloo 2', 'Segoe UI', sans-serif", "#ffffff");
+            this.drawCenteredString("UNLOCKED!", W / 2, 192, "bold 34px 'Baloo 2', 'Segoe UI', sans-serif", "#ffe08a");
 
             if (this.justUnlocked) {
-                let cardW = 140, cardH = 180;
-                let cx = (W - cardW) / 2;
-                let cy = (H - cardH) / 2;
-
-                ctx.fillStyle = "white";
-                this.drawRoundRect(cx, cy, cardW, cardH, 15, true, true);
-
-                this.drawCenteredString(this.justUnlocked.n, cx + cardW / 2, cy + cardH / 2, "bold 18px 'Baloo 2', 'Segoe UI', sans-serif", "black");
-                this.drawElixirCost(cx - 10, cy - 10, this.justUnlocked.c);
+                let cardW = 150, cardH = 200;
+                let cx = (W - cardW) / 2, cy = (H - cardH) / 2 - 10;
+                // Soft halo behind the card.
+                ctx.fillStyle = "rgba(255,255,255,0.10)";
+                this.drawRoundRect(cx - 14, cy - 14, cardW + 28, cardH + 28, 20, true, false);
+                // The card itself — same face as the hand and deck builder.
+                this.drawCardFace(cx, cy, cardW, cardH, this.justUnlocked);
+                // Gold "unlocked" frame.
+                ctx.strokeStyle = "#ffd24d"; ctx.lineWidth = 3;
+                this.drawRoundRect(cx, cy, cardW, cardH, 13, false, false); ctx.stroke(); ctx.lineWidth = 1;
             }
             this.drawBtn(this.continueBtn, "CONTINUE", "#32CD32");
             return;
@@ -1207,9 +1274,13 @@ class Main {
                     let gx = snap.x, gy = snap.y;
                     let effR = this.effectRadius(c);          // splash for hop/suicide units
                     let range = effR > 0 ? 0 : (c.rn || 0);   // …otherwise the attack range
+                    // The placement ghost is plain WHITE by default (never tinted by the
+                    // unit's own colour — that olive/gray read as a stray "ghost dot"). It
+                    // turns RED only where the card can't be placed (the river, the enemy
+                    // half, on top of a structure, …) for clear "you can't drop here" feedback.
                     let valid = canAfford && this.eng.isValid(gy, gx, c, ghostTeam) && this.mouse.y < H - 150;
-                    let col = valid ? this.getUnitColor(c.n) : "#8a8a8a";
-                    let outline = valid ? "#ffffff" : "#ff6a6a";
+                    let col = valid ? "#ffffff" : "#ff5a5a";
+                    let outline = valid ? "#ffffff" : "#ff5a5a";
                     let isBuilding = c.t === 3;
 
                     if (effR > 0) {
@@ -1633,12 +1704,18 @@ class Main {
             // Status Effects
             for (let e of this.eng.ents) {
                 if (e instanceof Troop && e.curseTime > 0) {
-                    ctx.fillStyle = "rgba(128, 0, 128, 0.4)";
+                    // Sit the curse on the unit's BODY (the visual/hitbox), not its ground
+                    // shadow — a flying unit's body floats 22px above its shadow.
+                    let cy = e.y - (e.fly ? 22 : 0);
                     let r = e.rad + 5;
-                    ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI * 2); ctx.fill();
+                    // The Balloon's body is its ENVELOPE, drawn higher and larger than the
+                    // nominal centre — put the ring there so it wraps the balloon, not the air.
+                    if (e.c && e.c.n === "Balloon") { let R = e.rad * 0.88 * 1.1; cy -= R * 0.35; r = R + 5; }
+                    ctx.fillStyle = "rgba(128, 0, 128, 0.4)";
+                    ctx.beginPath(); ctx.arc(e.x, cy, r, 0, Math.PI * 2); ctx.fill();
                     ctx.strokeStyle = "magenta";
                     ctx.lineWidth = 2;
-                    ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI * 2); ctx.stroke();
+                    ctx.beginPath(); ctx.arc(e.x, cy, r, 0, Math.PI * 2); ctx.stroke();
                     ctx.lineWidth = 1;
                 }
             }
@@ -1708,16 +1785,19 @@ class Main {
                         // does nothing).
                         let paintY = r.y - (isSel ? 12 : 0);
 
-                        // White card, no black outline; greyed when unaffordable.
-                        ctx.fillStyle = canAfford ? "#ffffff" : "#b9bdb7";
-                        this.drawRoundRect(r.x, paintY, r.w, r.h, 5, true, false);
+                        // When this card's evolution is charged, the NEXT play is the evo —
+                        // so the face shows the evo version (gem-stamped units).
+                        let evoReady = this.eng.p1.evos && this.eng.p1.evos.has(c.n) &&
+                            (this.eng.p1.evoProgress[c.n] || 0) >= this.eng.EVO_REQ[c.n];
+
+                        // Same face as the deck builder: name on top, the unit visual under
+                        // it, elixir badge. Greyed when unaffordable.
+                        this.drawCardFace(r.x, paintY, r.w, r.h, c, canAfford ? "#ffffff" : "#b9bdb7", evoReady);
                         if (isSel) {
                             ctx.strokeStyle = "#ffd24d"; ctx.lineWidth = 3;
                             this.drawRoundRect(r.x, paintY, r.w, r.h, 5, false, false); ctx.stroke();
                             ctx.lineWidth = 1;
                         }
-                        this.drawCenteredString(c.n, r.x + r.w / 2, paintY + r.h / 2 + 4, "700 10px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
-                        this.drawElixirCost(r.x + 15, paintY + 15, c.c);
                         // Evolution indicator: purple diamonds fill as the card cycles;
                         // once charged (progress >= req) they glow. Playing the evo resets.
                         if (this.eng.p1.evos && this.eng.p1.evos.has(c.n)) {
@@ -1801,7 +1881,7 @@ class Main {
 
             // Row 2: world edit, speed, pause, back.
             this.drawBtn(this.sbWorldBtn, "WORLD", "#3aa17e");
-            this.drawBtn(this.sbSpeedBtn, `${this.sandboxSpeed}x`, "#e0b13c");
+            this.drawBtn(this.sbSpeedBtn, `SPEED ${this.sandboxSpeed}x`, "#e0b13c");
             this.drawBtn(this.sbPauseBtn, this.sandboxPaused ? "PLAY" : "PAUSE", this.sandboxPaused ? "#39c44e" : "#e0b13c");
             this.drawBtn(this.sbBackBtn, "BACK", "#FF6347");
 
@@ -1870,19 +1950,21 @@ class Main {
                     this.drawCenteredString(`River y: ${this.eng.RIV_Y} · Bridges: ${Math.round(this.eng.bridgeXs[0])} / ${Math.round(this.eng.bridgeXs[1])}`,
                         W / 2, rects[0].y - 16, "600 12px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.75)");
                 }
+            } else if (this.sandboxSpeedOpen) {
+                this.drawSpeedPopup();
             }
 
             // ---- Full-screen ALL-cards picker (mirrors the deck-builder look) ----
             if (this.sandboxDeckOpen) {
-                this.paintBg("#23362a");
-                let cols = 3, margin = 20, cardW = (W - 4 * margin) / 3, cardH = 60;
+                this.paintBg(this.theme().deck);
+                let cols = 4, margin = 20, cardW = (W - 5 * margin) / 4, cardH = 140;
                 for (let i = 0; i < this.eng.allCards.length; i++) {
                     let c = this.eng.allCards[i];
                     let row = Math.floor(i / cols), col = i % cols;
                     let cx = margin + col * (cardW + margin);
                     let cy = 100 + row * (cardH + margin) - this.scrollY;
                     if (cy > H || cy + cardH < 0) continue;
-                    this.drawDeckCard(cx, cy, cardW, cardH, c, this.eng.sel === c);
+                    this.drawDeckCard(cx, cy, cardW, cardH, c, this.eng.sel === c, this.sandboxEvoSel && this.eng.sel === c);
                     // Evo crystal on every evo-capable card: tap it to summon the EVO.
                     if (this.eng.isEvoCapable(c.n)) {
                         let armed = this.eng.sel === c && this.sandboxEvoSel;
@@ -1923,7 +2005,7 @@ class Main {
         }
     } // End render()
 
-    drawEntityBody(e) {
+    drawEntityBody(e, card = false) {
         // A unit at 0 HP is gone visually — it may still linger a few ticks in the
         // engine (the dying delay that lets mutual kills draw), but it must DISAPPEAR
         // immediately on screen, with no leftover body or health bar (so a one-shot
@@ -1936,16 +2018,22 @@ class Main {
         // a gap instead of clipping into each other and the towers.
         let radius = e.rad * 0.88;
 
-        // Flying units float above their ground shadow (drawn in the shadow pass).
-        if (e.fly) {
+        // A LEAPING troop (Mega-Knight jump, river hop, an Evo-MK knock-jump victim) arcs
+        // up from the ground and back to it, so its height must start and end at 0.
+        const isLeaping = e instanceof Troop && e.jp && e.jdx !== undefined;
+
+        // Natural fliers float a FIXED height above their ground shadow. A leaper does not —
+        // applying that flat offset would pop the body up 22px the instant the leap begins
+        // and drop it 22px on landing (the "teleport"); its height is purely the arc below.
+        if (e.fly && !isLeaping) {
             y -= 22;
             radius *= 1.1;
         }
 
-        // Jump offset — arc height from progress toward the FIXED landing point.
-        if (e instanceof Troop && e.jp && e.jdx !== undefined) {
+        // Jump offset — a smooth arc that is 0 at take-off and at landing.
+        if (isLeaping) {
             let progress = 1.0 - (Math.hypot(e.jdx - e.x, e.jdy - e.y) / (e.jd || 1));
-            y -= 22.0 * Math.sin(progress * Math.PI);
+            y -= 42.0 * Math.sin(progress * Math.PI);
         }
 
         // Spirit hop onto the enemy — arc up (the ground shadow stays put, showing
@@ -1954,6 +2042,11 @@ class Main {
             let prog = 1 - e.sjT / (e.sjMax || 1);
             y -= 20 * Math.sin(prog * Math.PI);
         }
+
+        // Faux-3D: every unit casts a soft contact shadow on the ground (e.x/e.y is the
+        // ground point — the body floats above it for fliers/leapers). Skipped on the
+        // deck card, which sits on a flat coloured tile.
+        if (!card) this.unitShadow(e.x, e.y, e.rad * 0.88, !!(e.fly && !isLeaping));
 
         // (Sparky / Zappies charge ring is drawn once in drawCharge — no duplicate
         // aura here.)
@@ -1967,7 +2060,7 @@ class Main {
         if (e instanceof Tower) {
             color = isFriend ? "#4aa3ff" : "#ff5a5a";
         } else {
-            color = this.getUnitColor(name);
+            color = this.getUnitColor(e.c ? e.c.n : name); // colour by the REAL card (so Elite ≠ regular Musketeer)
             if (e.isClone) color = "#bce8ff"; // light tint; translucency comes from globalAlpha below
             if (e.isGhosted) color = "#bce8ff"; // ghosts render like clones — pale glassy blue
             if (e.c && e.c.isFake) color = "#c4e3a6"; // fake (decoy) goblins: pale, washed-out green
@@ -1994,7 +2087,9 @@ class Main {
         if (e instanceof Tower) {
             // ROUNDED TOWER
             let r = radius;
-            this.drawRoundRect(x - r, y - r, r * 2, r * 2, 8, true, false);
+            this.extrudeWall(x, y, r, card ? 0 : r * 0.85, color, false); // raised block
+            ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
+            this.drawRoundRect(x - r, y - r, r * 2, r * 2, 8, true, false); // lit top face
             ctx.stroke();
             // Turret(s) rotate to aim at the tower's current target, each with a
             // barrel sticking out. The KING also has a smaller "shooter" above.
@@ -2065,9 +2160,21 @@ class Main {
             }
             ctx.lineWidth = 1;
         } else if (e instanceof Building) {
-            ctx.rect(x - radius, y - radius, radius * 2, radius * 2);
+            let s = radius;
+            this.extrudeWall(x, y, s, card ? 0 : s * 0.85, color, false); // raised block
+            ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.rect(x - s, y - s, s * 2, s * 2);        // lit top face
             ctx.fill();
             ctx.stroke();
+            if (FAUX3D) {
+                // raised bevel (flat solid edges, no gradient): bright top-left, dark bottom-right
+                ctx.lineWidth = 2.2;
+                ctx.strokeStyle = "rgba(255,255,255,0.30)";
+                ctx.beginPath(); ctx.moveTo(x - s, y + s); ctx.lineTo(x - s, y - s); ctx.lineTo(x + s, y - s); ctx.stroke();
+                ctx.strokeStyle = "rgba(0,0,0,0.34)";
+                ctx.beginPath(); ctx.moveTo(x + s, y - s); ctx.lineTo(x + s, y + s); ctx.lineTo(x - s, y + s); ctx.stroke();
+                ctx.lineWidth = 1;
+            }
         } else if (e.c && e.c.n === "Balloon") {
             // A dark-red hot-air-balloon: the round envelope sits ABOVE the bomb
             // basket, ropes connecting the two.
@@ -2108,16 +2215,19 @@ class Main {
             ctx.lineWidth = 1;
             ctx.beginPath(); // keep the generic stroke below happy (no-op path)
         } else {
-            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            this.extrudeWall(x, y, radius, card ? 0 : radius * 0.7, color, true); // raised cylinder
+            ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2);              // lit top face
             ctx.fill();
             ctx.stroke();
+            this.specDot(x, y, radius); // upper-left glint (flat, no gradient)
         }
         ctx.globalAlpha = 1;
         ctx.lineWidth = 1;
 
         // Faint SIDE outline (blue = yours, red = enemy) so you can tell sides apart at
-        // a glance — replaces colouring the unit's name.
-        if (e instanceof Troop) {
+        // a glance — replaces colouring the unit's name. (Not on the card face.)
+        if (e instanceof Troop && !card) {
             ctx.strokeStyle = isFriend ? "rgba(90,165,255,0.5)" : "rgba(255,95,95,0.5)";
             ctx.lineWidth = 2;
             ctx.beginPath(); ctx.arc(x, y, radius + 1.5, 0, Math.PI * 2); ctx.stroke();
@@ -2222,7 +2332,7 @@ class Main {
 
         // Unit name (white). The friend/foe side is shown by the body's faint colored
         // outline (see drawEntityBody) and the health-bar colour, not the name.
-        if (name && name.length > 0) {
+        if (name && name.length > 0 && !card) {
             let fontSize = Math.max(9, Math.min(13, 8 + radius * 0.4));
             ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
             ctx.font = `${fontSize}px 'Baloo 2', 'Segoe UI', sans-serif`;
@@ -2241,7 +2351,7 @@ class Main {
         const C = {
             "Knight": "#9aa6b2", "Archers": "#c98fb0", "Giant": "#e0a458",
             "Mini PEKKA": "#5566a0", "Skeletons": "#e6e3d3", "Skeleton Army": "#e6e3d3",
-            "Musketeer": "#7c8fc7", "Elite Musketeer": "#5d74c4", "Mega Knight": "#6b5b8a", "P.E.K.K.A": "#4b4f86",
+            "Musketeer": "#7c8fc7", "Elite Musketeer": "#ec7fb4", "Mega Knight": "#6b5b8a", "P.E.K.K.A": "#4b4f86",
             "Barbarians": "#d8a24e", "Fire Spirit": "#ff7a3c", "Ice Spirit": "#9ddcef",
             "Electro Spirit": "#4f9bff", "Heal Spirit": "#76d98a", "Minions": "#356b6b",
             "Goblins": "#79b44a", "Spear Goblins": "#8cc04f", "Bats": "#6a4a78",
@@ -2272,23 +2382,123 @@ class Main {
         return `rgb(${r},${g},${b})`;
     }
 
+    // === Faux-3D shading (flat tones only — NO gradients) ====================
+    // Extrude a footprint into a raised block: draws the darker "height" wall
+    // dropping `h` px BELOW the body, so the normal flat top face (drawn by the
+    // caller afterward) reads as the lit top of a solid block. Vertical extrusion
+    // only — unit x/y positions are unchanged. `round` = cylinder vs box wall.
+    // Flat solid side tone, no gradient.
+    extrudeWall(x, yTop, r, h, top, round) {
+        if (!FAUX3D || h <= 0) return;
+        const yb = yTop + h;
+        ctx.fillStyle = this.shade(top, -0.34);
+        if (round) {
+            ctx.beginPath(); ctx.arc(x, yb, r, 0, Math.PI * 2); ctx.fill(); // rounded base
+            ctx.fillRect(x - r, yTop, 2 * r, h);                           // straight walls
+        } else {
+            ctx.fillRect(x - r, yTop, 2 * r, h);
+        }
+        // dark silhouette on the visible wall edges
+        ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(x - r, yTop); ctx.lineTo(x - r, yb);
+        if (round) ctx.arc(x, yb, r, Math.PI, 0, false); else ctx.lineTo(x + r, yb);
+        ctx.lineTo(x + r, yTop);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+    }
+
+    // A soft elliptical contact shadow on the GROUND at (gx, gy). Fliers cast a
+    // smaller, fainter shadow so they read as airborne.
+    unitShadow(gx, gy, radius, fly) {
+        if (!FAUX3D) return;
+        const a = ctx.globalAlpha;
+        ctx.globalAlpha = fly ? 0.13 : 0.24;
+        ctx.fillStyle = "#0a0e14";
+        const rx = radius * (fly ? 0.68 : 0.92), ry = rx * 0.42;
+        ctx.beginPath();
+        ctx.ellipse(gx, gy + radius * 0.66, rx, ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = a;
+    }
+
+    // A small specular highlight (upper-left) on a round body — the glint that
+    // sells the sphere. Respects the current globalAlpha (clones/ghosts stay dim).
+    specDot(x, y, radius) {
+        if (!FAUX3D) return;
+        const a = ctx.globalAlpha;
+        ctx.globalAlpha = a * 0.5;
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(x - radius * 0.34, y - radius * 0.40, radius * 0.20, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = a;
+    }
+
     paintBg(color) {
         ctx.fillStyle = color;
         ctx.fillRect(0, 0, W, H);
     }
 
-    // Flat solid green for menus (no gradient).
-    menuBg() {
-        this.paintBg("#3a9d5e");
+    // The active background style (Ocean / Grass / Indigo).
+    theme() { return this.themes[this.themeKey] || this.themes.ocean; }
+    cycleTheme() {
+        let i = this.themeOrder.indexOf(this.themeKey);
+        this.themeKey = this.themeOrder[(i + 1) % this.themeOrder.length];
+        try { localStorage.setItem("acr_theme", this.themeKey); } catch (e) { }
     }
 
-    // Clean grass arena (no gradients): subtle mowed bands and a cooler tint on
-    // the enemy half for orientation.
+    setTheme(key) {
+        if (this.themes[key]) { this.themeKey = key; try { localStorage.setItem("acr_theme", key); } catch (e) { } }
+    }
+
+    // The style option buttons on the Settings screen (one per theme).
+    settingsStyleRects() {
+        return this.themeOrder.map((key, i) => ({
+            key, name: this.themes[key].name,
+            x: W / 2 - 110, y: H / 2 - 70 + i * 66, w: 220, h: 52,
+        }));
+    }
+
+    // Top-left settings button: just a small gear (no background), opens the Settings screen.
+    drawSettingsButton() {
+        const b = this.settingsBtn;
+        const hover = this.contains(b, this.mouse.x, this.mouse.y);
+        this.drawGearIcon(b.x + b.w / 2, b.y + b.h / 2, hover ? 9.5 : 9);
+    }
+
+    // A simple, clean line-art cog: a white ring, eight short teeth ticks, and a centre dot.
+    drawGearIcon(cx, cy, r) {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2; ctx.lineCap = "round";
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
+        for (let i = 0; i < 8; i++) {
+            let a = i * Math.PI / 4;
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+            ctx.lineTo(Math.cos(a) * (r + 3), Math.sin(a) * (r + 3));
+            ctx.stroke();
+        }
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath(); ctx.arc(0, 0, r * 0.34, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        ctx.lineWidth = 1; ctx.lineCap = "butt";
+    }
+
+    // Flat solid menu colour in the chosen style.
+    menuBg() {
+        this.paintBg(this.theme().menu);
+    }
+
+    // Clean arena in the chosen style (no gradients): subtle tile bands and a cooler
+    // tint on the enemy half for orientation.
     arenaGrass() {
-        this.paintBg("#5cb356");
-        ctx.fillStyle = "rgba(255,255,255,0.025)";
+        const t = this.theme();
+        this.paintBg(t.field);
+        ctx.fillStyle = t.band;
         for (let gy = 0; gy < H - 150; gy += 60) ctx.fillRect(0, gy, W, 30);
-        ctx.fillStyle = "rgba(20,45,75,0.06)";
+        ctx.fillStyle = t.enemy;
         ctx.fillRect(0, 0, W, RIV_Y - 15);
     }
 
@@ -2351,6 +2561,54 @@ class Main {
         return 0;
     }
 
+    // Geometry of the speed-popup slider track.
+    speedTrack() {
+        const w = 360, x = (W - w) / 2, y = H - 230;
+        return { x, y, w };
+    }
+
+    // The speed POPUP: a wide draggable slider (0.5x–10x, any 0.1 step) with labelled
+    // preset marks. Tap or drag the bar to scrub, tap a preset to jump, tap away to close.
+    drawSpeedPopup() {
+        const t = this.speedTrack();
+        const toX = sp => t.x + (sp - this.sbSpeedMin) / (this.sbSpeedMax - this.sbSpeedMin) * t.w;
+        // Dim backdrop + title (matches the other popups).
+        ctx.fillStyle = "rgba(0,0,0,0.62)";
+        ctx.fillRect(0, 0, W, H);
+        this.drawCenteredString("Speed", W / 2, t.y - 70, "bold 26px 'Baloo 2', 'Segoe UI', sans-serif", "#ffffff");
+        // Big current value.
+        this.drawCenteredString(`${this.sandboxSpeed.toFixed(1)}x`, W / 2, t.y - 26, "800 34px 'Baloo 2', 'Segoe UI', sans-serif", "#ffe6a0");
+        // Track.
+        ctx.strokeStyle = "rgba(255,255,255,0.28)"; ctx.lineWidth = 6; ctx.lineCap = "round";
+        ctx.beginPath(); ctx.moveTo(t.x, t.y); ctx.lineTo(t.x + t.w, t.y); ctx.stroke();
+        // Filled portion + handle.
+        let hx = toX(this.sandboxSpeed);
+        ctx.strokeStyle = "#e0b13c"; ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.moveTo(t.x, t.y); ctx.lineTo(hx, t.y); ctx.stroke();
+        ctx.lineCap = "butt";
+        // Preset tick marks + labels.
+        for (const p of this.sbSpeedTicks) {
+            let px = toX(p);
+            ctx.strokeStyle = "rgba(255,255,255,0.45)"; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(px, t.y - 8); ctx.lineTo(px, t.y + 8); ctx.stroke();
+            this.drawCenteredString(`${p}x`, px, t.y + 34, "700 13px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.8)");
+        }
+        // Handle.
+        ctx.fillStyle = "#ffd86b"; ctx.strokeStyle = "#7a5a18"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(hx, t.y, 11, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.lineWidth = 1;
+        this.drawCenteredString("tap away to close", W / 2, t.y + 66, "600 12px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.55)");
+    }
+
+    // Map an x within the speed-popup track to a 0.5–10x speed, snapped to 0.1.
+    setSandboxSpeedFromX(px) {
+        const t = this.speedTrack();
+        let frac = (px - t.x) / t.w;
+        frac = Math.max(0, Math.min(1, frac));
+        let sp = this.sbSpeedMin + frac * (this.sbSpeedMax - this.sbSpeedMin);
+        this.sandboxSpeed = Math.round(sp * 10) / 10; // 0.1 granularity
+    }
+
     // Troops/buildings deploy on a 30px tile grid (like the real game).
     snapToGrid(x, y) {
         const T = 30, oy = (RIV_Y - 15) % T; // RIV_Y=405 → oy=0, so the top/bottom edges and the river all land on tile lines
@@ -2367,7 +2625,7 @@ class Main {
         let m = 10;
         const n = c.n;
         if (["Skeletons", "Bats"].includes(n)) m = 6;
-        else if (n.includes("Spirit")) m = 13;
+        else if (n.includes("Spirit")) m = 8; // slightly smaller spirits
         else if (["Goblins", "Archers", "Wall Breakers"].some(x => n.includes(x))) m = 8;
         else if (["Barbarians", "Elite Barbarians", "Royal Recruits"].includes(n)) m = 12;
         else if (n === "Mega Knight" || n === "P.E.K.K.A") m = 20;
@@ -2489,13 +2747,228 @@ class Main {
         return px >= cx + w / 2 - 22 && px <= cx + w / 2 + 22 && py >= cy + h - 20 && py <= cy + h + 3;
     }
 
-    drawDeckCard(cx, cy, w, h, c, selected) {
-        ctx.fillStyle = "#ffffff"; // white card, no gradient, no outline
-        this.drawRoundRect(cx, cy, w, h, 10, true, false);
+    // The card NAME across the top of a card, wrapped onto two lines when it's long.
+    drawCardName(name, cx, cy, w) {
+        let words = name.split(' ');
+        if (words.length <= 1) {
+            this.drawCenteredString(name, cx + w / 2, cy + 15, "700 12px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
+        } else {
+            let mid = Math.ceil(words.length / 2);
+            let l1 = words.slice(0, mid).join(' '), l2 = words.slice(mid).join(' ');
+            this.drawCenteredString(l1, cx + w / 2, cy + 12, "700 11px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
+            this.drawCenteredString(l2, cx + w / 2, cy + 23, "700 11px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
+        }
+    }
 
-        this.drawCenteredString(c.n, cx + w / 2, cy + h / 2 + 5, "700 12px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
-        this.drawElixirCost(cx + 13, cy + 14, c.c);
+    // A spell card's actual cast EFFECT, contained in the box, so it reads like what you
+    // see when you place it (Zap = a lightning bolt from the top, Fireball = a blast, …).
+    drawCardSpell(cx, cy, w, h, c, isEvo) {
+        const ccx = cx + w / 2, ccy = cy + h / 2, n = c.n;
+        // Area spells are sized by their REAL radius so they read to-scale (Vines < Freeze <
+        // Poison …), clamped to the card.
+        const sr = this.eng.getSpellRadius(c);
+        const R = Math.min(Math.min(w, h) * 0.46, (sr && sr.val ? sr.val : 100) * 0.4);
+        const gem = () => { if (isEvo) this.drawEvoGem(ccx, ccy, 6, true); };
+        const disc = (col, a = 1, rr = R) => { ctx.globalAlpha = a; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(ccx, ccy, rr, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; };
 
+        // Thrown ARC spells — show the projectile IN THE AIR with its shadow below, using
+        // the exact renderer from the battlefield (drawSpellArc).
+        const arcKind = { "Fireball": "fireball", "Rocket": "rocket", "Goblin Barrel": "barrel", "Giant Snowball": "snowball" }[n];
+        if (arcKind) {
+            let arcH = h * 0.34;
+            this.drawSpellArc({ x: ccx, y: ccy + arcH * 0.55, tx: ccx, ty: ccy + arcH * 0.55 - 50, totalDist: 100, arcMax: arcH, rad: 18, spellKind: arcKind, tm: 0 });
+            gem(); return;
+        }
+        if (n === "Zap") {
+            // The FIRST frame of the zap sprite (static on the card); evo uses the evo sheet.
+            let size = Math.min(w, h) * 0.82;
+            if (!this.drawSprite(isEvo ? "evozap" : "zap", ccx, ccy, size, 0)) {
+                ctx.globalAlpha = 0.5; ctx.fillStyle = "#9fe6ff";
+                ctx.beginPath(); ctx.arc(ccx, ccy, size * 0.32, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+            }
+            return; // the evo sprite already shows the evo look — no crystal overlay
+        }
+        if (n === "Arrows") {
+            // the real arrows volley, caught mid-fall.
+            this.drawArrowsVolley({ x: ccx, y: ccy + 6, rad: Math.min(w, h) * 0.44, life: 23 });
+            gem(); return;
+        }
+        if (n === "The Log" || n === "Barbarian Barrel") {
+            // The ORIGINAL rolling-log texture, drawn by the real renderer (drawProj/isLog):
+            // a brown cylinder with scrolling bands. Scaled to the card.
+            let k = Math.min((w * 0.86) / 70, (h * 0.5) / 20);
+            ctx.save(); ctx.translate(ccx, ccy); ctx.scale(k, k);
+            this.drawProj({ isLog: true, barbBarrelLog: (n === "Barbarian Barrel"), x: 0, y: 0, tm: 0, rad: 5 });
+            ctx.restore();
+            gem(); return;
+        }
+        if (n === "Freeze") {
+            disc("rgba(127,216,255,0.45)");
+            disc("rgba(127,216,255,0.3)", 1, R * 0.66);
+            ctx.strokeStyle = "rgba(120,200,240,0.7)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(ccx, ccy, R, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;
+            gem(); return;
+        }
+        if (n === "Vines") {
+            disc("rgba(95,174,79,0.42)");
+            disc("rgba(95,174,79,0.28)", 1, R * 0.66);
+            ctx.strokeStyle = "rgba(70,150,60,0.7)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(ccx, ccy, R, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;
+            gem(); return;
+        }
+        if (n === "Poison") {
+            disc("rgba(0,128,0,0.4)"); disc("rgba(0,128,0,0.4)", 1, R * 0.66); gem(); return; // exact in-game poison patch
+        }
+        if (n === "Graveyard") { disc("rgba(0,0,139,0.4)"); disc("rgba(0,0,139,0.4)", 1, R * 0.66); gem(); return; }
+        if (n === "Clone") { disc("rgba(0,255,255,0.4)"); disc("rgba(0,255,255,0.4)", 1, R * 0.66); gem(); return; }
+        if (n === "Rage") {
+            // matches the placed rage POOL — a translucent pink disc with a pink rim
+            ctx.fillStyle = "rgba(255,95,176,0.22)";
+            ctx.beginPath(); ctx.arc(ccx, ccy, R, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = "rgba(255,130,195,0.7)"; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(ccx, ccy, R, 0, Math.PI * 2); ctx.stroke();
+            ctx.lineWidth = 1; gem(); return;
+        }
+        if (n === "Tornado") {
+            ctx.strokeStyle = "rgba(155,188,208,0.85)"; ctx.lineWidth = 3;
+            for (let i = 0; i < 4; i++) { let rr = R * (0.4 + i * 0.2), yy = ccy - R + i * (R * 0.55); ctx.beginPath(); ctx.ellipse(ccx, yy, rr, rr * 0.32, 0, 0, Math.PI * 2); ctx.stroke(); }
+            ctx.lineWidth = 1; gem(); return;
+        }
+        if (n === "Royale Delivery") {
+            // the in-game cardboard delivery crate (landed), scaled to the card
+            let k = Math.min(w, h) / 70;
+            ctx.save(); ctx.translate(ccx, ccy + 2); ctx.scale(k, k);
+            const cw = 42, hw = cw / 2, ch = 42, hy = ch / 2, dep = 9, fy = -hy + dep, inset = 6;
+            ctx.fillStyle = "#d8ad6a"; // top face (trapezoid receding back)
+            ctx.beginPath(); ctx.moveTo(-hw, fy); ctx.lineTo(-hw + inset, -hy); ctx.lineTo(hw - inset, -hy); ctx.lineTo(hw, fy); ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = "rgba(90,60,25,0.7)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, fy); ctx.lineTo(0, -hy); ctx.stroke();
+            ctx.fillStyle = "#c79a5e"; ctx.fillRect(-hw, fy, cw, ch - dep); // front face
+            ctx.save(); ctx.translate(hw * 0.12, fy + (ch - dep) * 0.52); ctx.rotate(-0.22); // label
+            ctx.fillStyle = "#f0e3a4"; ctx.fillRect(-9, -10, 18, 20);
+            ctx.strokeStyle = "rgba(120,100,40,0.55)"; ctx.lineWidth = 1; ctx.strokeRect(-9, -10, 18, 20);
+            ctx.beginPath(); ctx.moveTo(-6, -3); ctx.lineTo(6, -3); ctx.moveTo(-6, 2); ctx.lineTo(6, 2); ctx.moveTo(-6, 7); ctx.lineTo(3, 7); ctx.stroke();
+            ctx.restore();
+            ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = 1.5; ctx.strokeRect(-hw, fy, cw, ch - dep);
+            ctx.lineWidth = 1; ctx.restore();
+            gem(); return;
+        }
+        // Generic spell: a coloured blast with a bright core.
+        disc(this.spellColor(n), 0.95); disc("rgba(255,255,255,0.4)", 1, R * 0.5);
+        gem();
+    }
+
+    // Representative colour for a spell's effect (getUnitColor only covers troops/buildings).
+    spellColor(n) {
+        const M = {
+            "Fireball": "#ff5a2c", "Rocket": "#ff7043", "Giant Snowball": "#9fd8f0", "Arrows": "#caa15a",
+            "Poison": "#7fbf4f", "Zap": "#ffe14d", "Freeze": "#7fd8ff", "Rage": "#d24bd2", "Tornado": "#9bbcd0",
+            "Vines": "#5fae4f", "The Log": "#8b5a2b", "Barbarian Barrel": "#8b5a2b", "Goblin Barrel": "#79b44a",
+            "Clone": "#7fe0e0", "Graveyard": "#7a5a8a", "Royale Delivery": "#c0703a", "Mirror": "#cf8fe0",
+        };
+        return M[n] || "#cf8fe0";
+    }
+
+    // A compact, REPRESENTATIVE sample of a card's unit(s) for the card face. Swarms and
+    // wide formations (Royal Recruits, Skeleton Army, …) show only a FEW units at the
+    // unit's real relative size instead of cramming the whole spawn in shrunk. Offsets are
+    // in px (radius-based); drawCardVisual scales the cluster to fit.
+    cardSampleLayout(c) {
+        // Cards that spawn a DIFFERENT unit size the sample by that unit (so Skeleton-Army
+        // skeletons are skeleton-sized, not card-sized).
+        const spawn = { "Skeleton Army": "Skeletons", "Minion Horde": "Minions", "Three Musketeers": "Elite Musketeer" }[c.n];
+        const r = this.unitRadius(spawn ? { n: spawn, t: 0 } : c);
+        const single = [{ dx: 0, dy: 0, r }];
+        // Cells are spaced 2.3r apart so discs (radius r) NEVER touch — a 0.3r gap.
+        const G = 2.3 * r;
+        const row = (n) => { let a = [], x0 = -(n - 1) * G / 2; for (let i = 0; i < n; i++) a.push({ dx: x0 + i * G, dy: 0, r }); return a; };
+        const pack = (n) => {
+            let cols = Math.ceil(Math.sqrt(n)), rows = Math.ceil(n / cols), a = [];
+            for (let i = 0; i < n; i++) {
+                let rowOf = Math.floor(i / cols), inRow = Math.min(cols, n - rowOf * cols), col = i % cols;
+                a.push({ dx: (col - (inRow - 1) / 2) * G, dy: (rowOf - (rows - 1) / 2) * G, r });
+            }
+            return a;
+        };
+        const n = c.n, full = this.ghostLayout(c).length;
+        // Witch: the witch in the centre with a few of her skeletons around her feet.
+        if (n === "Witch") {
+            const sr = this.unitRadius({ n: "Skeletons", t: 0 });
+            return [
+                { dx: 0, dy: -r * 0.2, r },
+                { dx: -r * 1.4, dy: r * 1.25, r: sr, unit: "Skeletons" },
+                { dx: r * 1.4, dy: r * 1.25, r: sr, unit: "Skeletons" },
+                { dx: 0, dy: r * 1.75, r: sr, unit: "Skeletons" },
+            ];
+        }
+        // Trios always read as the same TRIANGLE the skeletons use (pack of 3 = two over one).
+        if (["Royal Recruits", "Three Musketeers"].includes(n)) return pack(3);
+        if (["Archers", "Wall Breakers", "Elite Barbarians", "Spear Goblins", "Zappies"].includes(n)) return pack(Math.min(3, full));
+        if (n === "Skeleton Army") return pack(Math.min(full, 15)); // the whole army
+        if (["Minion Horde", "Barbarians"].includes(n)) return pack(5);
+        if (n === "Royal Hogs") return row(Math.min(4, full));
+        if (["Skeletons", "Minions", "Goblins", "Bats"].includes(n)) return pack(full);
+        return single;
+    }
+
+    // The "what this card is" visual, centred in a box: the unit(s) as coloured discs
+    // (mirrors the placement ghost), a tinted disc for a spell, or a square for a building.
+    // `isEvo` stamps the purple evolution gem on each unit so the evo version reads clearly.
+    drawCardVisual(cx, cy, w, h, c, isEvo = false) {
+        const ccx = cx + w / 2, ccy = cy + h / 2;
+        const col = this.getUnitColor(c.n);
+        if (c.t === 2) { this.drawCardSpell(cx, cy, w, h, c, isEvo); return; }
+        // Troops AND buildings: draw the EXACT placed sprite via the real renderer
+        // (drawEntityBody), at the unit's real size, in a tidy non-overlapping sample. A
+        // single scale for every card keeps them to-scale (Giant big, skeleton small).
+        // Cards that spawn a DIFFERENT unit show that unit at its real size.
+        const spawn = { "Skeleton Army": "Skeletons", "Minion Horde": "Minions", "Three Musketeers": "Elite Musketeer" }[c.n];
+        const uc = spawn ? this.eng.getCard(spawn) : c;
+        const layout = this.cardSampleLayout(c);
+        // Evo Skeleton Army: a GENERAL stands at the BACK (top) and the skeletons carry NO
+        // crystal — the general is the only evo marker.
+        const skeleGen = isEvo && c.n === "Skeleton Army";
+        let entries = layout.slice();
+        if (skeleGen) {
+            let topY = Math.min(...layout.map(g => g.dy)), gr = layout[0].r * 1.7;
+            entries.push({ dx: 0, dy: topY - gr * 1.5, r: gr, unit: "Skeletons", general: true });
+        }
+        let ext = 1;
+        for (const gp of entries) ext = Math.max(ext, Math.hypot(gp.dx, gp.dy) + gp.r);
+        const box = Math.min(w, h) * 0.46;
+        const scale = Math.min(Math.min(w, h) * 0.011, box / ext);
+        ctx.save();
+        ctx.translate(ccx, ccy);
+        ctx.scale(scale, scale);
+        for (const gp of entries) {
+            let card = gp.unit ? this.eng.getCard(gp.unit) : uc;
+            // Evo cards show the REAL evo unit (drawEntityBody draws its own gem) — never a gem
+            // slapped on every troop. (Skeleton Army is the special case above: general, no gems.)
+            if (isEvo && !gp.general && card && this.eng.isEvoCapable(card.n)) card = this.eng.makeEvoCard(card);
+            let e = (card.t === 3) ? new Building(0, gp.dx, gp.dy, card) : new Troop(0, gp.dx, gp.dy, card);
+            e.deployTime = 0; e.fly = false; // card view: no deploy fade, no float offset
+            if (gp.general) { e.isSkeleGeneral = true; e.rad = gp.r; }
+            this.drawEntityBody(e, true);     // the same renderer used on the battlefield
+        }
+        ctx.restore();
+    }
+
+    // A full card FACE — the same look used in your hand and in the deck builder:
+    // white body, NAME across the top, the unit VISUAL filling the area beneath it,
+    // and the elixir badge. (Selection / evo chrome is added by the caller.)
+    drawCardFace(cx, cy, w, h, c, bg = "#ffffff", isEvo = false) {
+        ctx.fillStyle = bg;
+        this.drawRoundRect(cx, cy, w, h, Math.min(10, w * 0.09), true, false);
+        this.drawCardName(c.n, cx, cy, w);
+        let top = cy + 28, bot = cy + h - 9;
+        // Cards are STATIC: freeze Date.now() so the reused in-game renderers (zap flicker,
+        // barrel tumble, log bands, …) draw a fixed frame instead of animating in the deck.
+        const _now = Date.now;
+        Date.now = () => 1000;
+        try { this.drawCardVisual(cx + 4, top, w - 8, bot - top, c, isEvo); }
+        finally { Date.now = _now; }
+        this.drawElixirCost(cx + 13, cy + 13, c.c); // top-left corner
+    }
+
+    drawDeckCard(cx, cy, w, h, c, selected, isEvo = false) {
+        this.drawCardFace(cx, cy, w, h, c, "#ffffff", isEvo);
         if (selected) {
             ctx.strokeStyle = "#ffd24d"; ctx.lineWidth = 3;
             this.drawRoundRect(cx, cy, w, h, 10, false, false); ctx.stroke();
@@ -2583,18 +3056,15 @@ class Main {
     }
 
     drawElixirCost(x, y, val) {
-        ctx.beginPath();
-        ctx.arc(x, y, 10, 0, Math.PI * 2);
-        ctx.fillStyle = "#c800c8";
-        ctx.fill();
-        ctx.strokeStyle = "black";
-        ctx.stroke();
-        ctx.fillStyle = "white";
-        ctx.font = "bold 12px 'Baloo 2', 'Segoe UI', sans-serif";
+        // Just the cost as a purple number (no circle), with a dark outline for legibility.
+        ctx.font = "bold 16px 'Baloo 2', 'Segoe UI', sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(val, x, y);
-        ctx.textBaseline = "alphabetic";
+        ctx.lineWidth = 3; ctx.lineJoin = "round";
+        ctx.strokeStyle = "rgba(0,0,0,0.6)"; ctx.strokeText(val, x, y);
+        ctx.fillStyle = "#d11ad1"; ctx.fillText(val, x, y);
+        ctx.lineWidth = 1; ctx.lineJoin = "miter";
+        ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
     }
 
     drawRoundRect(x, y, w, h, r, fill, stroke) {
@@ -2869,11 +3339,9 @@ class Main {
             ctx.beginPath(); ctx.moveTo(0, 0.5); ctx.lineTo(-1.5, 3); ctx.lineTo(1.5, 3); ctx.closePath(); ctx.fill();
             ctx.lineWidth = 1;
         } else {
-            // fireball — a big, chunky flaming ball
-            ctx.fillStyle = "rgba(255,120,30,0.5)"; ctx.beginPath(); ctx.arc(0, 0, 23, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = "rgba(255,140,40,0.85)"; ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = "#ff7a1e"; ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = "#ffd24d"; ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
+            // fireball — a small, solid flaming ball (two layers)
+            ctx.fillStyle = "#e8521a"; ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#ffb13a"; ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fill();
         }
         ctx.restore();
     }
@@ -3021,18 +3489,46 @@ class Main {
     }
 
     // Zap: a jagged light-blue lightning bolt strikes down from the sky.
+    // Register an animated sprite sheet: a vertical column of `frameSize`×`frameSize` frames
+    // (default 16). Frame count is read from the image height once it loads.
+    addSprite(name, src, frameSize = 16) {
+        const s = { img: new Image(), loaded: false, frames: 1, fs: frameSize };
+        s.img.onload = () => { s.loaded = true; s.frames = Math.max(1, Math.round(s.img.height / s.fs)); };
+        s.img.src = src;
+        this.sprites[name] = s;
+        return s;
+    }
+
+    // Draw a sprite frame CRISP (no smoothing), centred at (x, y), scaled to `size`×`size`.
+    // `frame` wraps around the sheet's frame count (so a rising counter loops forever).
+    // Returns false if the sheet hasn't loaded yet (so callers can draw a fallback).
+    drawSprite(name, x, y, size, frame) {
+        const s = this.sprites[name];
+        if (!s || !s.loaded) return false;
+        let f = ((Math.floor(frame) % s.frames) + s.frames) % s.frames;
+        const sm = ctx.imageSmoothingEnabled;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(s.img, 0, f * s.fs, s.fs, s.fs, x - size / 2, y - size / 2, size, size);
+        ctx.imageSmoothingEnabled = sm;
+        return true;
+    }
+
     drawZapStrike(p) {
+        // In-game zap renders NORMALLY (procedural bolt + flash) — the pixel-art sprite is
+        // only used on the deck card.
         if (p.life > 5) {
             ctx.save();
             ctx.lineCap = "round";
             const segs = 8;
+            const H = 140; // fixed bolt height — the strike is the same length wherever it's
+            //              placed (it no longer spans 0..p.y, which compacted it near the top)
             const pts = [];
             for (let i = 0; i <= segs; i++) {
-                let yy = (p.y / segs) * i;
+                let yy = (p.y - H) + (H / segs) * i;
                 let jit = (i === 0 || i === segs) ? 0 : Math.sin(i * 9.3 + Math.floor(Date.now() / 55)) * 13;
                 pts.push([p.x + jit, yy]);
             }
-            ctx.strokeStyle = p.flashCol || "#7fdcff"; ctx.lineWidth = 4; // purple for evo Zap
+            ctx.strokeStyle = p.flashCol || "#7fdcff"; ctx.lineWidth = 4;
             ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
             ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.4;
             ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();

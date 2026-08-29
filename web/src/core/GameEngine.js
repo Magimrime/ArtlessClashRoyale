@@ -89,7 +89,7 @@ export default class GameEngine {
             new Card("Mega Knight", 7, 3993, 268, 0.5, 14, 0, 100, 102, 150, false, false),
             new Card("P.E.K.K.A", 7, 3760, 816, 0.375, 14, 0, 100, 108, 150, false, false),
             new Card("Skeleton Army", 3, 81, 81, 0.825, 8, 0, 100, 60, 150, false, false),
-            new Card("Barbarians", 5, 715, 192, 0.55, 8, 0, 100, 78, 150, false, false),
+            new Card("Barbarians", 5, 715, 192, 0.45, 8, 0, 100, 78, 150, false, false),
             new Card("Goblin Barrel", 3, 0, 0, 0, 0, 2, 0, 0, 0, false, false),
             new Card("Royale Delivery", 3, 0, 250, 0, 0, 2, 0, 0, 0, false, false),
             new Card("Vines", 2, 0, 44, 0, 0, 2, 0, 0, 0, false, true),
@@ -490,13 +490,10 @@ export default class GameEngine {
             });
         }
 
+        // NOTE: the enemy-deck selection is NOT restored from the save — otherwise a deck
+        // built once in the debug screen would pin the opponent's deck for every future
+        // match. Normal play always rolls a fresh role-balanced random deck (generateDeck).
         this.enemyDeckSelection = [];
-        if (data.enemyDeckSelection) {
-            data.enemyDeckSelection.forEach(n => {
-                let c = this.getCard(n);
-                if (c) this.enemyDeckSelection.push(c);
-            });
-        }
 
         // Evolution selections (only keep ones that are actually evo-capable, ≤2).
         this.evoSel = (data.evoSel || []).filter(n => this.isEvoCapable(n)).slice(0, 2);
@@ -620,10 +617,15 @@ export default class GameEngine {
     isValid(y, x, c, tm) {
         if (this.sandbox) {
             if (y < 0 || y > 810) return false;
-            // Sandbox has NO side/river red zones. Spells (and the "rules off" toggle)
-            // drop anywhere; the ONLY restriction is you can't place on top of a tower
-            // or building.
+            // Sandbox drops without the side restriction, but spells (and "rules off")
+            // still go anywhere.
             if (this.sandboxNoRules || c.t === 2 || c.n === "Goblin Barrel") return true;
+            // You still can't drop a troop/building IN the river (only the bridges cross it).
+            if (!this.sandboxNoRiver && y > this.RIV_Y - 15 && y < this.RIV_Y + 15) {
+                let onBridge = (this.bridgeXs || []).some(bx => Math.abs(x - bx) < 30);
+                if (!onBridge) return false;
+            }
+            // …and you can't place on top of a tower or building.
             for (let e of this.ents) {
                 let isStruct = e.constructor.name === "Building" || e.constructor.name === "Tower";
                 if (isStruct && e.hp > 0) {
@@ -818,7 +820,7 @@ export default class GameEngine {
         if (c.n === "Rage") return { type: 'circle', val: 72 }; // matches the Lumberjack's dropped rage
         if (c.n === "Freeze") return { type: 'circle', val: 67 };
         if (c.n === "Vines") return { type: 'circle', val: 52 };
-        if (c.n === "Zap") return { type: 'circle', val: 55 };
+        if (c.n === "Zap") return { type: 'circle', val: 64 }; // a touch bigger
         if (c.n === "Fireball") return { type: 'circle', val: 55 }; // slightly bigger
         if (c.n === "Giant Snowball") return { type: 'circle', val: 55 };
         if (c.n === "Royale Delivery") return { type: 'circle', val: 58 };
@@ -828,8 +830,10 @@ export default class GameEngine {
         if (c.n === "Goblin Barrel") return { type: 'circle', val: 31 };
         if (c.n === "Clone") return { type: 'circle', val: 79 };
         if (c.n === "Tornado") return { type: 'circle', val: 127 };
-        if (c.n === "Heal Spirit") return { type: 'circle', val: 0 };
-        if (c.n === "Ice Spirit" || c.n === "Electro Spirit" || c.n === "Fire Spirit") return { type: 'circle', val: 0 };
+        // NOTE: spirits are TROOPS, not spells — they must return null here. Returning a
+        // (truthy) zero-radius shape made the placement preview render them down the SPELL
+        // path, whose white "center marker" dot looked like a stray gray dot under the
+        // hover ghost. With null they take the troop path (proper body + splash preview).
 
         // Default for other spells
         if (c.t === 2) return { type: 'circle', val: 43 };
@@ -1069,6 +1073,7 @@ export default class GameEngine {
                 p.crownMult = crown;
                 if (c.n === "Zap") {
                     p.asStun();
+                    p.tightArea = true; // only units INSIDE the zap circle are hit (no +edge)
                     // EVO Zap: PURPLE/pink lightning that strikes, throws out an expanding
                     // electric ring, then zaps a SECOND time at a slightly larger radius.
                     p.asSpellDrop("zap", c.isEvo ? "#d98cff" : "#7fdcff", 20);
@@ -1139,8 +1144,9 @@ export default class GameEngine {
                 this.ents.push(s);
             }
         } else if (c.n === "Bats") {
-            for (let i = 0; i < 5; i++)
-                this.ents.push(new Troop(tm, x + this.random() * 40 - 20, y + this.random() * 40 - 20, c));
+            // Five bats in a fixed formation (3 over 2), not a random scatter.
+            for (const [dx, dy] of [[-18, -8], [0, -14], [18, -8], [-10, 10], [10, 10]])
+                this.ents.push(new Troop(tm, x + dx, y + dy, c));
         } else if (c.n === "Barbarians") {
             // Five barbarians in a tight knot (so a Fireball catches them all — and
             // they all just barely survive it).
@@ -1534,8 +1540,11 @@ export default class GameEngine {
                 let dx = u.x - t.x, dy = u.y - t.y;
                 if (Math.abs(dx) < half && Math.abs(dy) < half) {
                     let penX = half - Math.abs(dx), penY = half - Math.abs(dy);
-                    if (penX <= penY) u.x += (dx < 0 ? -1 : 1) * penX;
-                    else u.y += (dy < 0 ? -1 : 1) * penY;
+                    // Eject at most a few px per tick. A unit that lands deep inside a
+                    // structure (e.g. an Evo Mega Knight launches it onto a tower) then
+                    // slides out SMOOTHLY over a few frames instead of teleporting out.
+                    if (penX <= penY) u.x += (dx < 0 ? -1 : 1) * Math.min(penX, 3.5);
+                    else u.y += (dy < 0 ? -1 : 1) * Math.min(penY, 3.5);
                 }
             }
         }

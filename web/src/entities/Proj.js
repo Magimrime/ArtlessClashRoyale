@@ -188,7 +188,9 @@ export default class Proj {
             return;
         }
         for (let e of g.ents) {
-            if (e.tm !== this.tm && Math.hypot(this.tx - e.x, this.ty - e.y) < this.rad + e.rad) {
+            // `tightArea` (Zap): a unit is hit only if its CENTRE is inside the circle — the
+            // effect matches the drawn circle exactly. Others hit anything overlapping it.
+            if (e.tm !== this.tm && Math.hypot(this.tx - e.x, this.ty - e.y) < this.rad + (this.tightArea ? 0 : e.rad)) {
                 e.hp -= this.hitDmg(e);
                 if (this.shouldStun) e.st = this.stunDuration;
                 if (this.isRoot) e.rt = 84;

@@ -1,0 +1,10 @@
+/* Baloo 2 (latin, variable weight 500-800) self-hosted so the desktop app
+   and offline play render with the real game font. Same face the old
+   fonts.googleapis.com link served. */
+@font-face {
+    font-family: 'Baloo 2';
+    font-style: normal;
+    font-weight: 500 800;
+    font-display: swap;
+    src: url(baloo2-latin.woff2) format('woff2');
+}
