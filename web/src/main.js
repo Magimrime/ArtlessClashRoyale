@@ -167,6 +167,8 @@ class Main {
         this.settingsBackBtn = { x: W / 2 - 60, y: H - 120, w: 120, h: 50 };
         // Cheat/debug entry lives on the Settings screen (below the style options).
         this.settingsCheatBtn = { x: W / 2 - 110, y: H / 2 + 140, w: 220, h: 46 };
+        // In-battle (single-player) save-and-quit, top-left corner.
+        this.saveQuitBtn = { x: 10, y: 10, w: 116, h: 32 };
         // Sandbox bottom bar: row 1 (4 wide buttons) + row 2 (5 narrow buttons),
         // all inside the H-150 HUD strip so the field grid is untouched.
         this.sbDeckBtn = { x: 12, y: H - 140, w: 120, h: 40 };
@@ -709,6 +711,14 @@ class Main {
                 else if (this.eng.sel) this.eng.sandboxPlace(this.eng.sel, gm.x, gm.y, this.sandboxEvoSel);
             }
         } else if (this.state === State.PLAY) {
+            // SAVE & QUIT (single-player only): save progress and abandon the match.
+            if (!this.eng.isMultiplayer && this.contains(this.saveQuitBtn, x, y)) {
+                this.eng.saveProgress();
+                this.eng.reset();
+                this.eng.sel = null;
+                this.state = State.TITLE;
+                return;
+            }
             if (y > H - 150) {
                 if (this.eng.p1) {
                     for (let i = 0; i < 4; i++) {
@@ -732,7 +742,8 @@ class Main {
                     // here AND affordable; otherwise keep the card picked.
                     let sel = this.eng.sel;
                     let cost = (sel.n === "Mirror" && this.eng.p1.lastPlayedCard) ? this.eng.p1.lastPlayedCard.c + 1 : sel.c;
-                    let placeable = this.eng.p1.elx >= cost && this.eng.isValid(ry, rx, sel, 0);
+                    // Mirror is checked as the card it replays (engine does the same).
+                    let placeable = this.eng.p1.elx >= cost && this.eng.isValid(ry, rx, this.mirroredView(sel), 0);
                     if (placeable) {
                         if (this.eng.isMultiplayer) {
                             this.mp.sendSpawnRequest(sel.n, rx, ry, this.mp.isHost ? 0 : 1);
@@ -1188,7 +1199,9 @@ class Main {
             this.drawGrid();
 
 
-            if ((this.state === State.PLAY || this.state === State.CNT) && this.eng.sel && (this.eng.sel.t !== 2 || ["The Log", "Barbarian Barrel", "Royale Delivery"].includes(this.eng.sel.n))) {
+            // Mirror shows the red zones (and hover cell) of the card it replays.
+            const selView = this.eng.sel ? this.mirroredView(this.eng.sel) : null;
+            if ((this.state === State.PLAY || this.state === State.CNT) && selView && (selView.t !== 2 || ["The Log", "Barbarian Barrel", "Royale Delivery"].includes(selView.n))) {
                 // Invalid-placement tint
                 ctx.fillStyle = "rgba(255, 0, 0, 0.28)";
                 ctx.fillRect(0, 0, W, 200); // behind enemy towers/king
@@ -1196,7 +1209,7 @@ class Main {
                 if (this.eng.t2R && this.eng.t2R.hp > 0) ctx.fillRect(W / 2, 200, W / 2, RIV_Y - 200);
 
                 // Hovered-cell highlight for troops/buildings
-                if (this.eng.sel.t !== 2) this.drawHoverCell(this.eng.sel);
+                if (selView.t !== 2) this.drawHoverCell(selView);
             } // Close Invalid Area Logic
 
             // (Sandbox has no placement red zone — you may drop anything anywhere
@@ -1208,7 +1221,9 @@ class Main {
             // HOVER PREVIEW (Ghost Unit & Range)
             if ((this.state === State.PLAY || this.state === State.CNT || this.state === State.SANDBOX) && this.eng.sel && this.mouse.y < H - 150
                 && !(this.sandboxEraser || this.sandboxTowerArm)) {
-                let c = this.eng.sel;
+                // Mirror previews AS the card it will replay — same ghost shape, same
+                // placement rules (red zones), same splash/range circles.
+                let c = this.mirroredView(this.eng.sel);
                 let spellShape = this.eng.getSpellRadius(c);
                 let canAfford = this.eng.sandbox || this.eng.p1.elx >= c.c; // sandbox: no elixir
                 // Validity is from the placing TEAM's view — in sandbox that's the
@@ -1800,7 +1815,18 @@ class Main {
 
                         // Same face as the deck builder: name on top, the unit visual under
                         // it, elixir badge. Greyed when unaffordable.
-                        this.drawCardFace(r.x, paintY, r.w, r.h, c, canAfford ? "#ffffff" : "#b9bdb7", evoReady);
+                        if (c.n === "Mirror" && this.eng.p1.lastPlayedCard) {
+                            // Mirror wears the face of the card it will replay (the engine
+                            // keeps c.c at that card's cost +1), tinted + tagged as Mirror.
+                            const mc = this.eng.p1.lastPlayedCard;
+                            this.drawCardFace(r.x, paintY, r.w, r.h, mc, canAfford ? "#f2e7fa" : "#b9bdb7", false);
+                            this.drawElixirCost(r.x + 13, paintY + 13, c.c);
+                            ctx.fillStyle = "#8a6bbf";
+                            this.drawRoundRect(r.x + r.w / 2 - 25, paintY + r.h - 16, 50, 13, 6, true, false);
+                            this.drawCenteredString("MIRROR", r.x + r.w / 2, paintY + r.h - 6, "800 8px 'Baloo 2', 'Segoe UI', sans-serif", "#ffffff");
+                        } else {
+                            this.drawCardFace(r.x, paintY, r.w, r.h, c, canAfford ? "#ffffff" : "#b9bdb7", evoReady);
+                        }
                         if (isSel) {
                             ctx.strokeStyle = "#ffd24d"; ctx.lineWidth = 3;
                             this.drawRoundRect(r.x, paintY, r.w, r.h, 5, false, false); ctx.stroke();
@@ -1872,6 +1898,11 @@ class Main {
                     if (this.eng.tiebreaker) ctx.fillStyle = "red";
                     ctx.font = "bold 20px 'Baloo 2', 'Segoe UI', sans-serif";
                     ctx.fillText(timeStr, W - 40, 30);
+
+                    // Save & quit the match (single-player only — MP can't pause/park).
+                    if (!this.eng.isMultiplayer && this.state === State.PLAY) {
+                        this.drawBtn(this.saveQuitBtn, "SAVE+QUIT", "#5a7ea6");
+                    }
                 }
             }
 
@@ -2801,6 +2832,22 @@ class Main {
             }
             return; // the evo sprite already shows the evo look — no crystal overlay
         }
+        if (n === "Mirror") {
+            // A plain hand mirror: oval glass in a frame, short handle, one glint.
+            let mr = Math.min(w, h) * 0.30;
+            ctx.fillStyle = "#8a6bbf";                                    // handle
+            this.drawRoundRect(ccx - mr * 0.18, ccy + mr * 0.9, mr * 0.36, mr * 0.85, mr * 0.18, true, false);
+            ctx.fillStyle = "#8a6bbf";                                    // frame
+            ctx.beginPath(); ctx.ellipse(ccx, ccy, mr * 1.18, mr * 1.38, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#cfe6f5";                                    // glass
+            ctx.beginPath(); ctx.ellipse(ccx, ccy, mr * 0.88, mr * 1.08, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 2.5; ctx.lineCap = "round";
+            ctx.beginPath();                                              // glint
+            ctx.moveTo(ccx - mr * 0.38, ccy + mr * 0.3); ctx.lineTo(ccx + mr * 0.22, ccy - mr * 0.55);
+            ctx.stroke();
+            ctx.lineCap = "butt"; ctx.lineWidth = 1;
+            return;
+        }
         if (n === "Arrows") {
             // the real arrows volley, caught mid-fall.
             this.drawArrowsVolley({ x: ccx, y: ccy + 6, rad: Math.min(w, h) * 0.44, life: 23 });
@@ -3003,13 +3050,20 @@ class Main {
         for (let gy = oy; gy < H - 150; gy += T) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
     }
 
+    // Mirror shows and behaves as the card it will replay (your last played card);
+    // until you've played something it stays plain Mirror.
+    mirroredView(c) {
+        if (c && c.n === "Mirror" && this.eng.p1.lastPlayedCard) return this.eng.p1.lastPlayedCard;
+        return c;
+    }
+
     // Hovered cell highlight (green valid / red invalid) while placing.
     drawHoverCell(sel) {
         const T = 30, oy = (RIV_Y - 15) % T;
         if (this.mouse.y >= H - 150) return;
         let cx = Math.floor(this.mouse.x / T) * T, cy = Math.floor((this.mouse.y - oy) / T) * T + oy;
         let s = this.snapToGrid(this.mouse.x, this.mouse.y);
-        let valid = this.eng.isValid(s.y, s.x, sel, 0);
+        let valid = this.eng.isValid(s.y, s.x, this.mirroredView(sel), 0);
         ctx.fillStyle = valid ? "rgba(80,220,120,0.32)" : "rgba(220,60,60,0.32)";
         ctx.fillRect(cx, cy, T, T);
         ctx.strokeStyle = valid ? "#4aff8a" : "#ff5a5a";
