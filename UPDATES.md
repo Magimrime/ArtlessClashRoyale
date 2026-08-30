@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.4.11** — here's the whole road there.
+We're currently on **26.4.12** — here's the whole road there.
 
 ---
 
@@ -64,6 +64,7 @@ A new whole-game look: the field flips from the green grass to a **deep ocean bl
 - **26.4.9** — **…and a phone app too.** The site is now a **PWA**: open it on a phone and *Add to Home Screen* installs it with the crown icon, running **fullscreen portrait** like a real app. A service worker **precaches the whole game**, so once installed it plays fully **offline** (saves and multiplayer still need a connection); it always picks up the newest deploy when online. The crown also became the site **favicon** and the icon Windows shows in **Installed apps**.
 - **26.4.10** — Menu tidy-up. The title-screen **gear** was redrawn as a smaller **solid cog**, the **cheat/debug** entry moved off its hidden title-screen corner and into the **Settings screen** as a proper button, and cards went **back to their classic plain look** — white face, centred name, elixir badge — dropping the unit-art card faces.
 - **26.4.11** — Course correction on the look. The **unit-art card faces are back** (name on top, the unit drawn underneath) — 26.4.10 removed the wrong thing. What actually goes is the **Faux-3D battlefield shading**: troops and buildings drop the raised-block extrusion, contact-shadow ellipse, bevels, and specular glints, returning to the **classic flat look** (the original soft ground shadows stay). Also fixed the **TIEBREAKER! / 2x ELIXIR** banners drawing on top of each other — when both are up they now stack.
+- **26.4.12** — **New app icon**: a simpler, cleaner **flat gold crown on royal blue** (no outlines, gem, or band), in the spirit of the real thing. Applied everywhere — the Windows app and installer, the desktop shortcut, the site favicon, and the phone home-screen icons.
 
 ---
 
