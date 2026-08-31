@@ -2218,6 +2218,16 @@ class Main {
                 ctx.beginPath(); ctx.moveTo(x + s, y - s); ctx.lineTo(x + s, y + s); ctx.lineTo(x - s, y + s); ctx.stroke();
                 ctx.lineWidth = 1;
             }
+        } else if (e.c && e.c.n === "Skeleton Barrel") {
+            // A wooden barrel: brown disc with two darker hoop bands.
+            ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.strokeStyle = "rgba(60,36,14,0.55)"; ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x - radius * 0.9, y - radius * 0.35); ctx.lineTo(x + radius * 0.9, y - radius * 0.35);
+            ctx.moveTo(x - radius * 0.9, y + radius * 0.35); ctx.lineTo(x + radius * 0.9, y + radius * 0.35);
+            ctx.stroke(); ctx.lineWidth = 1;
+            ctx.beginPath(); // keep the generic stroke below happy (no-op path)
         } else if (e.c && e.c.n === "Balloon") {
             // A PLAIN balloon in the team's colour (blue = yours, red = enemy): a blank
             // round envelope over a simple rectangle basket that peeks out underneath —
@@ -2386,7 +2396,7 @@ class Main {
             "Bowler": "#7456b0", "Hog Rider": "#b07a45", "Royal Hogs": "#e89ab5",
             "Prince": "#f1c64a", "Mother Witch": "#7a3f9c", "Royal Recruits": "#b9a06a",
             "Dark Prince": "#4a3f5a", "Ice Golem": "#a9dcef", "Cannon": "#6b7079",
-            "Lumberjack": "#5a7a3a", "Balloon": "#9c2b3a", "Hopper": "#6db84a",
+            "Lumberjack": "#5a7a3a", "Balloon": "#9c2b3a", "Hopper": "#6db84a", "Skeleton Barrel": "#a5713a",
             "Inferno Tower": "#b5563a", "Elixir Collector": "#c46fb0", "Crate": "#9c7b4a",
             "Golemite": "#8a8a8a", "Lava Pup": "#ff8a4c", "Elixir Golemite": "#d56ab5",
             "Elixir Blob": "#d56ab5", "Cursed Hog": "#8e4fb0", "Golem": "#8a8a8a"
@@ -2654,6 +2664,7 @@ class Main {
         else if (n === "Mega Knight" || n === "P.E.K.K.A") m = 20;
         else if (n === "Sparky" || n === "Bowler") m = 18;
         else if (n === "Balloon") m = 19;
+        else if (n === "Skeleton Barrel") m = 12;
         else if (n.includes("Dragon") || n === "Lava Hound") m = 16;
         else if (["Giant", "Golem", "Elixir Golem", "Royal Giant", "Electro Giant"].includes(n)) m = 20;
         return m * 0.88;

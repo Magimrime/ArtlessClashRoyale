@@ -138,7 +138,11 @@ export default class GameEngine {
             new Card("Ice Golem", 2, 1197, 84, 0.375, 8, 1, 100, 150, 150, false, false),
             new Card("Lumberjack", 4, 1244, 150, 1.1, 14, 0, 100, 60, 150, false, false),
             new Card("Rage", 2, 0, 140, 0, 0, 2, 0, 0, 0, false, true),
-            new Card("Balloon", 5, 1421, 644, 0.75, 14, 1, 100, 120, 150, true, false)
+            new Card("Balloon", 5, 1421, 644, 0.75, 14, 1, 100, 120, 150, true, false),
+            // Skeleton Barrel: real L11 stats — 625 hp, no attack of its own; d=105 is
+            // the area DEATH damage when it pops, dropping 7 Skeletons (see Troop.js).
+            // Fast flying building-targeter (same engine speed as the other Fast fliers).
+            new Card("Skeleton Barrel", 3, 625, 105, 1.0, 14, 1, 100, 78, 150, true, false)
         ];
 
         // Role tags drive the enemy AI's counter logic. (Stats above are already
@@ -172,7 +176,7 @@ export default class GameEngine {
         // Win conditions: cards whose job is to deal tower damage.
         if (has(["Giant", "Golem", "Royal Giant", "Electro Giant", "Hog Rider",
             "Royal Hogs", "Lava Hound", "Elixir Golem", "Wall Breakers",
-            "Goblin Barrel", "Graveyard", "Balloon"]))
+            "Goblin Barrel", "Graveyard", "Balloon", "Skeleton Barrel"]))
             tags.push("WinCon");
 
         // Tanks: high-HP units meant to soak damage up front.

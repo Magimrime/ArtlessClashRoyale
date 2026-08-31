@@ -22,6 +22,7 @@ export default class Troop extends Entity {
         else if (c.n === "Sparky" || c.n === "Bowler") mass = 18;
         else if (c.n === "Cannon") mass = 15;
         else if (c.n === "Balloon") mass = 19;
+        else if (c.n === "Skeleton Barrel") mass = 12;
         else if (c.n.includes("Dragon") || c.n === "Lava Hound") mass = 16;
         else if (["Giant", "Golem", "Elixir Golem", "Royal Giant", "Electro Giant"].includes(c.n) || c.t === 3) mass = 20;
         else if (c.n === "Elixir Golemite") mass = 10;
@@ -636,6 +637,10 @@ export default class Troop extends Entity {
                                 !e.jp && e.c.n !== "Hopper")
                                 this.launchKnockJump(g, e);
                         }
+                } else if (this.c.n === "Skeleton Barrel") {
+                    // Doesn't attack: connecting with its target pops the barrel — the
+                    // death effects deal the area death damage and drop the crew.
+                    this.hp = 0;
                 } else if (this.c.n === "Balloon") {
                     // Instant hit — it's a building-targeter, so its target is always a
                     // tower/building. No bomb projectile, no troop splash.
@@ -862,6 +867,13 @@ export default class Troop extends Entity {
             this.spawnDeathTroops(g, g.getCard("Elixir Blob") || { n: "Elixir Blob", hp: 360, ms: 15, fl: false, ar: false }, 2, 8);
         } else if (this.c.n === "Elixir Blob") {
             if (!this.isClone) g.giveElixir(1 - this.tm, 0.5);
+        } else if (this.c.n === "Skeleton Barrel") {
+            // Real L11: 105 area death damage where it pops (the card's d), then the
+            // crew bails out — 7 Skeletons hit the ground and carry on.
+            let p = new Proj(this.x, this.y, this.x, this.y, null, 0, false, 55, this.c.d, this.tm, false);
+            p.fireArea = true; p.isGray = true; p.life = 6;
+            g.projs.push(p);
+            this.spawnDeathTroops(g, g.getCard("Skeletons"), 7, 16);
         }
 
         if (this.curseTime > 0) {
