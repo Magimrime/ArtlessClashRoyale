@@ -2219,42 +2219,21 @@ class Main {
                 ctx.lineWidth = 1;
             }
         } else if (e.c && e.c.n === "Balloon") {
-            // A dark-red hot-air-balloon: the round envelope sits ABOVE the bomb
-            // basket, ropes connecting the two.
+            // A PLAIN balloon in the team's colour (blue = yours, red = enemy): a blank
+            // round envelope over a simple rectangle basket that peeks out underneath —
+            // the balloon covers the basket's top. No ropes, seams, or decorations.
             let R = radius;
             let ey = y - R * 0.35;                       // envelope centre (raised up)
-            let by = y + R * 1.0;                        // basket centre (below)
-            let bw = R * 0.72, bh = R * 0.5;
-            // ropes from envelope to basket
-            ctx.strokeStyle = "rgba(40,22,12,0.7)"; ctx.lineWidth = 1.3;
-            ctx.beginPath();
-            ctx.moveTo(x - R * 0.55, ey + R * 0.55); ctx.lineTo(x - bw / 2, by - bh / 2);
-            ctx.moveTo(x + R * 0.55, ey + R * 0.55); ctx.lineTo(x + bw / 2, by - bh / 2);
-            ctx.stroke();
-            // envelope
-            ctx.fillStyle = color;
+            let bw = R * 0.62, bh = R * 0.85;
+            // basket FIRST so the envelope overlaps it
+            ctx.fillStyle = "#8a5c33";
+            ctx.fillRect(x - bw / 2, ey + R * 0.5, bw, bh);
+            ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1;
+            ctx.strokeRect(x - bw / 2, ey + R * 0.5, bw, bh);
+            // blank envelope on top
+            ctx.fillStyle = isFriend ? "#4f8fe0" : "#e05555";
             ctx.beginPath(); ctx.ellipse(x, ey, R, R * 1.06, 0, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5; ctx.stroke();
-            // panel seams
-            ctx.strokeStyle = "rgba(255,255,255,0.16)"; ctx.lineWidth = 1.3;
-            ctx.beginPath();
-            ctx.moveTo(x - R * 0.45, ey - R * 0.7); ctx.lineTo(x - R * 0.45, ey + R * 0.7);
-            ctx.moveTo(x + R * 0.45, ey - R * 0.7); ctx.lineTo(x + R * 0.45, ey + R * 0.7);
-            ctx.stroke();
-            // skull face on the envelope
-            ctx.fillStyle = "#efe8d8";
-            ctx.beginPath(); ctx.arc(x, ey - R * 0.05, R * 0.4, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = "#241616";
-            ctx.beginPath(); ctx.arc(x - R * 0.15, ey - R * 0.09, R * 0.1, 0, Math.PI * 2); ctx.fill();
-            ctx.beginPath(); ctx.arc(x + R * 0.15, ey - R * 0.09, R * 0.1, 0, Math.PI * 2); ctx.fill();
-            ctx.fillRect(x - R * 0.16, ey + R * 0.11, R * 0.32, R * 0.1); // teeth band
-            // basket + bomb
-            ctx.fillStyle = "#7a4a22";
-            this.drawRoundRect(x - bw / 2, by - bh / 2, bw, bh, 2, true, false);
-            ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1;
-            this.drawRoundRect(x - bw / 2, by - bh / 2, bw, bh, 2, false, false); ctx.stroke();
-            ctx.fillStyle = "#2b2b2b";
-            ctx.beginPath(); ctx.arc(x, by, R * 0.2, 0, Math.PI * 2); ctx.fill();
             ctx.lineWidth = 1;
             ctx.beginPath(); // keep the generic stroke below happy (no-op path)
         } else {

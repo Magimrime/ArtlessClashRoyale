@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.4.13** — here's the whole road there.
+We're currently on **26.4.14** — here's the whole road there.
 
 ---
 
@@ -66,6 +66,7 @@ A new whole-game look: the field flips from the green grass to a **deep ocean bl
 - **26.4.11** — Course correction on the look. The **unit-art card faces are back** (name on top, the unit drawn underneath) — 26.4.10 removed the wrong thing. What actually goes is the **Faux-3D battlefield shading**: troops and buildings drop the raised-block extrusion, contact-shadow ellipse, bevels, and specular glints, returning to the **classic flat look** (the original soft ground shadows stay). Also fixed the **TIEBREAKER! / 2x ELIXIR** banners drawing on top of each other — when both are up they now stack.
 - **26.4.12** — **New app icon**: a simpler, cleaner **flat gold crown on royal blue** (no outlines, gem, or band), in the spirit of the real thing. Applied everywhere — the Windows app and installer, the desktop shortcut, the site favicon, and the phone home-screen icons.
 - **26.4.13** — **Mirror grows up, and you can leave a match.** The **Mirror** card in your hand now **wears the face of the card it will replay** (art, name, and the **+1 cost**, tinted purple with a MIRROR tag), and placing it follows **that card's rules, visualized** — mirror a troop and the enemy half tints red with the troop's ghost and green/red hover cell; mirror a spell and it ranges anywhere, exactly as the real card would. Its own art (before you've played anything) is a plain **hand mirror**. A **SAVE+QUIT** button (top-left, single-player) saves your progress and exits the battle — an abandoned match counts for nothing. And the **app icon is now a flat skull** on the same royal blue — crown retired.
+- **26.4.14** — The **Balloon got simple**: a blank **team-coloured** envelope (blue = yours, red = enemy) over a plain rectangle **basket** peeking out underneath — the ropes, panel seams, skull face, and bomb decorations are gone.
 
 ---
 
