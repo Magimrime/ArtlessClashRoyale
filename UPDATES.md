@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.4.16** — here's the whole road there.
+We're currently on **26.4.17** — here's the whole road there.
 
 ---
 
@@ -69,6 +69,7 @@ A new whole-game look: the field flips from the green grass to a **deep ocean bl
 - **26.4.14** — The **Balloon got simple**: a blank **team-coloured** envelope (blue = yours, red = enemy) over a plain rectangle **basket** peeking out underneath — the ropes, panel seams, skull face, and bomb decorations are gone.
 - **26.4.15** — Added the **Skeleton Barrel**, with **real Level-11 stats**: 3 elixir, **625 hp**, a Fast flying building-targeter with no attack of its own — when it's destroyed (or connects with its target) it pops for **105 area death damage** and bails out **7 Skeletons** where it fell. Drawn as a wooden barrel with hoop bands. Verified in a headless sim: pops on the tower for exactly 105, seven skeletons land and keep fighting.
 - **26.4.16** — Taskbar-icon fix for the desktop app: the game now declares a **stable Windows taskbar identity** (Squirrel-style AppUserModelID) instead of one derived from the exe path, which changes every update and could leave the taskbar showing a stale blank icon for a running window.
+- **26.4.17** — A **texture pass with a light hand**: every unit, building, tower, and the balloon now wears a **flat two-tone finish** — a darker edge band inside the rim plus one short lighter arc, all solid tones (no gradients, shadows, or gloss; tiny swarm bodies stay plain). **Mirror looks like the spell it was** again (the plain tinted disc, hand-mirror art removed) and got stricter: with **no previous card to copy it shows no placement ghost and refuses to play** — no spell-ring preview pretending otherwise.
 
 ---
 

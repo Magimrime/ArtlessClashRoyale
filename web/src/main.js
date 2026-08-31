@@ -742,8 +742,10 @@ class Main {
                     // here AND affordable; otherwise keep the card picked.
                     let sel = this.eng.sel;
                     let cost = (sel.n === "Mirror" && this.eng.p1.lastPlayedCard) ? this.eng.p1.lastPlayedCard.c + 1 : sel.c;
-                    // Mirror is checked as the card it replays (engine does the same).
-                    let placeable = this.eng.p1.elx >= cost && this.eng.isValid(ry, rx, this.mirroredView(sel), 0);
+                    // Mirror is checked as the card it replays (engine does the same);
+                    // with nothing to mirror it simply will not play.
+                    let placeable = this.eng.p1.elx >= cost && this.eng.isValid(ry, rx, this.mirroredView(sel), 0)
+                        && !(sel.n === "Mirror" && !this.eng.p1.lastPlayedCard);
                     if (placeable) {
                         if (this.eng.isMultiplayer) {
                             this.mp.sendSpawnRequest(sel.n, rx, ry, this.mp.isHost ? 0 : 1);
@@ -1220,7 +1222,9 @@ class Main {
 
             // HOVER PREVIEW (Ghost Unit & Range)
             if ((this.state === State.PLAY || this.state === State.CNT || this.state === State.SANDBOX) && this.eng.sel && this.mouse.y < H - 150
-                && !(this.sandboxEraser || this.sandboxTowerArm)) {
+                && !(this.sandboxEraser || this.sandboxTowerArm)
+                // Mirror with nothing to mirror shows NO ghost at all — it can't play.
+                && !(this.eng.sel.n === "Mirror" && !this.eng.p1.lastPlayedCard)) {
                 // Mirror previews AS the card it will replay — same ghost shape, same
                 // placement rules (red zones), same splash/range circles.
                 let c = this.mirroredView(this.eng.sel);
@@ -2134,6 +2138,14 @@ class Main {
             ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
             this.drawRoundRect(x - r, y - r, r * 2, r * 2, 8, true, false); // lit top face
             ctx.stroke();
+            // Flat two-tone finish: a darker inner border band inside the rim.
+            if (typeof color === "string" && color[0] === "#") {
+                const tb = Math.max(3, r * 0.13);
+                ctx.strokeStyle = this.shade(color, -0.12); ctx.lineWidth = tb;
+                this.drawRoundRect(x - r + tb / 2 + 1, y - r + tb / 2 + 1, 2 * r - tb - 2, 2 * r - tb - 2, 6, false, false);
+                ctx.stroke();
+                ctx.lineWidth = 1;
+            }
             // Turret(s) rotate to aim at the tower's current target, each with a
             // barrel sticking out. The KING also has a smaller "shooter" above.
             // Smoothly ease the displayed turret angle toward the aim angle (along
@@ -2209,6 +2221,15 @@ class Main {
             ctx.beginPath(); ctx.rect(x - s, y - s, s * 2, s * 2);        // lit top face
             ctx.fill();
             ctx.stroke();
+            // Flat two-tone finish: darker inner border band + a lighter top edge.
+            if (typeof color === "string" && color[0] === "#" && s > 8) {
+                const ib = Math.min(5, Math.max(2, s * 0.18));
+                ctx.strokeStyle = this.shade(color, -0.13); ctx.lineWidth = ib;
+                ctx.strokeRect(x - s + ib / 2 + 1, y - s + ib / 2 + 1, 2 * (s - ib / 2 - 1), 2 * (s - ib / 2 - 1));
+                ctx.strokeStyle = this.shade(color, 0.24); ctx.lineWidth = Math.max(1.5, ib * 0.6);
+                ctx.beginPath(); ctx.moveTo(x - s + ib + 2, y - s + ib); ctx.lineTo(x + s - ib - 2, y - s + ib); ctx.stroke();
+                ctx.lineWidth = 1;
+            }
             if (FAUX3D) {
                 // raised bevel (flat solid edges, no gradient): bright top-left, dark bottom-right
                 ctx.lineWidth = 2.2;
@@ -2240,11 +2261,17 @@ class Main {
             ctx.fillRect(x - bw / 2, ey + R * 0.5, bw, bh);
             ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1;
             ctx.strokeRect(x - bw / 2, ey + R * 0.5, bw, bh);
-            // blank envelope on top
-            ctx.fillStyle = isFriend ? "#4f8fe0" : "#e05555";
+            // blank envelope on top (with the flat two-tone edge band)
+            const envCol = isFriend ? "#4f8fe0" : "#e05555";
+            ctx.fillStyle = envCol;
             ctx.beginPath(); ctx.ellipse(x, ey, R, R * 1.06, 0, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5; ctx.stroke();
-            ctx.lineWidth = 1;
+            const eb = Math.max(2, R * 0.16);
+            ctx.strokeStyle = this.shade(envCol, -0.13); ctx.lineWidth = eb;
+            ctx.beginPath(); ctx.ellipse(x, ey, R - eb / 2 - 0.5, R * 1.06 - eb / 2 - 0.5, 0, 0, Math.PI * 2); ctx.stroke();
+            ctx.strokeStyle = this.shade(envCol, 0.26); ctx.lineWidth = Math.max(1.5, R * 0.1); ctx.lineCap = "round";
+            ctx.beginPath(); ctx.arc(x, ey, R * 0.55, Math.PI * 1.05, Math.PI * 1.5); ctx.stroke();
+            ctx.lineCap = "butt"; ctx.lineWidth = 1;
             ctx.beginPath(); // keep the generic stroke below happy (no-op path)
         } else {
             this.extrudeWall(x, y, radius, card ? 0 : radius * 0.7, color, true); // raised cylinder
@@ -2252,6 +2279,7 @@ class Main {
             ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2);              // lit top face
             ctx.fill();
             ctx.stroke();
+            this.tone2Circle(x, y, radius, color); // flat two-tone finish
             this.specDot(x, y, radius); // upper-left glint (flat, no gradient)
         }
         ctx.globalAlpha = 1;
@@ -2452,6 +2480,23 @@ class Main {
         ctx.ellipse(gx, gy + radius * 0.66, rx, ry, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha = a;
+    }
+
+    // === Flat two-tone finish ===============================================
+    // "Slightly more complicated but simple": a darker flat edge band inside the
+    // rim plus one short lighter arc, all solid tones — no gradients, shadows,
+    // or speculars. Tiny swarm bodies stay plain so they don't get noisy.
+    tone2Circle(x, y, radius, color) {
+        if (radius < 5.5 || typeof color !== "string" || color[0] !== "#") return;
+        const bw = Math.min(6, Math.max(1.5, radius * 0.22));
+        ctx.strokeStyle = this.shade(color, -0.14);
+        ctx.lineWidth = bw;
+        ctx.beginPath(); ctx.arc(x, y, radius - bw / 2 - 0.5, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = this.shade(color, 0.26);
+        ctx.lineWidth = Math.min(3.5, Math.max(1.2, radius * 0.14));
+        ctx.lineCap = "round";
+        ctx.beginPath(); ctx.arc(x, y, radius * 0.52, Math.PI * 1.05, Math.PI * 1.55); ctx.stroke();
+        ctx.lineCap = "butt"; ctx.lineWidth = 1;
     }
 
     // A small specular highlight (upper-left) on a round body — the glint that
@@ -2821,22 +2866,6 @@ class Main {
                 ctx.beginPath(); ctx.arc(ccx, ccy, size * 0.32, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
             }
             return; // the evo sprite already shows the evo look — no crystal overlay
-        }
-        if (n === "Mirror") {
-            // A plain hand mirror: oval glass in a frame, short handle, one glint.
-            let mr = Math.min(w, h) * 0.30;
-            ctx.fillStyle = "#8a6bbf";                                    // handle
-            this.drawRoundRect(ccx - mr * 0.18, ccy + mr * 0.9, mr * 0.36, mr * 0.85, mr * 0.18, true, false);
-            ctx.fillStyle = "#8a6bbf";                                    // frame
-            ctx.beginPath(); ctx.ellipse(ccx, ccy, mr * 1.18, mr * 1.38, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = "#cfe6f5";                                    // glass
-            ctx.beginPath(); ctx.ellipse(ccx, ccy, mr * 0.88, mr * 1.08, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 2.5; ctx.lineCap = "round";
-            ctx.beginPath();                                              // glint
-            ctx.moveTo(ccx - mr * 0.38, ccy + mr * 0.3); ctx.lineTo(ccx + mr * 0.22, ccy - mr * 0.55);
-            ctx.stroke();
-            ctx.lineCap = "butt"; ctx.lineWidth = 1;
-            return;
         }
         if (n === "Arrows") {
             // the real arrows volley, caught mid-fall.
