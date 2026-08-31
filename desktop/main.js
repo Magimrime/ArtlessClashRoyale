@@ -51,6 +51,11 @@ function handleSquirrelEvent() {
     return false; // includes --squirrel-firstrun: launch normally
 }
 
+// Stable taskbar identity (the Squirrel convention). Without it Windows derives
+// an identity from the exe path, which churns every update (app-x.y.z folders)
+// and can leave the taskbar clinging to stale icon lookups.
+app.setAppUserModelId('com.squirrel.artless-clash-royale.Artless Clash Royale');
+
 // Only one copy of the game at a time (a second one would fight over the port
 // and the save file); launching again just focuses the existing window.
 if (handleSquirrelEvent()) {
