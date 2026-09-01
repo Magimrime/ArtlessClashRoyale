@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.5.5** — here's the whole road there.
+We're currently on **26.5.6** — here's the whole road there.
 
 ---
 
@@ -88,6 +88,7 @@ A major on request: not a new coat of paint this time, but the deepest gameplay-
 - **26.5.3** — **Tesla zaps with CHAINED lightning** like the Electro Spirit — the current leaps from the coil to its target and can hop to two more nearby enemies. And the **Electro Spirit's chain is visible again**: the chain now starts at its origin point, so even a single-target zap draws the current (before, one target meant zero line segments and nothing rendered).
 - **26.5.4** — The realism batch. **Tesla goes UNDERGROUND** when it has no target — a closed hatch that **can't be hit, targeted, or even walked around** (troops walk right over it; it pops up when something enters range, and its lifetime still ticks down). **Troops never slow down**: a jostle from another unit can no longer brake a walker — the push is rotated into a sideways **slide**, so crowds flow instead of grinding. **Tombstone is regular building size.** **Firecracker's range** trimmed to the real 6 tiles. Formation spacing fixed so **nobody spawns touching** (Wall Breakers, Three Musketeers, Elite Barbarians).
 - **26.5.5** — **The zap you can actually SEE.** Found why electric chains felt invisible: a finished chain was clamped to an **8-tick (0.13-second!)** display life, so any single-target zap — the common case — flashed and was gone. Chains now linger a half second, and the current is REAL lightning: **jagged bolts that re-jitter every few frames, a bright white core, little forks flicking off the bends, and a spark on every zapped body**. Also: troops **funnel through the CENTRE of the bridge** (the path pins two centre waypoints at the crossing — no more hugging the bridge edge and grinding on the bank), the **Tesla's card art shows the raised tower** (not the buried state), and the concealed Tesla is a proper full-size **wooden cover** over the pit.
+- **26.5.6** — Rules tightened like the real game. **Tesla never chains**: one bolt, one target, full damage (the lightning look stays; the chain no longer even *draws* a hop it wouldn't deal). **Ghosts are truly untouchable**: buildings can't target them and electric chains can't arc to or stun them. **A spirit mid-hop can't be attacked** — no targeting, no damage, nothing lands until it does (its own landing explosion still fires). **Zappies deploy in a triangle**, and the **Witch summons her 4 skeletons in a clear ring around her every 7 seconds** (they used to spawn inside her body and get shoved around, reading as fewer).
 
 ---
 

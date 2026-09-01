@@ -117,6 +117,9 @@ export default class Troop extends Entity {
             this._hp = val;
             return;
         }
+        // A spirit mid-HOP is airborne and untouchable — no damage lands until it
+        // does (its own landing explosion still goes through via `exploded`).
+        if (this.sjT > 0 && !this.exploded && val < this._hp) return;
         let dmg = this._hp - val;
         if (dmg > 0 && this.shield > 0) {
             // Damage to shield
@@ -285,11 +288,13 @@ export default class Troop extends Entity {
         // NOT attacking, it still pulses a shock every 3 seconds.
         if (this.c.n === "Electro Giant" && !this.atk && g.aiTick % 180 === 0) this.electroShock(g);
 
-        // Witch Spawn — 4 skeletons that act immediately (no deploy cooldown).
+        // Witch Spawn — 4 skeletons AROUND her (a clear compass ring, outside her
+        // body so all four visibly appear), every 7s like the real card. They act
+        // immediately (no deploy cooldown).
         if (this.c.n === "Witch") {
             if (this.spT-- <= 0) {
-                this.spT = 640; // spawns less often (~10.7s between batches)
-                for (const [ox, oy] of [[10, 0], [-10, 0], [0, 10], [0, -10]]) {
+                this.spT = 420; // 7s between batches (real cadence)
+                for (const [ox, oy] of [[22, 0], [-22, 0], [0, 22], [0, -22]]) {
                     let t = new Troop(this.tm, this.x + ox, this.y + oy, g.getCard("Skeletons"));
                     t.deployTime = 0;
                     // EVO Witch: tag each summoned skelly so it feeds her HP when it dies.
@@ -1205,6 +1210,7 @@ export default class Troop extends Entity {
             if (e.tm === this.tm || e.hp <= 0 || isTower(e)) continue;
             if (e.isGhosted) continue; // ghosts are invisible — never targeted
             if (e.teslaHidden) continue; // an underground Tesla can't be seen or targeted
+            if (e.sjT > 0) continue; // a spirit mid-hop can't be attacked
             if (g.predictedHp(e) <= 0) continue; // already dead-on-arrival — don't pile on
             let isBldg = e.constructor.name === "Building";
             if (this.c.t === 1 && !isBldg && anyEnemyStruct) continue; // building-targeters ignore units WHILE a structure stands
@@ -1246,7 +1252,7 @@ export default class Troop extends Entity {
         // leaves sight, or a notably closer one appears (avoids flip-flopping).
         const cur = this.currentTarget;
         const curOK = cur && cur.hp > 0 && cur.rad !== 0 && cur.tm !== this.tm &&
-            !cur.isGhosted && g.predictedHp(cur) > 0 &&
+            !cur.isGhosted && !(cur.sjT > 0) && g.predictedHp(cur) > 0 &&
             !isTower(cur) && !(cur.fly && !this.air && !cur.jp) && this.dist(cur) <= sight;
 
         // Compare against the tower's EDGE, not its (far) centre — towers are large,

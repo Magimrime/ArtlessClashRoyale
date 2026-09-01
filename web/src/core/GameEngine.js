@@ -1001,8 +1001,8 @@ export default class GameEngine {
                 // A pentagon ring around the drop point.
                 "Barbarians": [[0, -22], [21, -7], [13, 18], [-13, 18], [-21, -7]],
                 "Elite Barbarians": [[-18, 0], [18, 0]],
-                // Three abreast.
-                "Zappies": [[-24, 0], [0, 0], [24, 0]],
+                // A triangle, like the skeletons.
+                "Zappies": [[0, -12], [-14, 10], [14, 10]],
                 "Royal Hogs": [[-30, 0], [-10, 0], [10, 0], [30, 0]],
                 // Royal Recruits guard the WHOLE lane width.
                 "Royal Recruits": [[-225, 0], [-135, 0], [-45, 0], [45, 0], [135, 0], [225, 0]],

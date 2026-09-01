@@ -231,8 +231,13 @@ export default class Proj {
                 let c = this.chainCurrent;
                 if (!this.chainHit.includes(c)) { c.hp -= this.chainDmg; c.st = Math.max(c.st, 16); this.chainHit.push(c); } // slightly longer stun
                 let next = null, nMin = 85; // shorter chain reach
-                for (let e of g.ents) {
-                    if (e.tm !== this.tm && e.hp > 0 && !e.teslaHidden && !this.chainHit.includes(e) && c.dist(e) < nMin) { nMin = c.dist(e); next = e; }
+                // Only hunt a next link if the cap allows another hit — otherwise the
+                // VISUAL would hop to a unit the chain never actually damages. Ghosts
+                // are untouchable: the current never arcs to (or stuns) a phantom.
+                if (this.chainHit.length < this.chainMax) {
+                    for (let e of g.ents) {
+                        if (e.tm !== this.tm && e.hp > 0 && !e.teslaHidden && !e.isGhosted && !(e.sjT > 0) && !this.chainHit.includes(e) && c.dist(e) < nMin) { nMin = c.dist(e); next = e; }
+                    }
                 }
                 this.chainCurrent = next;
                 // Keep the finished current on screen for a good half second — the old

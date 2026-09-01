@@ -41,7 +41,7 @@ export default class Tower extends Entity {
         // will help against a unit that's crossed into the other lane but is in reach.
         // SANDBOX: no half restriction — a tower placed anywhere (even deep in enemy
         // territory) fights whatever is in range, including the other side's towers.
-        const valid = e => e && e.hp > 0 && e.tm !== this.tm && g.ents.includes(e) && !e.isGhosted && !e.teslaHidden &&
+        const valid = e => e && e.hp > 0 && e.tm !== this.tm && g.ents.includes(e) && !e.isGhosted && !e.teslaHidden && !(e.sjT > 0) &&
             (g.sandbox || (!(this.tm === 0 && e.y < RIV_Y) && !(this.tm === 1 && e.y > RIV_Y))) &&
             this.dist(e) <= RANGE + myHb + g.getHitboxRadius(e);
         if (!valid(this.lk)) {

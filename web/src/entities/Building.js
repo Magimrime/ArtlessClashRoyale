@@ -79,6 +79,8 @@ export default class Building extends Entity {
             let best = null;
             for (let e of g.ents) {
                 if (e.tm !== this.tm) {
+                    if (e.isGhosted) continue; // phantoms are invisible to buildings
+                    if (e.sjT > 0) continue;   // a spirit mid-hop can't be attacked
                     if (e.fly && !this.c.ar) continue;
                     let d = this.dist(e);
                     if (d < min && d < this.c.si) {
@@ -106,11 +108,11 @@ export default class Building extends Entity {
                 let dmg = this.c.d * mult;
                 this.lk.hp -= dmg;
             } else if (this.c.n === "Tesla") {
-                // CHAINED lightning, Electro-Spirit style: the current leaps from the
-                // coil to the target and can hop to up to two more enemies near it.
+                // An electric ZAP with the Electro-Spirit lightning LOOK — but like the
+                // real Tesla it never chains: one bolt, one target, full damage.
                 let p = new Proj(this.x, this.y, this.lk.x, this.lk.y, null, 0, false, 0, 0, this.tm, false)
                     .asElectroChain(this.lk, this.c.d);
-                p.chainMax = 3; // target + up to 2 hops
+                p.chainMax = 1; // the target only — no hops
                 g.projs.push(p);
             } else if (this.c.n === "Bomb Tower") {
                 // Lobbed bomb: slower shot that SPLASHES where it lands.
