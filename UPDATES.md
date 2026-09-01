@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.5.0** — here's the whole road there.
+We're currently on **26.5.1** — here's the whole road there.
 
 ---
 
@@ -83,6 +83,7 @@ A major on request: not a new coat of paint this time, but the deepest gameplay-
   - **Building looks.** The **Cannon** is a round **wooden base with an actual cannon** that turns to track its target; the **Inferno Tower** is a circle with a core that flares as it burns; Tesla, Bomb Tower, and Tombstone each got their own simple shapes. The **Barbarian Barrel finally rolls as a barrel** — hoops and staves, not a log.
   - **Deaths and effects.** Units now **fall over and fade** when they die (the real-game feel), and explosions burst with an expanding **shock-ring and sparks**. A new **Graphics setting (High/Low)** in Settings strips all of that (and the two-tone finish) for a plain fast look.
   - **Two test maps** in the sandbox: **3 Bridges** (an extra middle crossing) and **Fortress** (the river becomes a **moat** hugging the enemy base — one central bridge is the only way in).
+- **26.5.1** — Polish on the big one. **Tesla** is now a smaller **blue Inferno-style circle**; the **Bomb Tower** hides its bomb (plain stone circle); the **Tombstone** is **just a rock with a cross**; the **Balloon**'s envelope is a true **circle**; **Elite Barbarians** stand apart properly; the **Royal Recruits card** shows a representative **three at full size** (the real placement is still the whole lane). And the cheat got sneakier: the Settings screen hides a **small diamond icon** in the corner — click it to be offered the cheat; the **DEBUG MENU button only exists once you've actually cheated**.
 
 ---
 

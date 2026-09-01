@@ -995,7 +995,7 @@ export default class GameEngine {
                 "Skeleton Army": spiral,
                 "Bats": [[-18, -8], [0, -14], [18, -8], [-10, 10], [10, 10]],
                 "Barbarians": [[-20, -11], [20, -11], [0, 0], [-20, 13], [20, 13]],
-                "Elite Barbarians": [[-10, 0], [10, 0]],
+                "Elite Barbarians": [[-16, 0], [16, 0]],
                 "Zappies": [[-10, 0], [10, 0], [0, 10]],
                 "Royal Hogs": [[-30, 0], [-10, 0], [10, 0], [30, 0]],
                 // Royal Recruits guard the WHOLE lane width.

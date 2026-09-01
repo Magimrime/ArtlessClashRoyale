@@ -186,6 +186,9 @@ class Main {
         this.settingsGfxHighBtn = { x: W / 2 - 110, y: H / 2 + 146, w: 105, h: 40 };
         this.settingsGfxLowBtn = { x: W / 2 + 5, y: H / 2 + 146, w: 105, h: 40 };
         this.settingsCheatBtn = { x: W / 2 - 110, y: H / 2 + 202, w: 220, h: 46 };
+        // The cheat is hidden behind a SMALL icon in the settings corner — the
+        // DEBUG MENU button only exists once you've actually cheated.
+        this.settingsCheatIcon = { x: W - 48, y: H - 60, w: 36, h: 36 };
         // In-battle (single-player) save-and-quit, top-left corner.
         this.saveQuitBtn = { x: 10, y: 10, w: 116, h: 32 };
         // Sandbox bottom bar: row 1 (4 wide buttons) + row 2 (5 narrow buttons),
@@ -490,15 +493,16 @@ class Main {
                 try { localStorage.setItem("acr_gfx", "low"); } catch (e) { }
                 return;
             }
-            // Cheat/debug moved here from the title screen's hidden corner.
-            if (this.contains(this.settingsCheatBtn, x, y)) {
-                if (!this.eng.cheatPressed) {
-                    this.eng.cheatPressed = true;
-                    this.eng.saveProgress();
-                    this.state = State.CHEAT;
-                } else if (this.eng.cheated) {
-                    this.state = State.DEBUG_MENU;
-                }
+            // The small corner cheat icon opens the cheat prompt (first time only);
+            // the DEBUG MENU button exists only once you've cheated.
+            if (!this.eng.cheatPressed && this.contains(this.settingsCheatIcon, x, y)) {
+                this.eng.cheatPressed = true;
+                this.eng.saveProgress();
+                this.state = State.CHEAT;
+                return;
+            }
+            if (this.eng.cheated && this.contains(this.settingsCheatBtn, x, y)) {
+                this.state = State.DEBUG_MENU;
                 return;
             }
             if (this.contains(this.settingsBackBtn, x, y)) this.state = State.TITLE;
@@ -1026,10 +1030,20 @@ class Main {
             this.drawBtn(this.settingsGfxHighBtn, "HIGH" + (this.gfxHigh ? " ✓" : ""), this.gfxHigh ? "#3aa17e" : "#5a7ea6");
             this.drawBtn(this.settingsGfxLowBtn, "LOW" + (!this.gfxHigh ? " ✓" : ""), !this.gfxHigh ? "#3aa17e" : "#5a7ea6");
 
-            // Cheat entry (formerly a hidden corner of the title screen). Once used and
-            // declined it stays gone; once accepted it becomes the debug menu.
+            // Cheat entry: a SMALL diamond icon tucked in the corner. Click it to be
+            // offered the cheat; decline and it's gone for good. Only once you've
+            // cheated does the proper DEBUG MENU button exist.
             if (!this.eng.cheatPressed) {
-                this.drawBtn(this.settingsCheatBtn, "CHEAT", "#8a6bbf");
+                const ic = this.settingsCheatIcon;
+                const cx2 = ic.x + ic.w / 2, cy2 = ic.y + ic.h / 2, d = 9;
+                const hov = this.contains(ic, this.mouse.x, this.mouse.y);
+                ctx.globalAlpha = hov ? 0.95 : 0.45;
+                ctx.fillStyle = "#b07fd8";
+                ctx.beginPath();
+                ctx.moveTo(cx2, cy2 - d); ctx.lineTo(cx2 + d, cy2); ctx.lineTo(cx2, cy2 + d); ctx.lineTo(cx2 - d, cy2);
+                ctx.closePath(); ctx.fill();
+                ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 1.3; ctx.stroke();
+                ctx.globalAlpha = 1; ctx.lineWidth = 1;
             } else if (this.eng.cheated) {
                 this.drawBtn(this.settingsCheatBtn, "DEBUG MENU", "#8a6bbf");
             }
@@ -2342,47 +2356,35 @@ class Main {
                 ctx.beginPath(); ctx.arc(x, y, s * (e.atk ? 0.34 : 0.24), 0, Math.PI * 2); ctx.fill();
                 ctx.lineWidth = 1;
             } else if (bn === "Tesla") {
-                // Compact pad with a coil rod and an orb that sparks while firing.
+                // A smaller, BLUE Inferno-style tower: round base, dark core, bright
+                // centre that flares while it zaps.
+                const ts = s * 0.85;
                 ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
-                this.drawRoundRect(x - s * 0.9, y - s * 0.9, s * 1.8, s * 1.8, s * 0.45, true, false); ctx.stroke();
-                ctx.strokeStyle = "#3b4148"; ctx.lineWidth = Math.max(2, s * 0.16);
-                ctx.beginPath(); ctx.moveTo(x, y + s * 0.25); ctx.lineTo(x, y - s * 0.55); ctx.stroke();
-                ctx.fillStyle = e.atk ? "#eaffff" : "#bfeaf5";
-                ctx.beginPath(); ctx.arc(x, y - s * 0.62, s * (e.atk ? 0.34 : 0.26), 0, Math.PI * 2); ctx.fill();
-                if (this.gfxHigh && e.atk) {
-                    ctx.strokeStyle = "#eaffff"; ctx.lineWidth = 1.5;
-                    ctx.beginPath();
-                    ctx.moveTo(x - s * 0.55, y - s * 0.62); ctx.lineTo(x + s * 0.55, y - s * 0.62);
-                    ctx.moveTo(x, y - s * 0.95); ctx.lineTo(x, y - s * 0.3);
-                    ctx.stroke();
-                }
+                ctx.beginPath(); ctx.arc(x, y, ts, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                this.tone2Circle(x, y, ts, color);
+                ctx.fillStyle = "#1e3742";
+                ctx.beginPath(); ctx.arc(x, y, ts * 0.5, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = e.atk ? "#eaffff" : "#9fdcf2";
+                ctx.beginPath(); ctx.arc(x, y, ts * (e.atk ? 0.34 : 0.24), 0, Math.PI * 2); ctx.fill();
                 ctx.lineWidth = 1;
             } else if (bn === "Bomb Tower") {
-                // Round stone base with a black bomb dome (lit fuse nub on top).
+                // Plain round stone tower — no bomb on show; just a darker inner disc.
                 ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
                 ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
                 this.tone2Circle(x, y, s, color);
-                ctx.fillStyle = "#23262b";
-                ctx.beginPath(); ctx.arc(x, y + s * 0.08, s * 0.5, 0, Math.PI * 2); ctx.fill();
-                ctx.strokeStyle = "#6b5a2e"; ctx.lineWidth = 2;
-                ctx.beginPath(); ctx.moveTo(x, y - s * 0.42); ctx.lineTo(x + s * 0.18, y - s * 0.62); ctx.stroke();
-                ctx.fillStyle = "#ffb63c";
-                ctx.beginPath(); ctx.arc(x + s * 0.2, y - s * 0.66, s * 0.09, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = this.shade(color, -0.22);
+                ctx.beginPath(); ctx.arc(x, y, s * 0.42, 0, Math.PI * 2); ctx.fill();
                 ctx.lineWidth = 1;
             } else if (bn === "Tombstone") {
-                // A gravestone: rounded upright slab on a small earth mound.
-                ctx.fillStyle = "#6b5a3e";
-                ctx.beginPath(); ctx.ellipse(x, y + s * 0.55, s * 1.0, s * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+                // Just a ROCK with a cross.
                 ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
-                this.drawRoundRect(x - s * 0.65, y - s * 0.95, s * 1.3, s * 1.6, s * 0.6, true, false); ctx.stroke();
-                if (this.gfxHigh) {
-                    ctx.strokeStyle = this.shade("#9aa0a8", -0.25); ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.moveTo(x, y - s * 0.55); ctx.lineTo(x, y - s * 0.05);
-                    ctx.moveTo(x - s * 0.22, y - s * 0.38); ctx.lineTo(x + s * 0.22, y - s * 0.38);
-                    ctx.stroke();
-                }
-                ctx.lineWidth = 1;
+                this.drawRoundRect(x - s * 0.85, y - s * 0.75, s * 1.7, s * 1.5, s * 0.6, true, false); ctx.stroke();
+                ctx.strokeStyle = this.shade("#9aa0a8", -0.3); ctx.lineWidth = Math.max(2, s * 0.14); ctx.lineCap = "round";
+                ctx.beginPath();
+                ctx.moveTo(x, y - s * 0.42); ctx.lineTo(x, y + s * 0.38);
+                ctx.moveTo(x - s * 0.28, y - s * 0.12); ctx.lineTo(x + s * 0.28, y - s * 0.12);
+                ctx.stroke();
+                ctx.lineCap = "butt"; ctx.lineWidth = 1;
             } else {
                 this.extrudeWall(x, y, s, card ? 0 : s * 0.85, color, false); // raised block
                 ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
@@ -2430,19 +2432,12 @@ class Main {
             ctx.fillRect(x - bw / 2, ey + R * 0.5, bw, bh);
             ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1;
             ctx.strokeRect(x - bw / 2, ey + R * 0.5, bw, bh);
-            // blank envelope on top (with the flat two-tone edge band)
+            // blank CIRCLE envelope on top (with the flat two-tone edge band)
             const envCol = isFriend ? "#4f8fe0" : "#e05555";
             ctx.fillStyle = envCol;
-            ctx.beginPath(); ctx.ellipse(x, ey, R, R * 1.06, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(x, ey, R, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5; ctx.stroke();
-            if (this.gfxHigh) {
-                const eb = Math.max(2, R * 0.16);
-                ctx.strokeStyle = this.shade(envCol, -0.13); ctx.lineWidth = eb;
-                ctx.beginPath(); ctx.ellipse(x, ey, R - eb / 2 - 0.5, R * 1.06 - eb / 2 - 0.5, 0, 0, Math.PI * 2); ctx.stroke();
-                ctx.strokeStyle = this.shade(envCol, 0.26); ctx.lineWidth = Math.max(1.5, R * 0.1); ctx.lineCap = "round";
-                ctx.beginPath(); ctx.arc(x, ey, R * 0.55, Math.PI * 1.05, Math.PI * 1.5); ctx.stroke();
-                ctx.lineCap = "butt";
-            }
+            this.tone2Circle(x, ey, R, envCol);
             ctx.lineWidth = 1;
             ctx.beginPath(); // keep the generic stroke below happy (no-op path)
         } else {
@@ -3140,6 +3135,9 @@ class Main {
                 { dx: 0, dy: r * 1.75, r: sr, unit: "Skeletons" },
             ];
         }
+        // Royal Recruits' real line is the whole lane wide — scaled onto a card the
+        // units would be specks, so the face shows a REPRESENTATIVE three at full size.
+        if (n === "Royal Recruits") return row(3);
         // FORMATION cards show the REAL deploy formation on the face — the card is
         // aligned exactly how the units stand when placed (scaled to fit the box).
         const f = this.eng.getFormation(n);
