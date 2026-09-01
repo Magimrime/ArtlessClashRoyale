@@ -2392,31 +2392,57 @@ class Main {
                 ctx.beginPath(); ctx.arc(x, y, s * (e.atk ? 0.34 : 0.24), 0, Math.PI * 2); ctx.fill();
                 ctx.lineWidth = 1;
             } else if (bn === "Tesla") {
-                // Underground: a full-size WOODEN COVER over the pit — untargetable,
-                // unhittable, walk right over it. (The card face always shows the
-                // raised tower, so `card` skips this.)
-                if (e.teslaHidden && !card) {
-                    ctx.fillStyle = "#8a5c33"; ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1.5;
-                    this.drawRoundRect(x - s * 0.85, y - s * 0.85, s * 1.7, s * 1.7, s * 0.3, true, false); ctx.stroke();
-                    ctx.strokeStyle = "rgba(0,0,0,0.22)"; ctx.lineWidth = 1.3;
-                    ctx.beginPath();
-                    ctx.moveTo(x - s * 0.75, y - s * 0.28); ctx.lineTo(x + s * 0.75, y - s * 0.28);
-                    ctx.moveTo(x - s * 0.75, y + s * 0.28); ctx.lineTo(x + s * 0.75, y + s * 0.28);
-                    ctx.stroke();
-                    ctx.lineWidth = 1;
-                    return; // no body, no bars, nothing else
-                }
-                // A smaller, BLUE Inferno-style tower: round base, dark core, bright
-                // centre that flares while it zaps.
+                // The Tesla sinks into a pit and a WOODEN COVER slides over it when it
+                // has no target (untargetable / unhittable / walkable), and rises back
+                // out to zap. `cover` (0 = raised, 1 = covered) eases each frame so the
+                // transition animates. The card face always shows the raised tower.
                 const ts = s * 0.85;
-                ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
-                ctx.beginPath(); ctx.arc(x, y, ts, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-                this.tone2Circle(x, y, ts, color);
-                ctx.fillStyle = "#1e3742";
-                ctx.beginPath(); ctx.arc(x, y, ts * 0.5, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = e.atk ? "#eaffff" : "#9fdcf2";
-                ctx.beginPath(); ctx.arc(x, y, ts * (e.atk ? 0.34 : 0.24), 0, Math.PI * 2); ctx.fill();
-                ctx.lineWidth = 1;
+                if (e._teslaCover === undefined) e._teslaCover = (e.teslaHidden && !card) ? 1 : 0;
+                const goal = (e.teslaHidden && !card) ? 1 : 0;
+                e._teslaCover += (goal - e._teslaCover) * 0.25;
+                if (Math.abs(goal - e._teslaCover) < 0.02) e._teslaCover = goal;
+                const cover = card ? 0 : e._teslaCover;
+
+                // The tower body, sinking: it slides DOWN into the pit and is clipped at
+                // ground level, so it disappears below the lid as the cover closes.
+                if (cover < 0.98) {
+                    ctx.save();
+                    ctx.beginPath(); ctx.rect(x - ts - 2, y - ts - 2, (ts + 2) * 2, ts + 2); ctx.clip(); // only the top half of the pit shows body
+                    const sink = cover * ts * 1.4; // how far it has dropped
+                    const cy2 = y + sink;
+                    ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
+                    ctx.beginPath(); ctx.arc(x, cy2, ts, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                    if (cover < 0.4) this.tone2Circle(x, cy2, ts, color);
+                    ctx.fillStyle = "#1e3742";
+                    ctx.beginPath(); ctx.arc(x, cy2, ts * 0.5, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = e.atk ? "#eaffff" : "#9fdcf2";
+                    ctx.beginPath(); ctx.arc(x, cy2, ts * (e.atk ? 0.34 : 0.24), 0, Math.PI * 2); ctx.fill();
+                    ctx.restore();
+                    ctx.lineWidth = 1;
+                }
+                // The wooden lid: two halves that part when open and close when covering.
+                if (cover > 0.02) {
+                    const gap = (1 - cover) * s * 0.9; // halves slide apart as it opens
+                    ctx.fillStyle = "#8a5c33"; ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1.5;
+                    for (const sgn of [-1, 1]) {
+                        ctx.save();
+                        ctx.beginPath(); ctx.rect(x - s * 0.85, y - s * 0.85, s * 1.7, s * 1.7); ctx.clip();
+                        this.drawRoundRect(x - s * 0.85 + sgn * gap + (sgn < 0 ? 0 : s * 0.85), y - s * 0.85, s * 0.85, s * 1.7, s * 0.18, true, false);
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+                    if (cover > 0.85) { // plank seams once shut
+                        ctx.strokeStyle = "rgba(0,0,0,0.22)"; ctx.lineWidth = 1.3;
+                        ctx.beginPath();
+                        ctx.moveTo(x - s * 0.75, y - s * 0.28); ctx.lineTo(x + s * 0.75, y - s * 0.28);
+                        ctx.moveTo(x - s * 0.75, y + s * 0.28); ctx.lineTo(x + s * 0.75, y + s * 0.28);
+                        ctx.stroke();
+                    }
+                    ctx.lineWidth = 1;
+                }
+                // Hide the health bar the moment it starts sinking — a covered/sinking
+                // Tesla shows nothing (bulletproofs the drawHealthBars skip).
+                if (cover > 0.15) { e._barY = undefined; return; }
             } else if (bn === "Bomb Tower") {
                 // Plain round stone tower — no bomb on show; just a darker inner disc.
                 ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
