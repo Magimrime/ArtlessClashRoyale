@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.5.4** — here's the whole road there.
+We're currently on **26.5.5** — here's the whole road there.
 
 ---
 
@@ -87,6 +87,7 @@ A major on request: not a new coat of paint this time, but the deepest gameplay-
 - **26.5.2** — Formation truth, round two. **Minion Horde** deploys in **two neat rows of three**, **Zappies three abreast**, **Barbarians in a pentagon ring**; **Wall Breakers and Three Musketeers spawn close together** — their centre-placement lane split is pure **pathfinding**, not spawn spread. The **Tombstone looks like any other tower** (standard square, small cross on the face) and now **spawns Skeletons in pairs** (2 every 7s, the real cadence). And **Zap looks properly cool** when placed: the strike **forks** into side-bolts with a glow at the strike point, and the impact pops an **expanding electric ring with radial crackle** (High graphics).
 - **26.5.3** — **Tesla zaps with CHAINED lightning** like the Electro Spirit — the current leaps from the coil to its target and can hop to two more nearby enemies. And the **Electro Spirit's chain is visible again**: the chain now starts at its origin point, so even a single-target zap draws the current (before, one target meant zero line segments and nothing rendered).
 - **26.5.4** — The realism batch. **Tesla goes UNDERGROUND** when it has no target — a closed hatch that **can't be hit, targeted, or even walked around** (troops walk right over it; it pops up when something enters range, and its lifetime still ticks down). **Troops never slow down**: a jostle from another unit can no longer brake a walker — the push is rotated into a sideways **slide**, so crowds flow instead of grinding. **Tombstone is regular building size.** **Firecracker's range** trimmed to the real 6 tiles. Formation spacing fixed so **nobody spawns touching** (Wall Breakers, Three Musketeers, Elite Barbarians).
+- **26.5.5** — **The zap you can actually SEE.** Found why electric chains felt invisible: a finished chain was clamped to an **8-tick (0.13-second!)** display life, so any single-target zap — the common case — flashed and was gone. Chains now linger a half second, and the current is REAL lightning: **jagged bolts that re-jitter every few frames, a bright white core, little forks flicking off the bends, and a spark on every zapped body**. Also: troops **funnel through the CENTRE of the bridge** (the path pins two centre waypoints at the crossing — no more hugging the bridge edge and grinding on the bank), the **Tesla's card art shows the raised tower** (not the buried state), and the concealed Tesla is a proper full-size **wooden cover** over the pit.
 
 ---
 

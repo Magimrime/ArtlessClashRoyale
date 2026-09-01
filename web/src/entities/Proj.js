@@ -235,9 +235,11 @@ export default class Proj {
                     if (e.tm !== this.tm && e.hp > 0 && !e.teslaHidden && !this.chainHit.includes(e) && c.dist(e) < nMin) { nMin = c.dist(e); next = e; }
                 }
                 this.chainCurrent = next;
-                if (next) this.chainTargets.push(next); else this.life = Math.min(this.life, 8);
+                // Keep the finished current on screen for a good half second — the old
+                // 8-tick (0.13s) clamp made single-target zaps practically invisible.
+                if (next) this.chainTargets.push(next); else this.life = Math.min(this.life, 30);
             }
-            if (this.chainHit.length >= this.chainMax) this.life = Math.min(this.life, 8);
+            if (this.chainHit.length >= this.chainMax) this.life = Math.min(this.life, 30);
             return;
         }
         if (this.chainTargets || this.barbBreak || this.isIceNova || this.shockBeams || this.isShockwave || this.isPhantom || this.isElectricRing) {

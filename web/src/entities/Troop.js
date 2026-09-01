@@ -764,6 +764,32 @@ export default class Troop extends Entity {
                     // first waypoint jump around and troops visibly wobbled off their
                     // line. The goalMoved check above still reacts instantly.
                     this.pathTick = 18 + Math.floor(g.random() * 10);
+
+                    // FUNNEL river crossings through the CENTRE of the bridge: find the
+                    // segment that crosses the river and pin it to two centre waypoints
+                    // (line up before the bridge, exit after it) so troops never hug the
+                    // bridge edge and grind on the bank clamp.
+                    if (!g.sandboxNoRiver) {
+                        const RY = g.RIV_Y || RIV_Y;
+                        const riverJumper2 = ["Hog Rider", "Royal Hogs", "Prince", "Dark Prince"].includes(this.c.n);
+                        if (!riverJumper2) {
+                            let px = this.x, py = this.y;
+                            for (let wi = 0; wi < this.path.length; wi++) {
+                                const q = this.path[wi];
+                                if ((py < RY) !== (q.y < RY)) {
+                                    const t = (RY - py) / (q.y - py);
+                                    const crossX = px + t * (q.x - px);
+                                    const bxs = g.bridgeXs || [W / 4, W * 3 / 4];
+                                    let bx = bxs[0], bd = Math.abs(crossX - bxs[0]);
+                                    for (const b of bxs) { const d2 = Math.abs(crossX - b); if (d2 < bd) { bd = d2; bx = b; } }
+                                    const s2 = (py < RY) ? 1 : -1; // which side we start on
+                                    this.path.splice(wi, 0, { x: bx, y: RY - s2 * 26 }, { x: bx, y: RY + s2 * 26 });
+                                    break;
+                                }
+                                px = q.x; py = q.y;
+                            }
+                        }
+                    }
                 }
                 // Drop waypoints we've essentially reached (a touch generous so a fast
                 // troop can't orbit a waypoint it keeps overshooting).

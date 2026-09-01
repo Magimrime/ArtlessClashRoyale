@@ -1664,10 +1664,11 @@ class Main {
                 }
 
                 if (p.chainTargets) {
-                    // A mostly-STRAIGHT blue electric current with only a few small jags
-                    // and little sparkles travelling along it — a single flat colour, no
-                    // glow / white highlight.
+                    // A proper ELECTRIC ZAP: jagged lightning that re-jitters every few
+                    // frames, blue outer bolt with a bright white core, tiny fork ticks
+                    // off the bends, and a spark at each zapped body.
                     ctx.lineCap = "round";
+                    const tick = Math.floor(Date.now() / 55);
                     for (let i = 0; i < p.chainTargets.length - 1; i++) {
                         let a = p.chainTargets[i], b = p.chainTargets[i + 1];
                         if (!a || !b) continue;
@@ -1677,20 +1678,33 @@ class Main {
                         let bx = b.x, by = b.y - (b.fly ? 22 : 0);
                         let dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
                         let nx = -dy / len, ny = dx / len;
-                        const segs = 5;
+                        const segs = Math.max(4, Math.min(8, Math.round(len / 18)));
                         const pts = [];
                         for (let s = 0; s <= segs; s++) {
                             let f = s / segs;
-                            let jit = (s === 0 || s === segs) ? 0 : (s % 2 === 0 ? 2 : -2); // very slight jag
+                            let jit = (s === 0 || s === segs) ? 0 : Math.sin(s * 7.13 + i * 3.7 + tick * 2.3) * 6.5;
                             pts.push([ax + dx * f + nx * jit, ay + dy * f + ny * jit]);
                         }
-                        ctx.strokeStyle = "#4f9bff"; ctx.lineWidth = 3;
+                        ctx.strokeStyle = "#4f9bff"; ctx.lineWidth = 3.5;
                         ctx.beginPath(); pts.forEach((q, k) => k ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
-                        // twinkling sparkles along the current
-                        ctx.fillStyle = "#bfe3ff";
-                        for (let s = 1; s < segs; s++) {
-                            if ((Math.floor(Date.now() / 60) + s) % 2 === 0) {
-                                ctx.beginPath(); ctx.arc(pts[s][0], pts[s][1], 1.3 + (s % 3) * 0.5, 0, Math.PI * 2); ctx.fill();
+                        ctx.strokeStyle = "#eaffff"; ctx.lineWidth = 1.4;
+                        ctx.beginPath(); pts.forEach((q, k) => k ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
+                        if (this.gfxHigh) {
+                            // small forks flicking off alternating bends
+                            ctx.strokeStyle = "#9fd4ff"; ctx.lineWidth = 1.3;
+                            for (let s = 1; s < segs; s++) {
+                                if ((s + tick) % 3 !== 0) continue;
+                                const fx = pts[s][0], fy = pts[s][1];
+                                const fl = 7 + (s % 3) * 3, sgn = (s % 2 ? 1 : -1);
+                                ctx.beginPath();
+                                ctx.moveTo(fx, fy);
+                                ctx.lineTo(fx + nx * sgn * fl + dx / len * 4, fy + ny * sgn * fl + dy / len * 4);
+                                ctx.stroke();
+                            }
+                            // spark burst on each zapped body (not the origin node)
+                            if (!b.isChainOrigin) {
+                                ctx.fillStyle = "#ffffff";
+                                ctx.beginPath(); ctx.arc(bx, by, 3 + ((tick + i) % 2), 0, Math.PI * 2); ctx.fill();
                             }
                         }
                     }
@@ -2356,13 +2370,17 @@ class Main {
                 ctx.beginPath(); ctx.arc(x, y, s * (e.atk ? 0.34 : 0.24), 0, Math.PI * 2); ctx.fill();
                 ctx.lineWidth = 1;
             } else if (bn === "Tesla") {
-                // Underground: just a closed hatch on the ground (like the king's
-                // shooter box) — untargetable, unhittable, walk right over it.
-                if (e.teslaHidden) {
-                    ctx.fillStyle = "#3b4148"; ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = 1.5;
-                    this.drawRoundRect(x - s * 0.55, y - s * 0.4, s * 1.1, s * 0.8, s * 0.2, true, false); ctx.stroke();
-                    ctx.strokeStyle = "rgba(255,255,255,0.25)"; ctx.lineWidth = 1.2;
-                    ctx.beginPath(); ctx.moveTo(x - s * 0.35, y); ctx.lineTo(x + s * 0.35, y); ctx.stroke();
+                // Underground: a full-size WOODEN COVER over the pit — untargetable,
+                // unhittable, walk right over it. (The card face always shows the
+                // raised tower, so `card` skips this.)
+                if (e.teslaHidden && !card) {
+                    ctx.fillStyle = "#8a5c33"; ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1.5;
+                    this.drawRoundRect(x - s * 0.85, y - s * 0.85, s * 1.7, s * 1.7, s * 0.3, true, false); ctx.stroke();
+                    ctx.strokeStyle = "rgba(0,0,0,0.22)"; ctx.lineWidth = 1.3;
+                    ctx.beginPath();
+                    ctx.moveTo(x - s * 0.75, y - s * 0.28); ctx.lineTo(x + s * 0.75, y - s * 0.28);
+                    ctx.moveTo(x - s * 0.75, y + s * 0.28); ctx.lineTo(x + s * 0.75, y + s * 0.28);
+                    ctx.stroke();
                     ctx.lineWidth = 1;
                     return; // no body, no bars, nothing else
                 }
