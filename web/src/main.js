@@ -2356,6 +2356,16 @@ class Main {
                 ctx.beginPath(); ctx.arc(x, y, s * (e.atk ? 0.34 : 0.24), 0, Math.PI * 2); ctx.fill();
                 ctx.lineWidth = 1;
             } else if (bn === "Tesla") {
+                // Underground: just a closed hatch on the ground (like the king's
+                // shooter box) — untargetable, unhittable, walk right over it.
+                if (e.teslaHidden) {
+                    ctx.fillStyle = "#3b4148"; ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = 1.5;
+                    this.drawRoundRect(x - s * 0.55, y - s * 0.4, s * 1.1, s * 0.8, s * 0.2, true, false); ctx.stroke();
+                    ctx.strokeStyle = "rgba(255,255,255,0.25)"; ctx.lineWidth = 1.2;
+                    ctx.beginPath(); ctx.moveTo(x - s * 0.35, y); ctx.lineTo(x + s * 0.35, y); ctx.stroke();
+                    ctx.lineWidth = 1;
+                    return; // no body, no bars, nothing else
+                }
                 // A smaller, BLUE Inferno-style tower: round base, dark core, bright
                 // centre that flares while it zaps.
                 const ts = s * 0.85;
@@ -2868,7 +2878,7 @@ class Main {
         // Buildings: the half-width of their drawn square (matches Building.js rad*0.88).
         if (c.t === 3) {
             let r = (c.n === "Cannon") ? 15 : (c.n === "Crate") ? 14 :
-                (c.n === "Tesla") ? 16 : (c.n === "Bomb Tower") ? 17 : (c.n === "Tombstone") ? 14 : 20;
+                (c.n === "Tesla") ? 16 : (c.n === "Bomb Tower") ? 17 : 20;
             return r * 0.88;
         }
         let m = 10;
@@ -3599,6 +3609,7 @@ class Main {
         for (let e of this.eng.ents) {
             if (e._barY === undefined || e.hp <= 0) continue; // dying units are already gone
             if (e.isGhosted) continue; // phantoms show no bar
+            if (e.teslaHidden) continue; // a buried Tesla shows nothing at all
 
             let x = e._barX, barY = e._barY, barW = e._barW;
             // The shield has been damaged (not full)? Show the shield bar — and the

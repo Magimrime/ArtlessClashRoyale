@@ -1024,6 +1024,7 @@ export default class Troop extends Entity {
                 // "straight shot" would happily aim THROUGH an enemy tower and leave
                 // the troop grinding against its wall instead of walking the path).
                 if (e === this.currentTarget) continue; // walking INTO our target is the point
+                if (e.teslaHidden) continue; // a buried Tesla doesn't block anything
                 // An obstacle sitting AT the target (e.g. an enemy attacking our own
                 // tower) isn't really blocking — we CAN reach a unit next to it.
                 if (Math.hypot(e.x - x2, e.y - y2) < e.rad + 25) continue;
@@ -1046,6 +1047,7 @@ export default class Troop extends Entity {
             if (e === this) continue;
             if (e.constructor.name === "Tower" || e.constructor.name === "Building") {
                 if (e === this.currentTarget) continue; // never route around our own target
+                if (e.teslaHidden) continue;
                 let hR = e.rad;
                 let safeDist = hR + myHitbox + 5;
                 let d = this.ptSegDist(x1, y1, x2, y2, e.x, e.y);
@@ -1167,7 +1169,7 @@ export default class Troop extends Entity {
         // there are NO enemy towers OR buildings left to attack, the "towers are no
         // longer an aspect" — they hunt the nearest enemy TROOP instead of stalling at
         // the bridge with nothing to path to.
-        const anyEnemyStruct = g.ents.some(e => e.tm !== this.tm && e.hp > 0 &&
+        const anyEnemyStruct = g.ents.some(e => e.tm !== this.tm && e.hp > 0 && !e.teslaHidden &&
             (e.constructor.name === "Tower" || e.constructor.name === "Building"));
 
         // 1. Nearest valid enemy non-tower (unit or building) in sight.
@@ -1176,6 +1178,7 @@ export default class Troop extends Entity {
         for (let e of g.ents) {
             if (e.tm === this.tm || e.hp <= 0 || isTower(e)) continue;
             if (e.isGhosted) continue; // ghosts are invisible — never targeted
+            if (e.teslaHidden) continue; // an underground Tesla can't be seen or targeted
             if (g.predictedHp(e) <= 0) continue; // already dead-on-arrival — don't pile on
             let isBldg = e.constructor.name === "Building";
             if (this.c.t === 1 && !isBldg && anyEnemyStruct) continue; // building-targeters ignore units WHILE a structure stands

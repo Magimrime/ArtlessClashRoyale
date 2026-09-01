@@ -8,24 +8,39 @@ export default class Building extends Entity {
         if (c.n === "Crate") radius = 14;
         if (c.n === "Tesla") radius = 16;
         if (c.n === "Bomb Tower") radius = 17;
-        if (c.n === "Tombstone") radius = 14;
         super(0, t, x, y, c.hp, radius, 10000, false, false);
         this.c = c;
         this.cd = 0;
         this.lk = null;
         this.atk = false;
+        // Tesla starts UNDERGROUND: untargetable and unhittable until a target
+        // wanders into range (like the sleeping king, but fully immune).
+        if (c.n === "Tesla") this.teslaHidden = true;
+    }
+
+    // Damage immunity while the Tesla is underground: every "e.hp -= dmg" in the
+    // codebase routes through this setter, so a hidden Tesla shrugs it all off.
+    // (Lifetime decay writes _hp directly in act(), so it still expires.)
+    get hp() { return this._hp; }
+    set hp(v) {
+        if (this.teslaHidden && this._hp !== undefined && v < this._hp) return;
+        this._hp = v;
     }
 
     act(g) {
         if (this.fr > 0) { this.infernoTick = 0; return; }
         if (this.st-- > 0) { this.infernoTick = 0; return; }
 
-        // Lifetime decay
-        this.hp -= this.mhp / this.c.ms;
+        // Lifetime decay (bypasses the hidden-Tesla damage immunity on purpose)
+        this._hp -= this.mhp / this.c.ms;
         if (this.hp <= 0) {
             // Death Logic handled via die(g) called by GameEngine
             return;
         }
+
+        // Tesla pops up only while it has a target; otherwise it sinks back
+        // underground where nothing can hit or even see it.
+        if (this.c.n === "Tesla") this.teslaHidden = !this.lk;
 
         // Elixir Collector Logic
         if (this.c.n === "Elixir Collector") {
@@ -90,6 +105,13 @@ export default class Building extends Entity {
                 let mult = this.getInfernoMultiplier(stage);
                 let dmg = this.c.d * mult;
                 this.lk.hp -= dmg;
+            } else if (this.c.n === "Tesla") {
+                // CHAINED lightning, Electro-Spirit style: the current leaps from the
+                // coil to the target and can hop to up to two more enemies near it.
+                let p = new Proj(this.x, this.y, this.lk.x, this.lk.y, null, 0, false, 0, 0, this.tm, false)
+                    .asElectroChain(this.lk, this.c.d);
+                p.chainMax = 3; // target + up to 2 hops
+                g.projs.push(p);
             } else if (this.c.n === "Bomb Tower") {
                 // Lobbed bomb: slower shot that SPLASHES where it lands.
                 let p = new Proj(this.x, this.y, this.lk.x, this.lk.y, this.lk, 5, false, 4, this.c.d, this.tm, false);

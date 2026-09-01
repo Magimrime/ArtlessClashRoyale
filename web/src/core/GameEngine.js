@@ -152,9 +152,10 @@ export default class GameEngine {
             // Tombstone — 422 hp, spawns Skeletons in PAIRS (2 every 7s — the real
             // cadence; rt=420 is the spawn interval), 4 burst out on death, 40s life.
             new Card("Tombstone", 3, 422, 0, 0, 0, 3, 2400, 420, 0, false, false),
-            // Firecracker — real L11: 3 elixir, 300 hp, 168 splash dmg, 3s hit speed,
-            // 6-tile range, Fast, hits air; her shot kicks HER backward (see Troop.js).
-            new Card("Firecracker", 3, 300, 168, 0.825, 180, 0, 100, 180, 150, false, true)
+            // Firecracker — real L11: 3 elixir, 300 hp, 168 spark-burst splash, 3s hit
+            // speed, 6-tile range (engine scale ≈150), Fast, hits air; her shot kicks
+            // HER backward (see Troop.js).
+            new Card("Firecracker", 3, 300, 168, 0.825, 150, 0, 100, 180, 160, false, true)
         ];
 
         // Role tags drive the enemy AI's counter logic. (Stats above are already
@@ -739,7 +740,7 @@ export default class GameEngine {
             }
         }
         for (let e of this.ents) {
-            if ((e instanceof Tower || e instanceof Building) && e.hp > 0) {
+            if ((e instanceof Tower || e instanceof Building) && e.hp > 0 && !e.teslaHidden) {
                 let block = e.rad + 6;
                 let c0 = Math.max(0, Math.floor((e.x - block) / T)), c1 = Math.min(COLS - 1, Math.floor((e.x + block) / T));
                 let r0 = Math.max(0, Math.floor((e.y - block) / T)), r1 = Math.min(ROWS - 1, Math.floor((e.y + block) / T));
@@ -987,9 +988,9 @@ export default class GameEngine {
             this._formations = {
                 "Archers": [[-8, 0], [8, 0]],
                 "Spear Goblins": [[-15, 0], [15, 0], [0, 15]],
-                // Close together — the centre-placement lane SPLIT comes from the
-                // pathfinding (laneAssign), not from spawning them apart.
-                "Wall Breakers": [[-8, 0], [8, 0]],
+                // Close (but not touching) — the centre-placement lane SPLIT comes
+                // from the pathfinding (laneAssign), not from spawning them apart.
+                "Wall Breakers": [[-10, 0], [10, 0]],
                 "Skeletons": [[0, -8], [-7, 6.5], [7, 6.5]],
                 "Goblins": [[0, -12], [-12, 0], [12, 0], [0, 12]],
                 "Minions": [[0, -10], [-10, 10], [10, 10]],
@@ -999,15 +1000,15 @@ export default class GameEngine {
                 "Bats": [[-18, -8], [0, -14], [18, -8], [-10, 10], [10, 10]],
                 // A pentagon ring around the drop point.
                 "Barbarians": [[0, -22], [21, -7], [13, 18], [-13, 18], [-21, -7]],
-                "Elite Barbarians": [[-16, 0], [16, 0]],
+                "Elite Barbarians": [[-18, 0], [18, 0]],
                 // Three abreast.
                 "Zappies": [[-24, 0], [0, 0], [24, 0]],
                 "Royal Hogs": [[-30, 0], [-10, 0], [10, 0], [30, 0]],
                 // Royal Recruits guard the WHOLE lane width.
                 "Royal Recruits": [[-225, 0], [-135, 0], [-45, 0], [45, 0], [135, 0], [225, 0]],
-                // Tight clump — the 1/2 lane split on centre placement is pure
-                // pathfinding (laneAssign), not spawn spread.
-                "Three Musketeers": [[-13, 0], [13, 0], [0, 15]],
+                // Tight clump (no overlap) — the 1/2 lane split on centre placement is
+                // pure pathfinding (laneAssign), not spawn spread.
+                "Three Musketeers": [[-15, 0], [15, 0], [0, 17]],
             };
         }
         return this._formations[n] || null;
@@ -1453,6 +1454,7 @@ export default class GameEngine {
                     if (aIsStruct && bIsStruct) continue; // structures never push each other
                     let t = aIsStruct ? a : b;   // the structure
                     let u = aIsStruct ? b : a;   // the unit
+                    if (t.teslaHidden) continue; // troops walk right over a buried Tesla
                     let uHb = this.getHitboxRadius(u);
 
                     if (u.tm !== t.tm) {
@@ -1517,8 +1519,28 @@ export default class GameEngine {
                     let bMove = (bHop && !aHop) ? 0 : Math.min(overlap * (a.mass / total), 5);
                     if (aHop && !bHop) bMove = Math.min(overlap, 5);
                     if (bHop && !aHop) aMove = Math.min(overlap, 5);
-                    a.x += nx * aMove; a.y += ny * aMove;
-                    b.x -= nx * bMove; b.y -= ny * bMove;
+                    // NEVER SLOW DOWN: a walking troop is never shoved BACKWARD along its
+                    // own heading by a jostle — the braking component of the push is
+                    // rotated into a sideways SLIDE (same magnitude), so crowds flow
+                    // around each other instead of grinding to a crawl.
+                    const slide = (u, px, py) => {
+                        if (!(u instanceof Troop) || u.atk || !u.moveTarget) return [px, py];
+                        let hx = u.moveTarget.x - u.x, hy = u.moveTarget.y - u.y;
+                        let hl = Math.hypot(hx, hy);
+                        if (hl < 0.05) return [px, py];
+                        hx /= hl; hy /= hl;
+                        const along = px * hx + py * hy;
+                        if (along >= 0) return [px, py]; // not braking it
+                        let sx = px - along * hx, sy = py - along * hy;
+                        let sl = Math.hypot(sx, sy);
+                        if (sl < 0.03) { sx = -hy; sy = hx; sl = 1; } // dead-on: pick a side
+                        const mag = Math.hypot(px, py) / sl;
+                        return [sx * mag, sy * mag];
+                    };
+                    const [axp, ayp] = slide(a, nx * aMove, ny * aMove);
+                    const [bxp, byp] = slide(b, -nx * bMove, -ny * bMove);
+                    a.x += axp; a.y += ayp;
+                    b.x += bxp; b.y += byp;
 
                     // Plus a GENTLE sideways nudge in ONE narrow case: a heavier-or-equal
                     // MOVING troop works a LOCKED (attacking, planted) troop out of its lane

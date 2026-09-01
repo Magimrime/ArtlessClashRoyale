@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.5.2** — here's the whole road there.
+We're currently on **26.5.4** — here's the whole road there.
 
 ---
 
@@ -85,6 +85,8 @@ A major on request: not a new coat of paint this time, but the deepest gameplay-
   - **Two test maps** in the sandbox: **3 Bridges** (an extra middle crossing) and **Fortress** (the river becomes a **moat** hugging the enemy base — one central bridge is the only way in).
 - **26.5.1** — Polish on the big one. **Tesla** is now a smaller **blue Inferno-style circle**; the **Bomb Tower** hides its bomb (plain stone circle); the **Tombstone** is **just a rock with a cross**; the **Balloon**'s envelope is a true **circle**; **Elite Barbarians** stand apart properly; the **Royal Recruits card** shows a representative **three at full size** (the real placement is still the whole lane). And the cheat got sneakier: the Settings screen hides a **small diamond icon** in the corner — click it to be offered the cheat; the **DEBUG MENU button only exists once you've actually cheated**.
 - **26.5.2** — Formation truth, round two. **Minion Horde** deploys in **two neat rows of three**, **Zappies three abreast**, **Barbarians in a pentagon ring**; **Wall Breakers and Three Musketeers spawn close together** — their centre-placement lane split is pure **pathfinding**, not spawn spread. The **Tombstone looks like any other tower** (standard square, small cross on the face) and now **spawns Skeletons in pairs** (2 every 7s, the real cadence). And **Zap looks properly cool** when placed: the strike **forks** into side-bolts with a glow at the strike point, and the impact pops an **expanding electric ring with radial crackle** (High graphics).
+- **26.5.3** — **Tesla zaps with CHAINED lightning** like the Electro Spirit — the current leaps from the coil to its target and can hop to two more nearby enemies. And the **Electro Spirit's chain is visible again**: the chain now starts at its origin point, so even a single-target zap draws the current (before, one target meant zero line segments and nothing rendered).
+- **26.5.4** — The realism batch. **Tesla goes UNDERGROUND** when it has no target — a closed hatch that **can't be hit, targeted, or even walked around** (troops walk right over it; it pops up when something enters range, and its lifetime still ticks down). **Troops never slow down**: a jostle from another unit can no longer brake a walker — the push is rotated into a sideways **slide**, so crowds flow instead of grinding. **Tombstone is regular building size.** **Firecracker's range** trimmed to the real 6 tiles. Formation spacing fixed so **nobody spawns touching** (Wall Breakers, Three Musketeers, Elite Barbarians).
 
 ---
 

@@ -76,7 +76,9 @@ export default class Proj {
         this.chainDmg = dmg;
         this.chainStep = 0;
         this.chainMax = 9;
-        this.chainTargets = first ? [first] : [];
+        // The chain STARTS at its origin (the spirit's burst / the Tesla coil) so the
+        // current is visible even against a single target — one node draws nothing.
+        this.chainTargets = first ? [{ x: this.x, y: this.y, fly: false, isChainOrigin: true }, first] : [];
         this.life = 80;
         return this;
     }
@@ -230,7 +232,7 @@ export default class Proj {
                 if (!this.chainHit.includes(c)) { c.hp -= this.chainDmg; c.st = Math.max(c.st, 16); this.chainHit.push(c); } // slightly longer stun
                 let next = null, nMin = 85; // shorter chain reach
                 for (let e of g.ents) {
-                    if (e.tm !== this.tm && e.hp > 0 && !this.chainHit.includes(e) && c.dist(e) < nMin) { nMin = c.dist(e); next = e; }
+                    if (e.tm !== this.tm && e.hp > 0 && !e.teslaHidden && !this.chainHit.includes(e) && c.dist(e) < nMin) { nMin = c.dist(e); next = e; }
                 }
                 this.chainCurrent = next;
                 if (next) this.chainTargets.push(next); else this.life = Math.min(this.life, 8);
