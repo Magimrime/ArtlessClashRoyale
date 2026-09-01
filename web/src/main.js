@@ -1516,6 +1516,28 @@ class Main {
                     ctx.lineCap = "butt"; ctx.lineWidth = 1;
                     return;
                 }
+                if (p.firework) {
+                    // The BIG firework rocket: pink shell, white core, sparkle trail.
+                    ctx.strokeStyle = "rgba(255,158,203,0.55)"; ctx.lineWidth = 3; ctx.lineCap = "round";
+                    ctx.beginPath(); ctx.moveTo(p.lx, p.ly); ctx.lineTo(p.x, p.y); ctx.stroke();
+                    ctx.lineCap = "butt"; ctx.lineWidth = 1;
+                    ctx.fillStyle = "#ff6fae";
+                    ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = "#ffffff";
+                    ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill();
+                    return;
+                }
+                if (p.spark) {
+                    // A burst spark: tiny bright bullet with a short trail.
+                    ctx.strokeStyle = "rgba(255,217,236,0.7)"; ctx.lineWidth = 2; ctx.lineCap = "round";
+                    ctx.beginPath();
+                    ctx.moveTo(p.x - Math.cos(p.sparkAng) * 7, p.y - Math.sin(p.sparkAng) * 7);
+                    ctx.lineTo(p.x, p.y); ctx.stroke();
+                    ctx.lineCap = "butt"; ctx.lineWidth = 1;
+                    ctx.fillStyle = "#ffd9ec";
+                    ctx.beginPath(); ctx.arc(p.x, p.y, 2.6, 0, Math.PI * 2); ctx.fill();
+                    return;
+                }
                 if (p.barrel) {
                     ctx.fillStyle = "#643200";
                 } else if (p.fireArea) {
@@ -1850,7 +1872,7 @@ class Main {
                     let r = e.rad + 5;
                     // The Balloon's body is its ENVELOPE, drawn higher and larger than the
                     // nominal centre — put the ring there so it wraps the balloon, not the air.
-                    if (e.c && e.c.n === "Balloon") { let R = e.rad * 0.88 * 1.1; cy -= R * 0.35; r = R + 5; }
+                    if (e.c && e.c.n === "Balloon") { let R = e.rad * 0.88 * 1.3; cy -= R * 0.35; r = R + 5; } // match the bigger envelope
                     ctx.fillStyle = "rgba(128, 0, 128, 0.4)";
                     ctx.beginPath(); ctx.arc(e.x, cy, r, 0, Math.PI * 2); ctx.fill();
                     ctx.strokeStyle = "magenta";
@@ -2453,7 +2475,8 @@ class Main {
             // A PLAIN balloon in the team's colour (blue = yours, red = enemy): a blank
             // round envelope over a simple rectangle basket that peeks out underneath —
             // the balloon covers the basket's top. No ropes, seams, or decorations.
-            let R = radius;
+            // Drawn a bit larger than its hitbox so it reads properly balloon-sized.
+            let R = radius * 1.3;
             let ey = y - R * 0.35;                       // envelope centre (raised up)
             let bw = R * 0.62, bh = R * 0.85;
             // basket FIRST so the envelope overlaps it
@@ -2907,7 +2930,7 @@ class Main {
         else if (["Barbarians", "Elite Barbarians", "Royal Recruits"].includes(n)) m = 12;
         else if (n === "Mega Knight" || n === "P.E.K.K.A") m = 20;
         else if (n === "Sparky" || n === "Bowler") m = 18;
-        else if (n === "Balloon") m = 19;
+        else if (n === "Balloon") m = 24;
         else if (n === "Skeleton Barrel") m = 12;
         else if (n.includes("Dragon") || n === "Lava Hound") m = 16;
         else if (["Giant", "Golem", "Elixir Golem", "Royal Giant", "Electro Giant"].includes(n)) m = 20;
@@ -3156,12 +3179,15 @@ class Main {
         const n = c.n, full = this.ghostLayout(c).length;
         // Witch: the witch in the centre with a few of her skeletons around her feet.
         if (n === "Witch") {
+            // Matches what she actually does now: FOUR skeletons in a ring around her.
             const sr = this.unitRadius({ n: "Skeletons", t: 0 });
+            const ring = r * 1.9;
             return [
-                { dx: 0, dy: -r * 0.2, r },
-                { dx: -r * 1.4, dy: r * 1.25, r: sr, unit: "Skeletons" },
-                { dx: r * 1.4, dy: r * 1.25, r: sr, unit: "Skeletons" },
-                { dx: 0, dy: r * 1.75, r: sr, unit: "Skeletons" },
+                { dx: 0, dy: 0, r },
+                { dx: ring, dy: 0, r: sr, unit: "Skeletons" },
+                { dx: -ring, dy: 0, r: sr, unit: "Skeletons" },
+                { dx: 0, dy: ring, r: sr, unit: "Skeletons" },
+                { dx: 0, dy: -ring, r: sr, unit: "Skeletons" },
             ];
         }
         // Royal Recruits' real line is the whole lane wide — scaled onto a card the

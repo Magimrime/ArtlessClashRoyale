@@ -83,6 +83,18 @@ export default class Proj {
         return this;
     }
 
+    // Firecracker: the big rocket (bursts on its target into sparks)…
+    asFirework() { this.firework = true; return this; }
+    // …and one of the five SPARKS: an unlocked bullet flying a fixed heading that
+    // PENETRATES — it damages every enemy it passes through (once each) and keeps going.
+    asSpark(ang) {
+        this.spark = true;
+        this.sparkAng = ang;
+        this.sparkHit = [];
+        this.life = 15;
+        return this;
+    }
+
     asBarbBarrel() { this.barbBarrel = true; return this; }
     asMiniFireball() { this.miniFireball = true; return this; }
     asHealEffect() { this.isHeal = true; return this; }
@@ -247,6 +259,23 @@ export default class Proj {
             if (this.chainHit.length >= this.chainMax) this.life = Math.min(this.life, 30);
             return;
         }
+        if (this.spark) {
+            this.life--;
+            this.x += Math.cos(this.sparkAng) * this.spd;
+            this.y += Math.sin(this.sparkAng) * this.spd;
+            // PENETRATING: hit everything it passes through, once each, and fly on.
+            for (let e of g.ents) {
+                if (e.tm === this.tm || e.hp <= 0) continue;
+                if (e.isGhosted || e.teslaHidden || e.sjT > 0) continue;
+                if (this.sparkHit.includes(e)) continue;
+                if (Math.hypot(this.x - e.x, this.y - (e.y - (e.fly ? 22 : 0))) < 6 + g.getHitboxRadius(e)) {
+                    e.hp -= this.dmg;
+                    this.sparkHit.push(e);
+                }
+            }
+            return;
+        }
+
         if (this.chainTargets || this.barbBreak || this.isIceNova || this.shockBeams || this.isShockwave || this.isPhantom || this.isElectricRing) {
             this.life--; // brief visual-only flashes count down and vanish
             return;
@@ -548,6 +577,20 @@ export default class Proj {
 
         if (d < this.spd) {
             this.life = 0;
+            if (this.firework) {
+                // FIREWORK BURST: the rocket pops on its target (full damage), then
+                // FIVE sparks fly ON THROUGH in a cone, penetrating troops behind it.
+                if (this.t) this.t.hp -= this.dmg;
+                for (let i = -2; i <= 2; i++) {
+                    let sp = new Proj(this.x, this.y, this.x, this.y, null, 5, false, 4, Math.round(this.dmg / 3), this.tm, false).asSpark(a + i * 0.3);
+                    if (this.t) sp.sparkHit.push(this.t); // the target already took the rocket
+                    g.projs.push(sp);
+                }
+                let flash = new Proj(this.x, this.y, this.x, this.y, null, 0, false, 24, 0, this.tm, false).asFireArea();
+                flash.flashCol = "#ff9ecb";
+                g.projs.push(flash);
+                return;
+            }
             if (this.delayedSplash) {
                 let splash = new Proj(this.x, this.y, this.x, this.y, null, 0, true, this.splashRad || 24, this.dmg, this.tm, false);
                 if (this.isLightBlue) splash.asLightBlue();

@@ -627,14 +627,11 @@ export default class Troop extends Entity {
                 // melee jab instead of a shot (Season-77 Three Musketeers rework).
                 this.lk.hp -= 314;
             } else if (this.c.n === "Firecracker") {
-                // A rocket that BURSTS into sparks where it lands — and the recoil
-                // kicks her backward (her signature hop).
-                let p = new Proj(this.x, srcY, this.lk.x, this.lk.y, this.lk, 7, false, 5, this.c.d, this.tm, false);
-                p.delayedSplash = true;
-                p.spl = false;
-                p.life = 100;
-                p.splashRad = 28;
-                p.flashCol = "#ffb0c8";
+                // A BIG firework rocket — it pops on its target and splits into five
+                // smaller sparks that fly on through, PENETRATING every troop in their
+                // path. The recoil still kicks her backward (her signature hop).
+                let p = new Proj(this.x, srcY, this.lk.x, this.lk.y, this.lk, 6, false, 7, this.c.d, this.tm, false).asFirework();
+                p.flashCol = "#ff9ecb";
                 g.projs.push(p);
                 this.applyKnockback(Math.atan2(this.y - this.lk.y, this.x - this.lk.x), 22);
             } else if (this.c.n === "Goblin Demolisher") {
