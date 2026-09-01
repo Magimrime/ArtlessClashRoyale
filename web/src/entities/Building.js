@@ -6,6 +6,9 @@ export default class Building extends Entity {
     constructor(t, x, y, c) {
         let radius = (c.n === "Cannon") ? 15 : 20;
         if (c.n === "Crate") radius = 14;
+        if (c.n === "Tesla") radius = 16;
+        if (c.n === "Bomb Tower") radius = 17;
+        if (c.n === "Tombstone") radius = 14;
         super(0, t, x, y, c.hp, radius, 10000, false, false);
         this.c = c;
         this.cd = 0;
@@ -30,6 +33,19 @@ export default class Building extends Entity {
             if (this.infernoTick >= 780) {
                 g.giveElixir(this.tm, 1.0);
                 this.infernoTick = 0;
+            }
+            return;
+        }
+
+        // Tombstone: a spawner — one Skeleton every rt ticks (3.5s), alternating sides.
+        if (this.c.n === "Tombstone") {
+            this.infernoTick++;
+            if (this.infernoTick >= this.c.rt) {
+                this.infernoTick = 0;
+                this.spawnFlip = !this.spawnFlip;
+                const fx = this.x + (this.spawnFlip ? -14 : 14);
+                const fy = this.y + (this.tm === 0 ? -16 : 16); // toward the enemy
+                g.spawnLoose(this.tm, "Skeletons", [[fx, fy]]);
             }
             return;
         }
@@ -75,6 +91,14 @@ export default class Building extends Entity {
                 let mult = this.getInfernoMultiplier(stage);
                 let dmg = this.c.d * mult;
                 this.lk.hp -= dmg;
+            } else if (this.c.n === "Bomb Tower") {
+                // Lobbed bomb: slower shot that SPLASHES where it lands.
+                let p = new Proj(this.x, this.y, this.lk.x, this.lk.y, this.lk, 5, false, 4, this.c.d, this.tm, false);
+                p.delayedSplash = true;
+                p.spl = false;
+                p.life = 100;
+                p.splashRad = 32;
+                g.projs.push(p);
             } else {
                 g.projs.push(new Proj(this.x, this.y, this.lk.x, this.lk.y, this.lk, 8, false, 4, this.c.d, this.tm, false));
             }
@@ -91,6 +115,12 @@ export default class Building extends Entity {
             g.giveElixir(this.tm, 1.0);
         } else if (this.c.n === "Crate") {
             g.handleCrateDeath(this);
+        } else if (this.c.n === "Bomb Tower") {
+            // Fused death bomb (real L11: 222 area damage after ~1.5s).
+            g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 52, this.c.d, this.tm, false).asDeathBomb());
+        } else if (this.c.n === "Tombstone") {
+            // The stone cracks open: 4 Skeletons burst out.
+            g.spawnLoose(this.tm, "Skeletons", [[this.x - 12, this.y - 10], [this.x + 12, this.y - 10], [this.x - 12, this.y + 10], [this.x + 12, this.y + 10]]);
         }
     }
 }

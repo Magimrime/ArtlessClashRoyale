@@ -142,7 +142,19 @@ export default class GameEngine {
             // Skeleton Barrel: real L11 stats — 625 hp, no attack of its own; d=105 is
             // the area DEATH damage when it pops, dropping 7 Skeletons (see Troop.js).
             // Fast flying building-targeter (same engine speed as the other Fast fliers).
-            new Card("Skeleton Barrel", 3, 625, 105, 1.0, 14, 1, 100, 78, 150, true, false)
+            new Card("Skeleton Barrel", 3, 625, 105, 1.0, 14, 1, 100, 78, 150, true, false),
+            // Three more real buildings (real L11 stats):
+            // Tesla — 954 hp, 190 dmg, 1.1s hit speed, 5.5-tile range, hits air, 35s life.
+            new Card("Tesla", 4, 954, 190, 0, 165, 3, 2100, 66, 180, false, true),
+            // Bomb Tower — 1059 hp, 222 splash dmg, 1.6s, 6 tiles, ground only, 25s life;
+            // drops a fused death bomb (222) when it goes down (see Building.die).
+            new Card("Bomb Tower", 4, 1059, 222, 0, 180, 3, 1500, 96, 200, false, false),
+            // Tombstone — 422 hp, spawns a Skeleton every 3.5s (rt=210 is the spawn
+            // interval), 4 more burst out on death, 40s life.
+            new Card("Tombstone", 3, 422, 0, 0, 0, 3, 2400, 210, 0, false, false),
+            // Firecracker — real L11: 3 elixir, 300 hp, 168 splash dmg, 3s hit speed,
+            // 6-tile range, Fast, hits air; her shot kicks HER backward (see Troop.js).
+            new Card("Firecracker", 3, 300, 168, 0.825, 180, 0, 100, 180, 150, false, true)
         ];
 
         // Role tags drive the enemy AI's counter logic. (Stats above are already
@@ -226,6 +238,11 @@ export default class GameEngine {
         // Reset world-edit geometry (side / rules prefs survive map switches).
         this.RIV_Y = 405;
         this.bridgeXs = [this.W / 4, this.W * 3 / 4];
+        // '3 Bridges': an extra crossing straight up the middle.
+        if (this.sandboxMap === 'bridges3') this.bridgeXs = [this.W / 6, this.W / 2, this.W * 5 / 6];
+        // 'Fortress': the river is a MOAT hugging the enemy base — their towers sit
+        // behind it and the only way in is one central bridge.
+        if (this.sandboxMap === 'fortress') { this.RIV_Y = 250; this.bridgeXs = [this.W / 2]; }
         if (this.sandboxSide !== 0 && this.sandboxSide !== 1) this.sandboxSide = 0; // always a chosen side
         this.p1 = new Player(0);
         this.p2 = new Player(1);
@@ -254,7 +271,7 @@ export default class GameEngine {
                 this.t1K.noTurret = true; this.t2K.noTurret = true;
             }
         }
-        if (this.sandboxMap === 'default') {
+        if (['default', 'bridges3', 'fortress'].includes(this.sandboxMap)) {
             this.t1L = new Tower(0, this.W / 4, 645, false); this.ents.push(this.t1L);
             this.t1R = new Tower(0, this.W * 3 / 4, 645, false); this.ents.push(this.t1R);
             this.t2L = new Tower(1, this.W / 4, 165, false); this.ents.push(this.t2L);
@@ -790,12 +807,20 @@ export default class GameEngine {
     }
 
     // Greedy string-pulling: keep the farthest waypoint with a clear straight line.
+    // The line is tested as a CORRIDOR (centre + two side offsets) so the pulled
+    // segment leaves room for the troop's body — a rope pulled tight against a
+    // tower corner would otherwise shove the walker off its own path.
     _simplifyPath(sx, sy, pts, pass, T) {
         const clear = (ax, ay, bx, by) => {
-            let n = Math.ceil(Math.hypot(bx - ax, by - ay) / 10);
+            let dx = bx - ax, dy = by - ay;
+            let len = Math.hypot(dx, dy) || 1;
+            let px = -dy / len * 9, py = dx / len * 9; // perpendicular half-width
+            let n = Math.ceil(len / 10);
             for (let i = 1; i < n; i++) {
-                let x = ax + (bx - ax) * i / n, y = ay + (by - ay) * i / n;
+                let x = ax + dx * i / n, y = ay + dy * i / n;
                 if (!pass(Math.floor(x / T), Math.floor(y / T))) return false;
+                if (!pass(Math.floor((x + px) / T), Math.floor((y + py) / T))) return false;
+                if (!pass(Math.floor((x - px) / T), Math.floor((y - py) / T))) return false;
             }
             return true;
         };
@@ -949,6 +974,38 @@ export default class GameEngine {
     // cards so the units head to OPPOSITE lanes, like real CR.
     isMidSplit(x) { return Math.abs(x - this.W / 2) <= 30; }
 
+    // Deploy FORMATIONS — the single source of truth for where a card's units
+    // stand, used both when PLACING and for the card face art (so the card shows
+    // exactly the formation you'll get). Offsets are px from the placement point.
+    getFormation(n) {
+        if (!this._formations) {
+            const spiral = [];
+            for (let i = 0; i < 15; i++) {
+                let ang = i * 2.39996, rr = Math.sqrt((i + 0.5) / 15) * 48;
+                spiral.push([Math.cos(ang) * rr, Math.sin(ang) * rr]);
+            }
+            this._formations = {
+                "Archers": [[-8, 0], [8, 0]],
+                "Spear Goblins": [[-15, 0], [15, 0], [0, 15]],
+                "Wall Breakers": [[-15, 0], [15, 0]],
+                "Skeletons": [[0, -8], [-7, 6.5], [7, 6.5]],
+                "Goblins": [[0, -12], [-12, 0], [12, 0], [0, 12]],
+                "Minions": [[0, -10], [-10, 10], [10, 10]],
+                "Minion Horde": [[-22, -12], [0, -16], [22, -12], [-14, 12], [14, 12], [0, 4]],
+                "Skeleton Army": spiral,
+                "Bats": [[-18, -8], [0, -14], [18, -8], [-10, 10], [10, 10]],
+                "Barbarians": [[-20, -11], [20, -11], [0, 0], [-20, 13], [20, 13]],
+                "Elite Barbarians": [[-10, 0], [10, 0]],
+                "Zappies": [[-10, 0], [10, 0], [0, 10]],
+                "Royal Hogs": [[-30, 0], [-10, 0], [10, 0], [30, 0]],
+                // Royal Recruits guard the WHOLE lane width.
+                "Royal Recruits": [[-225, 0], [-135, 0], [-45, 0], [45, 0], [135, 0], [225, 0]],
+                "Three Musketeers": [[-26, 0], [26, 0], [0, 18]],
+            };
+        }
+        return this._formations[n] || null;
+    }
+
     // Assign lanes to the LAST `lanes.length` spawned troops (0 = left, 1 = right).
     // The units keep their normal spawn formation — the assignment makes them
     // PATHFIND to their lane's bridge and tower instead.
@@ -1088,83 +1145,38 @@ export default class GameEngine {
                 else { p.life = 26; } // any other placed spell still gets a short wind-up
                 this.projs.push(p);
             }
-        } else if (c.n === "Archers") {
-            // Two archers almost touching — just outside the collision radius so they
-            // don't immediately snap apart, leaving a tiny visible gap. Centre
-            // placement SPLITS them via lane-assigned pathfinding (one per lane).
-            this.ents.push(new Troop(tm, x - 8, y, c));
-            this.ents.push(new Troop(tm, x + 8, y, c));
-            if (this.isMidSplit(x)) this.splitLanes([0, 1]);
-        } else if (["Spear Goblins", "Wall Breakers"].includes(c.n)) {
-            this.ents.push(new Troop(tm, x - 15, y, c));
-            this.ents.push(new Troop(tm, x + 15, y, c));
-            if (c.n.includes("Spear")) this.ents.push(new Troop(tm, x, y + 15, c));
-            if (this.isMidSplit(x)) this.splitLanes(c.n.includes("Spear") ? [0, 1, x < this.W / 2 ? 0 : 1] : [0, 1]);
-        } else if (c.n === "Skeletons") {
-            // Tight triangle (same per-skeleton spacing as Skeleton Army).
-            const S = 13;
-            this.ents.push(new Troop(tm, x, y - S * 0.6, c));
-            this.ents.push(new Troop(tm, x - S * 0.55, y + S * 0.5, c));
-            this.ents.push(new Troop(tm, x + S * 0.55, y + S * 0.5, c));
-            if (this.isMidSplit(x)) this.splitLanes([x < this.W / 2 ? 0 : 1, 0, 1]);
-        } else if (c.n === "Goblins") {
-            // Four goblins in a tight diamond.
-            this.ents.push(new Troop(tm, x, y - 12, c));
-            this.ents.push(new Troop(tm, x - 12, y, c));
-            this.ents.push(new Troop(tm, x + 12, y, c));
-            this.ents.push(new Troop(tm, x, y + 12, c));
-            if (this.isMidSplit(x)) this.splitLanes([0, 0, 1, 1]);
-        } else if (c.n === "Minions") {
-            this.ents.push(new Troop(tm, x, y - 10, c));
-            this.ents.push(new Troop(tm, x - 10, y + 10, c));
-            this.ents.push(new Troop(tm, x + 10, y + 10, c));
-            if (this.isMidSplit(x)) this.splitLanes([x < this.W / 2 ? 0 : 1, 0, 1]);
-        } else if (c.n === "Minion Horde") {
-            for (let i = 0; i < 6; i++) {
-                let t = new Troop(tm, x + this.random() * 50 - 25, y + this.random() * 50 - 25, this.getCard("Minions"));
-                if (c.isEvo) t.evoGhostOnHit = true; // EVO: ghosts for 3s whenever it's damaged
-                this.ents.push(t);
-            }
-        } else if (c.n === "Skeleton Army") {
-            // EVO: a shielded GENERAL spawns at the BACK (toward home). Every army
-            // skeleton is tagged to it — they rise as ghosts when killed and only truly
-            // die once the general falls (handled in the death pass).
+        } else if (this.getFormation(c.n)) {
+            // FORMATION cards deploy in their real shapes (shared with the card art —
+            // getFormation is the single source of truth). Special pieces ride on top:
+            //  - EVO Skeleton Army spawns its shielded GENERAL at the back.
+            //  - EVO Minion Horde minions ghost when damaged; EVO Royal Hogs start airborne.
+            //  - Three Musketeers actually deploy ELITE Musketeers.
+            // Centre placement splits the group BY PATHFINDING: each unit gets a lane
+            // from the side it stands on (ties alternate) and walks its own lane — the
+            // formation itself is never stretched to fake the split.
             let general = null;
-            if (c.isEvo) {
+            if (c.n === "Skeleton Army" && c.isEvo) {
                 let gy = y + (tm === 0 ? 30 : -30);
                 general = new Troop(tm, x, gy, this.getCard("Skeletons"));
                 general.isSkeleGeneral = true;
                 general.skeleArmyGeneral = general; // self-ref keeps the kill-check uniform
-                general.maxShield = 180; general.shield = 180; // the general's shield (a bit weaker)
-                general.rad = Math.round(general.rad * 1.45); general.mass = general.rad; // a little bigger
+                general.maxShield = 180; general.shield = 180;
+                general.rad = Math.round(general.rad * 1.45); general.mass = general.rad;
                 this.ents.push(general);
             }
-            // Spread the 15 skeletons across a wide disk (like the real game).
-            for (let i = 0; i < 15; i++) {
-                let ang = i * 2.39996;
-                let rr = Math.sqrt((i + 0.5) / 15) * 48;
-                let s = new Troop(tm, x + Math.cos(ang) * rr, y + Math.sin(ang) * rr, this.getCard("Skeletons"));
-                if (general) s.skeleArmyGeneral = general;
-                this.ents.push(s);
-            }
-        } else if (c.n === "Bats") {
-            // Five bats in a fixed formation (3 over 2), not a random scatter.
-            for (const [dx, dy] of [[-18, -8], [0, -14], [18, -8], [-10, 10], [10, 10]])
-                this.ents.push(new Troop(tm, x + dx, y + dy, c));
-        } else if (c.n === "Barbarians") {
-            // Five barbarians in a tight knot (so a Fireball catches them all — and
-            // they all just barely survive it).
-            for (const [dx, dy] of [[-20, -11], [20, -11], [0, 0], [-20, 13], [20, 13]])
-                this.ents.push(new Troop(tm, x + dx, y + dy, c));
-        } else if (c.n === "Elite Barbarians") {
-            this.ents.push(new Troop(tm, x - 10, y, c));
-            this.ents.push(new Troop(tm, x + 10, y, c));
-            if (this.isMidSplit(x)) this.splitLanes([0, 1]);
-        } else if (c.n === "Zappies") {
-            this.ents.push(new Troop(tm, x - 10, y, c));
-            this.ents.push(new Troop(tm, x + 10, y, c));
-            this.ents.push(new Troop(tm, x, y + 10, c));
-            if (this.isMidSplit(x)) this.splitLanes([0, 1, x < this.W / 2 ? 0 : 1]);
+            const unitCard =
+                (c.n === "Three Musketeers") ? this.getCard("Elite Musketeer") :
+                    (c.n === "Minion Horde") ? this.getCard("Minions") :
+                        (c.n === "Skeleton Army") ? this.getCard("Skeletons") : c;
+            const split = this.isMidSplit(x);
+            this.getFormation(c.n).forEach(([dx, dy], i) => {
+                let t = new Troop(tm, x + dx, y + dy, unitCard);
+                if (c.n === "Minion Horde" && c.isEvo) t.evoGhostOnHit = true; // EVO: ghosts for 3s whenever damaged
+                if (c.n === "Royal Hogs" && c.isEvo) { t.fly = true; t.evoFlyHog = true; } // EVO: airborne until first hit
+                if (general) t.skeleArmyGeneral = general;
+                if (split) t.laneAssign = dx < -0.5 ? 0 : (dx > 0.5 ? 1 : i % 2);
+                this.ents.push(t);
+            });
         } else if (c.n === "Mega Knight") {
             this.ents.push(new Troop(tm, x, y, c));
             for (let e of this.ents)
@@ -1175,29 +1187,31 @@ export default class GameEngine {
         } else if (c.t === 3) {
             this.ents.push(new Building(tm, x, y, c));
             this.buildingGen = (this.buildingGen || 0) + 1; // a freshly placed building lets troops re-pick a building target
-        } else if (c.n === "Royal Hogs") {
-            for (const ox of [-30, -10, 10, 30]) {
-                let t = new Troop(tm, x + ox, y, c);
-                if (c.isEvo) { t.fly = true; t.evoFlyHog = true; } // EVO: start AIRBORNE, crash down on the first hit
-                this.ents.push(t);
-            }
-            // Centre placement: two hogs pathfind to each lane.
-            if (this.isMidSplit(x)) this.splitLanes([0, 0, 1, 1]);
-        } else if (c.n === "Three Musketeers") {
-            // Deploys 3 ELITE Musketeers (ranged + bayonet melee). Centre placement
-            // splits them 1 / 2 between the lanes via pathfinding, like the real card.
-            const em = this.getCard("Elite Musketeer");
-            this.ents.push(new Troop(tm, x - 26, y, em));
-            this.ents.push(new Troop(tm, x + 26, y, em));
-            this.ents.push(new Troop(tm, x, y + 18, em));
-            if (this.isMidSplit(x)) this.splitLanes([0, 1, x < this.W / 2 ? 0 : 1]);
-        } else if (c.n === "Royal Recruits") {
-            let offsets = [-150, -90, -30, 30, 90, 150];
-            for (let off of offsets) {
-                this.ents.push(new Troop(tm, x + off, y, c));
-            }
         } else {
             this.ents.push(new Troop(tm, x, y, c));
+        }
+    }
+
+    // DEATH PREDICTION: an entity's hp minus every projectile already flying at it.
+    // Attackers use this to stop shooting (and retarget) when the target is as good
+    // as dead — no more three archers all wasting shots on one doomed skeleton.
+    predictedHp(e) {
+        let hp = e.hp + (e.shield || 0);
+        for (const p of this.projs) {
+            if (p.t === e && p.dmg > 0 && p.tm !== e.tm) hp -= p.dmg;
+        }
+        return hp;
+    }
+
+    // Spawn loose units at explicit points (spawner buildings, death bursts).
+    // Combat-ready instantly, like other death-spawns.
+    spawnLoose(tm, cardName, pts) {
+        const c = this.getCard(cardName);
+        if (!c) return;
+        for (const [px, py] of pts) {
+            let t = new Troop(tm, px, py, c);
+            t.deployTime = 0;
+            this.ents.push(t);
         }
     }
 
@@ -1636,7 +1650,11 @@ export default class GameEngine {
                 // nothing left to strike back with.
                 if (e instanceof Troop && !e.exploded) {
                     if (e.dyingTime > 0) {
-                        if (--e.dyingTime <= 0) { e.die(this); this.ents.splice(i, 1); i--; }
+                        if (--e.dyingTime <= 0) {
+                            // Cosmetic death hook (the renderer's fall-over animation).
+                            if (this.onUnitDied && !e.isGhosted && !e.isClone) this.onUnitDied(e);
+                            e.die(this); this.ents.splice(i, 1); i--;
+                        }
                     } else {
                         e.dyingTime = 3;
                     }

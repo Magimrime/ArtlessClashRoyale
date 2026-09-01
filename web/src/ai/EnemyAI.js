@@ -67,12 +67,16 @@ export default class EnemyAI {
     update() {
         if (this.g.over) return;
         this.aiTick++;
-        if (this.aiTick < 120) return;            // brief opening pause
+        const s = this.skill();
+        if (this.aiTick < 200 - 100 * s) return;  // opening pause: rookies dawdle
         if (this.actCd > 0) { this.actCd--; return; }
-        // Human-like reaction time (~0.1-0.3s): don't instantly counter a card the
-        // moment it's played — re-evaluate at most every 6-18 ticks.
+        // Human-like reaction time, scaled by skill: a sharp opponent re-evaluates
+        // every ~4-10 ticks, a rookie every ~26-45.
         if (this.reactTimer > 0) { this.reactTimer--; return; }
-        this.reactTimer = 6 + Math.floor(this.g.random() * 13);
+        this.reactTimer = Math.round(4 + (1 - s) * 22 + this.g.random() * (6 + (1 - s) * 13));
+
+        // Rookies just... miss things sometimes.
+        if (this.g.random() < (1 - s) * 0.22) { this.actCd = 12; return; }
 
         const mode = this.computeMode();
         const threats = this.getThreats();
@@ -95,7 +99,8 @@ export default class EnemyAI {
         if (this.feedPush()) { this.actCd = 22; return; }
         if (this.p.elx >= (mode === 'pressure' ? 6 : 9) && this.startPush(mode)) { this.actCd = 40; return; }
         // 4) Only dump a card to avoid LEAKING near-full elixir (otherwise save it).
-        if (this.p.elx >= 9.3 && this.forcePlay()) { this.actCd = 18; return; }
+        // A rookie dumps early and wastefully; a sharp opponent only tops off at the cap.
+        if (this.p.elx >= (s < 0.5 ? 7.5 : 9.3) && this.forcePlay()) { this.actCd = 18; return; }
     }
 
     // A push worth a FULL counter: several troops, a tank / win condition, or a Rage
@@ -131,6 +136,7 @@ export default class EnemyAI {
         let cheap = this.affordable().filter(c => c.t === 0 && c.c <= 3);
         if (!cheap.length) return false;
         cheap.sort((a, b) => a.c - b.c);
+        if (!this.canSpend(cheap[0].c, this.significantThreat(threats))) return false;
         let pick = cheap.find(c => c.n === "Skeletons")
             || cheap.find(c => c.tags.includes("Swarm"))
             || cheap[0];
@@ -159,6 +165,24 @@ export default class EnemyAI {
 
     affordable() { return this.p.h.filter(c => c.c <= this.p.elx); }
 
+    // ---- Skill: the opponent gets SMARTER as your win/loss ratio climbs. ----
+    // 0 wins → a rookie (0.3): slow reactions, sloppy counters, leaks elixir early.
+    // Even record → solid (0.65). Undefeated → sharp (1.0): fast, efficient trades,
+    // keeps an elixir reserve, kites tanks with cheap bait.
+    skill() {
+        const w = this.g.gamesWon || 0, p = this.g.gamesPlayed || 0;
+        const ratio = p > 0 ? w / p : 0;
+        return Math.max(0.3, Math.min(1, 0.3 + ratio * 0.7));
+    }
+
+    // Overspend discipline: a skilled opponent keeps a reserve for the answer it
+    // might need next; critical spends (real defense) always go through.
+    canSpend(cost, critical = false) {
+        if (critical) return this.p.elx >= cost;
+        const reserve = this.skill() > 0.55 ? 1.5 : 0;
+        return this.p.elx - cost >= reserve;
+    }
+
     // True if (x,y) is close enough to the player's STILL-ASLEEP king tower that a
     // spell there would wake it. The AI avoids that (an early king is bad for it).
     nearAsleepKing(x, y, dist) {
@@ -168,8 +192,31 @@ export default class EnemyAI {
 
     defend(threats, mode) {
         const threat = threats[0];
+        const s = this.skill();
         let counter = this.pickCounter(threat);
         if (!counter) return false;
+
+        // A rookie sometimes grabs the WRONG card instead of the proper counter.
+        if (this.g.random() < (1 - s) * 0.35) {
+            const sloppy = this.affordable().filter(c => c.t !== 2);
+            if (sloppy.length) counter = sloppy[Math.floor(this.g.random() * sloppy.length)];
+        }
+
+        // A SHARP opponent trades efficiently: against a lone tank / win-con it
+        // KITES with cheap bait (1-3 elixir) instead of dumping a pricey counter —
+        // the tank chases the bait across the middle, away from the tower.
+        if (s > 0.6 && threats.length <= 2 && !threat.fly &&
+            (threat.tags.includes("Tank") || threat.tags.includes("WinCon")) &&
+            counter.c > this.pushValue(threats) - 1) {
+            const bait = this.affordable()
+                .filter(c => c.t === 0 && c.c <= 3)
+                .sort((a, b) => a.c - b.c)[0];
+            if (bait) {
+                const kx = 270 + (threat.x < 270 ? 55 : -55);
+                const ky = Math.max(120, Math.min(this.g.RIV_Y - 30, 210));
+                return this.playAI(bait, kx, ky);
+            }
+        }
 
         // The Log / Barbarian Barrel are only worth it against a GROUND SWARM (several
         // ground troops) — never against air or a single unit. Otherwise swap for a
@@ -294,6 +341,7 @@ export default class EnemyAI {
         if (threats.length && this.significantThreat(threats)) return false;
         const support = this.bestSupport();
         if (!support) return false;
+        if (!this.canSpend(support.c)) return false; // keep the defensive reserve
         // Place behind the tank (toward our king = smaller y), in its lane, clamped to
         // our own side so it spawns safely and walks down screened by the tank.
         let sx = tank.x;

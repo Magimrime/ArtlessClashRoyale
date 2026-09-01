@@ -545,6 +545,14 @@ export default class Troop extends Entity {
             let dashHit = this.isCharging && ["Prince", "Dark Prince", "Royal Recruits"].includes(this.c.n);
             if (this.cd-- > 0 && !isChargedSpecial && !dashHit) return;
 
+            // DEATH PREDICTION: if shots already in flight will finish this target,
+            // HOLD the attack (cd stays spent-ready) — the target pass will move us to
+            // a live enemy instead of overkilling a doomed one. Towers are exempt.
+            if (this.lk && this.lk.constructor.name !== "Tower" && g.predictedHp(this.lk) <= 0) {
+                this.cd = 0;
+                return;
+            }
+
             // Flying units (Baby Dragon, Minions, …) shoot from their VISUAL body,
             // which floats 22px above the ground shadow — not from the shadow.
             let srcY = this.y - (this.fly ? 22 : 0);
@@ -613,6 +621,17 @@ export default class Troop extends Entity {
                 // Bayonet: a ground target inside 1.6 tiles (48px) takes a 314-damage
                 // melee jab instead of a shot (Season-77 Three Musketeers rework).
                 this.lk.hp -= 314;
+            } else if (this.c.n === "Firecracker") {
+                // A rocket that BURSTS into sparks where it lands — and the recoil
+                // kicks her backward (her signature hop).
+                let p = new Proj(this.x, srcY, this.lk.x, this.lk.y, this.lk, 7, false, 5, this.c.d, this.tm, false);
+                p.delayedSplash = true;
+                p.spl = false;
+                p.life = 100;
+                p.splashRad = 28;
+                p.flashCol = "#ffb0c8";
+                g.projs.push(p);
+                this.applyKnockback(Math.atan2(this.y - this.lk.y, this.x - this.lk.x), 22);
             } else if (this.c.n === "Goblin Demolisher") {
                 // Throws a stick of DYNAMITE — it arcs to the target (with a shadow) and
                 // bursts into an area fire blast on landing.
@@ -741,10 +760,14 @@ export default class Troop extends Entity {
                         this.path = g.computePath(this.x, this.y, gx, gy, false);
                     }
                     this._lastGoal = { x: gx, y: gy };
-                    this.pathTick = 9 + Math.floor(g.random() * 8); // stagger recomputes across troops
+                    // Longer, staggered recompute window: constant re-pulls made the
+                    // first waypoint jump around and troops visibly wobbled off their
+                    // line. The goalMoved check above still reacts instantly.
+                    this.pathTick = 18 + Math.floor(g.random() * 10);
                 }
-                // Drop waypoints we've essentially reached.
-                while (this.path.length > 1 && Math.hypot(this.path[0].x - this.x, this.path[0].y - this.y) < 16) {
+                // Drop waypoints we've essentially reached (a touch generous so a fast
+                // troop can't orbit a waypoint it keeps overshooting).
+                while (this.path.length > 1 && Math.hypot(this.path[0].x - this.x, this.path[0].y - this.y) < 20) {
                     this.path.shift();
                 }
                 let wp = this.path[0] || { x: gx, y: gy };
@@ -996,9 +1019,13 @@ export default class Troop extends Entity {
         for (let e of g.ents) {
             if (e === this) continue;
             if (e.constructor.name === "Tower" || e.constructor.name === "Building") {
-                if (e.tm !== this.tm) continue;
+                // ALL structures are solid — including ENEMY towers/buildings (the nav
+                // grid already routes around them; this check must agree, or the
+                // "straight shot" would happily aim THROUGH an enemy tower and leave
+                // the troop grinding against its wall instead of walking the path).
+                if (e === this.currentTarget) continue; // walking INTO our target is the point
                 // An obstacle sitting AT the target (e.g. an enemy attacking our own
-                // tower) isn't really blocking — we CAN reach a unit next to our tower.
+                // tower) isn't really blocking — we CAN reach a unit next to it.
                 if (Math.hypot(e.x - x2, e.y - y2) < e.rad + 25) continue;
                 let hR = e.rad;
                 let myR = g.getHitboxRadius(this);
@@ -1018,7 +1045,7 @@ export default class Troop extends Entity {
         for (let e of g.ents) {
             if (e === this) continue;
             if (e.constructor.name === "Tower" || e.constructor.name === "Building") {
-                if (e.tm !== this.tm) continue;
+                if (e === this.currentTarget) continue; // never route around our own target
                 let hR = e.rad;
                 let safeDist = hR + myHitbox + 5;
                 let d = this.ptSegDist(x1, y1, x2, y2, e.x, e.y);
@@ -1149,6 +1176,7 @@ export default class Troop extends Entity {
         for (let e of g.ents) {
             if (e.tm === this.tm || e.hp <= 0 || isTower(e)) continue;
             if (e.isGhosted) continue; // ghosts are invisible — never targeted
+            if (g.predictedHp(e) <= 0) continue; // already dead-on-arrival — don't pile on
             let isBldg = e.constructor.name === "Building";
             if (this.c.t === 1 && !isBldg && anyEnemyStruct) continue; // building-targeters ignore units WHILE a structure stands
             if (e.fly && !this.air && !e.jp) continue; // a unit mid-LEAP can still be hit by ground troops
@@ -1189,7 +1217,7 @@ export default class Troop extends Entity {
         // leaves sight, or a notably closer one appears (avoids flip-flopping).
         const cur = this.currentTarget;
         const curOK = cur && cur.hp > 0 && cur.rad !== 0 && cur.tm !== this.tm &&
-            !cur.isGhosted &&
+            !cur.isGhosted && g.predictedHp(cur) > 0 &&
             !isTower(cur) && !(cur.fly && !this.air && !cur.jp) && this.dist(cur) <= sight;
 
         // Compare against the tower's EDGE, not its (far) centre — towers are large,

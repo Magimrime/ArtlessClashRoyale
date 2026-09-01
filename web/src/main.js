@@ -77,6 +77,23 @@ class Main {
         try { savedTheme = localStorage.getItem("acr_theme"); } catch (e) { }
         this.themeKey = (savedTheme && this.themes[savedTheme]) ? savedTheme : "ocean";
         this.eng = new GameEngine();
+
+        // Graphics quality: "high" (default) keeps the cosmetic extras — death
+        // animations, the two-tone body finish; "low" strips them for a plain fast look.
+        this.gfxHigh = true;
+        try { this.gfxHigh = localStorage.getItem("acr_gfx") !== "low"; } catch (e) { }
+
+        // Fall-over death animations (cosmetic only — the engine just reports deaths).
+        this.corpses = [];
+        this.eng.onUnitDied = (e) => {
+            if (!this.gfxHigh) return;
+            if (e.fly === undefined) return;
+            this.corpses.push({
+                x: e.x, y: e.y, rad: Math.max(5, (e.rad || 10) * 0.88),
+                name: e.c ? e.c.n : "", life: 36, max: 36
+            });
+            if (this.corpses.length > 80) this.corpses.shift();
+        };
         this.mp = new MultiplayerManager(this.eng); // Pass Engine
 
         this.scale = 1.0;
@@ -134,8 +151,8 @@ class Main {
         this.sbSpeedTicks = [1, 2, 3, 5, 10]; // labelled marks on the slider
         this.sbSpeedDrag = false;
         this.sbSpeedAcc = 0;
-        this.sbMaps = ['default', 'tower', 'open', 'heist', 'river', 'blank'];
-        this.sbMapNames = { default: 'Default', tower: 'Tower', open: 'Open', heist: 'Heist', river: 'River', blank: 'Blank' };
+        this.sbMaps = ['default', 'bridges3', 'fortress', 'tower', 'open', 'heist', 'river', 'blank'];
+        this.sbMapNames = { default: 'Default', bridges3: '3 Bridges', fortress: 'Fortress', tower: 'Tower', open: 'Open', heist: 'Heist', river: 'River', blank: 'Blank' };
 
         this.cardRects = [];
         this.nextCardRect = { x: W - 80, y: H - 110, w: 68, h: 90 }; // recomputed with the card row below
@@ -165,8 +182,10 @@ class Main {
         this.sandboxBtn = { x: W / 2 - 60, y: H / 2 + 220 - 150, w: 120, h: 50 };
         this.settingsBtn = { x: 12, y: 12, w: 46, h: 46 };           // top-left gear → settings screen
         this.settingsBackBtn = { x: W / 2 - 60, y: H - 120, w: 120, h: 50 };
-        // Cheat/debug entry lives on the Settings screen (below the style options).
-        this.settingsCheatBtn = { x: W / 2 - 110, y: H / 2 + 140, w: 220, h: 46 };
+        // Graphics quality row + cheat/debug entry on the Settings screen.
+        this.settingsGfxHighBtn = { x: W / 2 - 110, y: H / 2 + 146, w: 105, h: 40 };
+        this.settingsGfxLowBtn = { x: W / 2 + 5, y: H / 2 + 146, w: 105, h: 40 };
+        this.settingsCheatBtn = { x: W / 2 - 110, y: H / 2 + 202, w: 220, h: 46 };
         // In-battle (single-player) save-and-quit, top-left corner.
         this.saveQuitBtn = { x: 10, y: 10, w: 116, h: 32 };
         // Sandbox bottom bar: row 1 (4 wide buttons) + row 2 (5 narrow buttons),
@@ -458,6 +477,18 @@ class Main {
         } else if (this.state === State.SETTINGS) {
             for (const o of this.settingsStyleRects()) {
                 if (this.contains(o, x, y)) { this.setTheme(o.key); return; }
+            }
+            // Graphics quality toggle (Low strips death animations & body detail).
+            if (this.contains(this.settingsGfxHighBtn, x, y)) {
+                this.gfxHigh = true;
+                try { localStorage.setItem("acr_gfx", "high"); } catch (e) { }
+                return;
+            }
+            if (this.contains(this.settingsGfxLowBtn, x, y)) {
+                this.gfxHigh = false;
+                this.corpses.length = 0;
+                try { localStorage.setItem("acr_gfx", "low"); } catch (e) { }
+                return;
             }
             // Cheat/debug moved here from the title screen's hidden corner.
             if (this.contains(this.settingsCheatBtn, x, y)) {
@@ -989,6 +1020,12 @@ class Main {
                 // Each option is tinted with its OWN field colour so you preview the look.
                 this.drawBtn(o, o.name + (active ? "   ✓" : ""), this.themes[o.key].field);
             }
+            // Graphics quality: High keeps the extras (death animations, two-tone
+            // bodies); Low strips them for a plain, fast look.
+            this.drawCenteredString("Graphics", W / 2, H / 2 + 138, "700 15px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.88)");
+            this.drawBtn(this.settingsGfxHighBtn, "HIGH" + (this.gfxHigh ? " ✓" : ""), this.gfxHigh ? "#3aa17e" : "#5a7ea6");
+            this.drawBtn(this.settingsGfxLowBtn, "LOW" + (!this.gfxHigh ? " ✓" : ""), !this.gfxHigh ? "#3aa17e" : "#5a7ea6");
+
             // Cheat entry (formerly a hidden corner of the title screen). Once used and
             // declined it stays gone; once accepted it becomes the debug menu.
             if (!this.eng.cheatPressed) {
@@ -1468,21 +1505,40 @@ class Main {
                 if (p.barrel) {
                     ctx.fillStyle = "#643200";
                 } else if (p.fireArea) {
+                    // Explosions read as a BURST now: core flash + an expanding, fading
+                    // shockring + radial sparks (Graphics: Low keeps just the flash).
                     let size = p.rad * 2;
+                    const lifeK = Math.max(0, Math.min(1, (p.life || 1) / 6)); // 1 → 0 as it fades
                     if (p.isGray) {
                         ctx.fillStyle = "rgba(100, 100, 100, 0.7)";
                         ctx.beginPath(); ctx.arc(p.x, p.y, size / 2, 0, Math.PI * 2); ctx.fill();
                         ctx.fillStyle = "lightgray";
                         ctx.beginPath(); ctx.arc(p.x, p.y, size / 4, 0, Math.PI * 2); ctx.fill();
                     } else {
-                        // Explosion flash in the spell's colour (fireball orange,
-                        // snowball icy, etc.).
-                        ctx.globalAlpha = 0.75;
+                        ctx.globalAlpha = 0.75 * (0.4 + 0.6 * lifeK);
                         ctx.fillStyle = p.flashCol || "#ff4500";
                         ctx.beginPath(); ctx.arc(p.x, p.y, size / 2, 0, Math.PI * 2); ctx.fill();
                         ctx.globalAlpha = 1.0;
                         ctx.fillStyle = p.flashCol === "#cfeeff" ? "#eaf7ff" : "yellow";
-                        ctx.beginPath(); ctx.arc(p.x, p.y, size / 4, 0, Math.PI * 2); ctx.fill();
+                        ctx.beginPath(); ctx.arc(p.x, p.y, (size / 4) * (0.7 + 0.3 * lifeK), 0, Math.PI * 2); ctx.fill();
+                    }
+                    if (this.gfxHigh) {
+                        const ringR = (size / 2) * (1.15 + (1 - lifeK) * 0.55);
+                        ctx.globalAlpha = 0.85 * lifeK;
+                        ctx.strokeStyle = p.isGray ? "#d8d8d8" : "#ffffff";
+                        ctx.lineWidth = 2.5;
+                        ctx.beginPath(); ctx.arc(p.x, p.y, ringR, 0, Math.PI * 2); ctx.stroke();
+                        // six radial sparks flying outward
+                        ctx.lineWidth = 2; ctx.lineCap = "round";
+                        for (let si = 0; si < 6; si++) {
+                            const a = si * Math.PI / 3 + 0.35;
+                            const r0 = ringR * 0.85, r1 = ringR * (1.0 + 0.25 * (1 - lifeK));
+                            ctx.beginPath();
+                            ctx.moveTo(p.x + Math.cos(a) * r0, p.y + Math.sin(a) * r0);
+                            ctx.lineTo(p.x + Math.cos(a) * r1, p.y + Math.sin(a) * r1);
+                            ctx.stroke();
+                        }
+                        ctx.lineCap = "butt"; ctx.lineWidth = 1; ctx.globalAlpha = 1;
                     }
                 } else if (p.isCannonball) {
                     // Royal Giant: a heavy dark cannonball with a highlight.
@@ -1555,14 +1611,28 @@ class Main {
                     ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.stroke();
                 } else if (p.isRolling) {
                     if (p.isLog) {
+                        if (p.barbBarrelLog) {
+                            // A proper BARREL (not a log): rounded wooden body rolling on
+                            // its side — two dark hoops around it, a stave seam along it.
+                            let w = 42, h = 26, rx = p.x - w / 2, ry = p.y - h / 2;
+                            ctx.fillStyle = (p.tm === 1) ? "#8b3a2e" : "#9c6b3a";
+                            this.drawRoundRect(rx, ry, w, h, h * 0.45, true, false);
+                            ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1.5;
+                            this.drawRoundRect(rx, ry, w, h, h * 0.45, false, false); ctx.stroke();
+                            ctx.strokeStyle = "#4d3018"; ctx.lineWidth = 3;
+                            ctx.beginPath();
+                            ctx.moveTo(p.x - w * 0.22, ry + 1.5); ctx.lineTo(p.x - w * 0.22, ry + h - 1.5);
+                            ctx.moveTo(p.x + w * 0.22, ry + 1.5); ctx.lineTo(p.x + w * 0.22, ry + h - 1.5);
+                            ctx.stroke();
+                            ctx.strokeStyle = "rgba(0,0,0,0.2)"; ctx.lineWidth = 1;
+                            ctx.beginPath(); ctx.moveTo(rx + 4, p.y); ctx.lineTo(rx + w - 4, p.y); ctx.stroke();
+                            return; // skip default circle rendering
+                        }
                         if (p.tm === 1) ctx.fillStyle = "#8b0000"; // Dark Red for Enemy
                         else ctx.fillStyle = "#8b4513"; // Brown for Player
                         // Render as rectangle
-                        let w = p.barbBarrelLog ? 44 : 70;
-                        let h = 20;
+                        let w = 70, h = 20;
                         ctx.fillRect(p.x - w / 2, p.y - h / 2, w, h);
-                        // ctx.strokeStyle = "black";
-                        // ctx.strokeRect(p.x - w / 2, p.y - h / 2, w, h);
                         return; // Skip default circle rendering
                     }
                     ctx.fillStyle = "#640096";
@@ -1657,6 +1727,21 @@ class Main {
                         ctx.beginPath(); ctx.arc(e.x, e.y + baseR * 0.5, baseR * 0.6, 0, Math.PI * 2); ctx.fill();
                     }
                 }
+            }
+
+            // Fallen units: a brief fall-over — the body squashes flat, slumps a touch,
+            // and fades out (like the real game's death animations; Graphics: Low skips these).
+            for (let ci = this.corpses.length - 1; ci >= 0; ci--) {
+                const cp = this.corpses[ci];
+                cp.life--;
+                if (cp.life <= 0) { this.corpses.splice(ci, 1); continue; }
+                const k = cp.life / cp.max; // 1 → 0
+                ctx.globalAlpha = 0.65 * k;
+                ctx.fillStyle = this.getUnitColor(cp.name);
+                ctx.beginPath();
+                ctx.ellipse(cp.x, cp.y + cp.rad * (1 - k) * 0.4, cp.rad * (1 + (1 - k) * 0.4), Math.max(2, cp.rad * k), 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
             }
 
             // Debug Path
@@ -1994,7 +2079,7 @@ class Main {
                 popupBg("World Edit", rects[0].y - 26); // leave room for the info line
                 for (const o of rects) this.drawBtn(o, o.label, o.color);
                 if (!this.eng.sandboxNoRiver) {
-                    this.drawCenteredString(`River y: ${this.eng.RIV_Y} · Bridges: ${Math.round(this.eng.bridgeXs[0])} / ${Math.round(this.eng.bridgeXs[1])}`,
+                    this.drawCenteredString(`River y: ${this.eng.RIV_Y} · Bridges: ${(this.eng.bridgeXs || []).map(b => Math.round(b)).join(' / ')}`,
                         W / 2, rects[0].y - 16, "600 12px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.75)");
                 }
             } else if (this.sandboxSpeedOpen) {
@@ -2139,7 +2224,7 @@ class Main {
             this.drawRoundRect(x - r, y - r, r * 2, r * 2, 8, true, false); // lit top face
             ctx.stroke();
             // Flat two-tone finish: a darker inner border band inside the rim.
-            if (typeof color === "string" && color[0] === "#") {
+            if (this.gfxHigh && typeof color === "string" && color[0] === "#") {
                 const tb = Math.max(3, r * 0.13);
                 ctx.strokeStyle = this.shade(color, -0.12); ctx.lineWidth = tb;
                 this.drawRoundRect(x - r + tb / 2 + 1, y - r + tb / 2 + 1, 2 * r - tb - 2, 2 * r - tb - 2, 6, false, false);
@@ -2216,19 +2301,103 @@ class Main {
             ctx.lineWidth = 1;
         } else if (e instanceof Building) {
             let s = radius;
-            this.extrudeWall(x, y, s, card ? 0 : s * 0.85, color, false); // raised block
-            ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.rect(x - s, y - s, s * 2, s * 2);        // lit top face
-            ctx.fill();
-            ctx.stroke();
-            // Flat two-tone finish: darker inner border band + a lighter top edge.
-            if (typeof color === "string" && color[0] === "#" && s > 8) {
-                const ib = Math.min(5, Math.max(2, s * 0.18));
-                ctx.strokeStyle = this.shade(color, -0.13); ctx.lineWidth = ib;
-                ctx.strokeRect(x - s + ib / 2 + 1, y - s + ib / 2 + 1, 2 * (s - ib / 2 - 1), 2 * (s - ib / 2 - 1));
-                ctx.strokeStyle = this.shade(color, 0.24); ctx.lineWidth = Math.max(1.5, ib * 0.6);
-                ctx.beginPath(); ctx.moveTo(x - s + ib + 2, y - s + ib); ctx.lineTo(x + s - ib - 2, y - s + ib); ctx.stroke();
+            const bn = e.c ? e.c.n : "";
+            // Ease a display angle toward the current target (for aimed buildings).
+            let aim = (e.tm === 0) ? -Math.PI / 2 : Math.PI / 2;
+            if (e.lk && e.lk.hp > 0) aim = Math.atan2(e.lk.y - y, e.lk.x - x);
+            if (e.dispAngle === undefined) e.dispAngle = aim;
+            let da = aim - e.dispAngle;
+            while (da > Math.PI) da -= 2 * Math.PI;
+            while (da < -Math.PI) da += 2 * Math.PI;
+            e.dispAngle += da * 0.15;
+
+            if (bn === "Cannon") {
+                // A round WOODEN base with an actual cannon on top, aimed at its target.
+                ctx.fillStyle = "#8a5c33"; ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.arc(x, y, s * 1.05, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                if (this.gfxHigh) { // plank seams
+                    ctx.strokeStyle = "rgba(0,0,0,0.22)"; ctx.lineWidth = 1.2;
+                    ctx.beginPath();
+                    ctx.moveTo(x - s * 0.95, y - s * 0.35); ctx.lineTo(x + s * 0.95, y - s * 0.35);
+                    ctx.moveTo(x - s * 0.95, y + s * 0.35); ctx.lineTo(x + s * 0.95, y + s * 0.35);
+                    ctx.stroke();
+                }
+                ctx.save(); ctx.translate(x, y); ctx.rotate(e.dispAngle);
+                ctx.fillStyle = "#33373d";                                 // barrel
+                this.drawRoundRect(0, -s * 0.26, s * 1.35, s * 0.52, s * 0.2, true, false);
+                ctx.fillStyle = "#22252a";                                 // muzzle
+                ctx.fillRect(s * 1.12, -s * 0.3, s * 0.24, s * 0.6);
+                ctx.fillStyle = "#4a4e55";                                 // breech
+                ctx.beginPath(); ctx.arc(0, 0, s * 0.48, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
                 ctx.lineWidth = 1;
+            } else if (bn === "Inferno Tower") {
+                // Round base with a glowing core that flares while it burns a target.
+                ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                this.tone2Circle(x, y, s, color);
+                ctx.fillStyle = "#2c2118";
+                ctx.beginPath(); ctx.arc(x, y, s * 0.5, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = e.atk ? "#ffb63c" : "#e06a2c";
+                ctx.beginPath(); ctx.arc(x, y, s * (e.atk ? 0.34 : 0.24), 0, Math.PI * 2); ctx.fill();
+                ctx.lineWidth = 1;
+            } else if (bn === "Tesla") {
+                // Compact pad with a coil rod and an orb that sparks while firing.
+                ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
+                this.drawRoundRect(x - s * 0.9, y - s * 0.9, s * 1.8, s * 1.8, s * 0.45, true, false); ctx.stroke();
+                ctx.strokeStyle = "#3b4148"; ctx.lineWidth = Math.max(2, s * 0.16);
+                ctx.beginPath(); ctx.moveTo(x, y + s * 0.25); ctx.lineTo(x, y - s * 0.55); ctx.stroke();
+                ctx.fillStyle = e.atk ? "#eaffff" : "#bfeaf5";
+                ctx.beginPath(); ctx.arc(x, y - s * 0.62, s * (e.atk ? 0.34 : 0.26), 0, Math.PI * 2); ctx.fill();
+                if (this.gfxHigh && e.atk) {
+                    ctx.strokeStyle = "#eaffff"; ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.moveTo(x - s * 0.55, y - s * 0.62); ctx.lineTo(x + s * 0.55, y - s * 0.62);
+                    ctx.moveTo(x, y - s * 0.95); ctx.lineTo(x, y - s * 0.3);
+                    ctx.stroke();
+                }
+                ctx.lineWidth = 1;
+            } else if (bn === "Bomb Tower") {
+                // Round stone base with a black bomb dome (lit fuse nub on top).
+                ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                this.tone2Circle(x, y, s, color);
+                ctx.fillStyle = "#23262b";
+                ctx.beginPath(); ctx.arc(x, y + s * 0.08, s * 0.5, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = "#6b5a2e"; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(x, y - s * 0.42); ctx.lineTo(x + s * 0.18, y - s * 0.62); ctx.stroke();
+                ctx.fillStyle = "#ffb63c";
+                ctx.beginPath(); ctx.arc(x + s * 0.2, y - s * 0.66, s * 0.09, 0, Math.PI * 2); ctx.fill();
+                ctx.lineWidth = 1;
+            } else if (bn === "Tombstone") {
+                // A gravestone: rounded upright slab on a small earth mound.
+                ctx.fillStyle = "#6b5a3e";
+                ctx.beginPath(); ctx.ellipse(x, y + s * 0.55, s * 1.0, s * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
+                this.drawRoundRect(x - s * 0.65, y - s * 0.95, s * 1.3, s * 1.6, s * 0.6, true, false); ctx.stroke();
+                if (this.gfxHigh) {
+                    ctx.strokeStyle = this.shade("#9aa0a8", -0.25); ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(x, y - s * 0.55); ctx.lineTo(x, y - s * 0.05);
+                    ctx.moveTo(x - s * 0.22, y - s * 0.38); ctx.lineTo(x + s * 0.22, y - s * 0.38);
+                    ctx.stroke();
+                }
+                ctx.lineWidth = 1;
+            } else {
+                this.extrudeWall(x, y, s, card ? 0 : s * 0.85, color, false); // raised block
+                ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.rect(x - s, y - s, s * 2, s * 2);        // lit top face
+                ctx.fill();
+                ctx.stroke();
+                // Flat two-tone finish: darker inner border band + a lighter top edge.
+                if (this.gfxHigh && typeof color === "string" && color[0] === "#" && s > 8) {
+                    const ib = Math.min(5, Math.max(2, s * 0.18));
+                    ctx.strokeStyle = this.shade(color, -0.13); ctx.lineWidth = ib;
+                    ctx.strokeRect(x - s + ib / 2 + 1, y - s + ib / 2 + 1, 2 * (s - ib / 2 - 1), 2 * (s - ib / 2 - 1));
+                    ctx.strokeStyle = this.shade(color, 0.24); ctx.lineWidth = Math.max(1.5, ib * 0.6);
+                    ctx.beginPath(); ctx.moveTo(x - s + ib + 2, y - s + ib); ctx.lineTo(x + s - ib - 2, y - s + ib); ctx.stroke();
+                    ctx.lineWidth = 1;
+                }
             }
             if (FAUX3D) {
                 // raised bevel (flat solid edges, no gradient): bright top-left, dark bottom-right
@@ -2266,12 +2435,15 @@ class Main {
             ctx.fillStyle = envCol;
             ctx.beginPath(); ctx.ellipse(x, ey, R, R * 1.06, 0, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5; ctx.stroke();
-            const eb = Math.max(2, R * 0.16);
-            ctx.strokeStyle = this.shade(envCol, -0.13); ctx.lineWidth = eb;
-            ctx.beginPath(); ctx.ellipse(x, ey, R - eb / 2 - 0.5, R * 1.06 - eb / 2 - 0.5, 0, 0, Math.PI * 2); ctx.stroke();
-            ctx.strokeStyle = this.shade(envCol, 0.26); ctx.lineWidth = Math.max(1.5, R * 0.1); ctx.lineCap = "round";
-            ctx.beginPath(); ctx.arc(x, ey, R * 0.55, Math.PI * 1.05, Math.PI * 1.5); ctx.stroke();
-            ctx.lineCap = "butt"; ctx.lineWidth = 1;
+            if (this.gfxHigh) {
+                const eb = Math.max(2, R * 0.16);
+                ctx.strokeStyle = this.shade(envCol, -0.13); ctx.lineWidth = eb;
+                ctx.beginPath(); ctx.ellipse(x, ey, R - eb / 2 - 0.5, R * 1.06 - eb / 2 - 0.5, 0, 0, Math.PI * 2); ctx.stroke();
+                ctx.strokeStyle = this.shade(envCol, 0.26); ctx.lineWidth = Math.max(1.5, R * 0.1); ctx.lineCap = "round";
+                ctx.beginPath(); ctx.arc(x, ey, R * 0.55, Math.PI * 1.05, Math.PI * 1.5); ctx.stroke();
+                ctx.lineCap = "butt";
+            }
+            ctx.lineWidth = 1;
             ctx.beginPath(); // keep the generic stroke below happy (no-op path)
         } else {
             this.extrudeWall(x, y, radius, card ? 0 : radius * 0.7, color, true); // raised cylinder
@@ -2426,6 +2598,7 @@ class Main {
             "Dark Prince": "#4a3f5a", "Ice Golem": "#a9dcef", "Cannon": "#6b7079",
             "Lumberjack": "#5a7a3a", "Balloon": "#9c2b3a", "Hopper": "#6db84a", "Skeleton Barrel": "#a5713a",
             "Inferno Tower": "#b5563a", "Elixir Collector": "#c46fb0", "Crate": "#9c7b4a",
+            "Tesla": "#57b8d8", "Bomb Tower": "#8a8f99", "Tombstone": "#9aa0a8", "Firecracker": "#e87ea1",
             "Golemite": "#8a8a8a", "Lava Pup": "#ff8a4c", "Elixir Golemite": "#d56ab5",
             "Elixir Blob": "#d56ab5", "Cursed Hog": "#8e4fb0", "Golem": "#8a8a8a"
         };
@@ -2487,6 +2660,7 @@ class Main {
     // rim plus one short lighter arc, all solid tones — no gradients, shadows,
     // or speculars. Tiny swarm bodies stay plain so they don't get noisy.
     tone2Circle(x, y, radius, color) {
+        if (!this.gfxHigh) return; // Graphics: Low = plain flat bodies
         if (radius < 5.5 || typeof color !== "string" || color[0] !== "#") return;
         const bw = Math.min(6, Math.max(1.5, radius * 0.22));
         ctx.strokeStyle = this.shade(color, -0.14);
@@ -2697,7 +2871,8 @@ class Main {
     unitRadius(c) {
         // Buildings: the half-width of their drawn square (matches Building.js rad*0.88).
         if (c.t === 3) {
-            let r = (c.n === "Cannon") ? 15 : (c.n === "Crate") ? 14 : 20;
+            let r = (c.n === "Cannon") ? 15 : (c.n === "Crate") ? 14 :
+                (c.n === "Tesla") ? 16 : (c.n === "Bomb Tower") ? 17 : (c.n === "Tombstone") ? 14 : 20;
             return r * 0.88;
         }
         let m = 10;
@@ -2719,23 +2894,11 @@ class Main {
     // unit a card spawns, mirroring GameEngine.addU.
     ghostLayout(c) {
         const r = this.unitRadius(c);
-        const at = (dx, dy) => ({ dx, dy, r });
-        const n = c.n;
-        if (n === "Archers") return [at(-8, 0), at(8, 0)];               // almost touching
-        if (n === "Wall Breakers") return [at(-15, 0), at(15, 0)];
-        if (n === "Spear Goblins") return [at(-15, 0), at(15, 0), at(0, 15)];
-        if (n === "Goblins") return [at(0, -12), at(-12, 0), at(12, 0), at(0, 12)];   // 4 goblins
-        if (["Skeletons", "Minions"].includes(n)) return [at(0, -10), at(-10, 10), at(10, 10)];
-        if (n === "Minion Horde") return [at(-22, -12), at(0, -16), at(22, -12), at(-14, 12), at(14, 12), at(0, 4)];
-        if (n === "Skeleton Army") { let a = []; for (let i = 0; i < 15; i++) { let ang = i * 2.39996, rr = Math.sqrt((i + 0.5) / 15) * 48; a.push(at(Math.cos(ang) * rr, Math.sin(ang) * rr)); } return a; }
-        if (n === "Bats") return [at(-18, -8), at(0, -14), at(18, -8), at(-10, 10), at(10, 10)];
-        if (n === "Barbarians") return [at(-20, -11), at(20, -11), at(0, 0), at(-20, 13), at(20, 13)]; // 5 barbs
-        if (n === "Elite Barbarians") return [at(-10, 0), at(10, 0)];
-        if (n === "Zappies") return [at(-10, 0), at(10, 0), at(0, 10)];
-        if (n === "Royal Hogs") return [at(-30, 0), at(-10, 0), at(10, 0), at(30, 0)];
-        if (n === "Royal Recruits") return [-150, -90, -30, 30, 90, 150].map(off => at(off, 0));
-        if (n === "Three Musketeers") return [at(-26, 0), at(26, 0), at(0, 18)];
-        return [at(0, 0)];
+        // The engine's deploy formations are the single source of truth — the ghost
+        // preview shows EXACTLY where the units will stand.
+        const f = this.eng.getFormation(c.n);
+        if (f) return f.map(([dx, dy]) => ({ dx, dy, r }));
+        return [{ dx: 0, dy: 0, r }];
     }
 
     elixirColor(c) {
@@ -2977,13 +3140,11 @@ class Main {
                 { dx: 0, dy: r * 1.75, r: sr, unit: "Skeletons" },
             ];
         }
-        // Trios always read as the same TRIANGLE the skeletons use (pack of 3 = two over one).
-        if (["Royal Recruits", "Three Musketeers"].includes(n)) return pack(3);
-        if (["Archers", "Wall Breakers", "Elite Barbarians", "Spear Goblins", "Zappies"].includes(n)) return pack(Math.min(3, full));
-        if (n === "Skeleton Army") return pack(Math.min(full, 15)); // the whole army
-        if (["Minion Horde", "Barbarians"].includes(n)) return pack(5);
-        if (n === "Royal Hogs") return row(Math.min(4, full));
-        if (["Skeletons", "Minions", "Goblins", "Bats"].includes(n)) return pack(full);
+        // FORMATION cards show the REAL deploy formation on the face — the card is
+        // aligned exactly how the units stand when placed (scaled to fit the box).
+        const f = this.eng.getFormation(n);
+        if (f) return f.map(([dx, dy]) => ({ dx, dy, r }));
+        void row; void pack; void full; // helpers kept for the Witch-style specials
         return single;
     }
 
