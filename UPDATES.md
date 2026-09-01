@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.5.1** — here's the whole road there.
+We're currently on **26.5.2** — here's the whole road there.
 
 ---
 
@@ -84,6 +84,7 @@ A major on request: not a new coat of paint this time, but the deepest gameplay-
   - **Deaths and effects.** Units now **fall over and fade** when they die (the real-game feel), and explosions burst with an expanding **shock-ring and sparks**. A new **Graphics setting (High/Low)** in Settings strips all of that (and the two-tone finish) for a plain fast look.
   - **Two test maps** in the sandbox: **3 Bridges** (an extra middle crossing) and **Fortress** (the river becomes a **moat** hugging the enemy base — one central bridge is the only way in).
 - **26.5.1** — Polish on the big one. **Tesla** is now a smaller **blue Inferno-style circle**; the **Bomb Tower** hides its bomb (plain stone circle); the **Tombstone** is **just a rock with a cross**; the **Balloon**'s envelope is a true **circle**; **Elite Barbarians** stand apart properly; the **Royal Recruits card** shows a representative **three at full size** (the real placement is still the whole lane). And the cheat got sneakier: the Settings screen hides a **small diamond icon** in the corner — click it to be offered the cheat; the **DEBUG MENU button only exists once you've actually cheated**.
+- **26.5.2** — Formation truth, round two. **Minion Horde** deploys in **two neat rows of three**, **Zappies three abreast**, **Barbarians in a pentagon ring**; **Wall Breakers and Three Musketeers spawn close together** — their centre-placement lane split is pure **pathfinding**, not spawn spread. The **Tombstone looks like any other tower** (standard square, small cross on the face) and now **spawns Skeletons in pairs** (2 every 7s, the real cadence). And **Zap looks properly cool** when placed: the strike **forks** into side-bolts with a glow at the strike point, and the impact pops an **expanding electric ring with radial crackle** (High graphics).
 
 ---
 

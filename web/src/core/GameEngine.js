@@ -149,9 +149,9 @@ export default class GameEngine {
             // Bomb Tower — 1059 hp, 222 splash dmg, 1.6s, 6 tiles, ground only, 25s life;
             // drops a fused death bomb (222) when it goes down (see Building.die).
             new Card("Bomb Tower", 4, 1059, 222, 0, 180, 3, 1500, 96, 200, false, false),
-            // Tombstone — 422 hp, spawns a Skeleton every 3.5s (rt=210 is the spawn
-            // interval), 4 more burst out on death, 40s life.
-            new Card("Tombstone", 3, 422, 0, 0, 0, 3, 2400, 210, 0, false, false),
+            // Tombstone — 422 hp, spawns Skeletons in PAIRS (2 every 7s — the real
+            // cadence; rt=420 is the spawn interval), 4 burst out on death, 40s life.
+            new Card("Tombstone", 3, 422, 0, 0, 0, 3, 2400, 420, 0, false, false),
             // Firecracker — real L11: 3 elixir, 300 hp, 168 splash dmg, 3s hit speed,
             // 6-tile range, Fast, hits air; her shot kicks HER backward (see Troop.js).
             new Card("Firecracker", 3, 300, 168, 0.825, 180, 0, 100, 180, 150, false, true)
@@ -987,20 +987,27 @@ export default class GameEngine {
             this._formations = {
                 "Archers": [[-8, 0], [8, 0]],
                 "Spear Goblins": [[-15, 0], [15, 0], [0, 15]],
-                "Wall Breakers": [[-15, 0], [15, 0]],
+                // Close together — the centre-placement lane SPLIT comes from the
+                // pathfinding (laneAssign), not from spawning them apart.
+                "Wall Breakers": [[-8, 0], [8, 0]],
                 "Skeletons": [[0, -8], [-7, 6.5], [7, 6.5]],
                 "Goblins": [[0, -12], [-12, 0], [12, 0], [0, 12]],
                 "Minions": [[0, -10], [-10, 10], [10, 10]],
-                "Minion Horde": [[-22, -12], [0, -16], [22, -12], [-14, 12], [14, 12], [0, 4]],
+                // Two neat rows of three, like the real deploy.
+                "Minion Horde": [[-24, -10], [0, -10], [24, -10], [-24, 10], [0, 10], [24, 10]],
                 "Skeleton Army": spiral,
                 "Bats": [[-18, -8], [0, -14], [18, -8], [-10, 10], [10, 10]],
-                "Barbarians": [[-20, -11], [20, -11], [0, 0], [-20, 13], [20, 13]],
+                // A pentagon ring around the drop point.
+                "Barbarians": [[0, -22], [21, -7], [13, 18], [-13, 18], [-21, -7]],
                 "Elite Barbarians": [[-16, 0], [16, 0]],
-                "Zappies": [[-10, 0], [10, 0], [0, 10]],
+                // Three abreast.
+                "Zappies": [[-24, 0], [0, 0], [24, 0]],
                 "Royal Hogs": [[-30, 0], [-10, 0], [10, 0], [30, 0]],
                 // Royal Recruits guard the WHOLE lane width.
                 "Royal Recruits": [[-225, 0], [-135, 0], [-45, 0], [45, 0], [135, 0], [225, 0]],
-                "Three Musketeers": [[-26, 0], [26, 0], [0, 18]],
+                // Tight clump — the 1/2 lane split on centre placement is pure
+                // pathfinding (laneAssign), not spawn spread.
+                "Three Musketeers": [[-13, 0], [13, 0], [0, 15]],
             };
         }
         return this._formations[n] || null;

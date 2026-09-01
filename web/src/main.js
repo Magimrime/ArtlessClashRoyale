@@ -2375,17 +2375,9 @@ class Main {
                 ctx.fillStyle = this.shade(color, -0.22);
                 ctx.beginPath(); ctx.arc(x, y, s * 0.42, 0, Math.PI * 2); ctx.fill();
                 ctx.lineWidth = 1;
-            } else if (bn === "Tombstone") {
-                // Just a ROCK with a cross.
-                ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
-                this.drawRoundRect(x - s * 0.85, y - s * 0.75, s * 1.7, s * 1.5, s * 0.6, true, false); ctx.stroke();
-                ctx.strokeStyle = this.shade("#9aa0a8", -0.3); ctx.lineWidth = Math.max(2, s * 0.14); ctx.lineCap = "round";
-                ctx.beginPath();
-                ctx.moveTo(x, y - s * 0.42); ctx.lineTo(x, y + s * 0.38);
-                ctx.moveTo(x - s * 0.28, y - s * 0.12); ctx.lineTo(x + s * 0.28, y - s * 0.12);
-                ctx.stroke();
-                ctx.lineCap = "butt"; ctx.lineWidth = 1;
             } else {
+                // (Tombstone deliberately falls through here: it looks almost like any
+                // other tower — the standard square — plus a small cross on the face.)
                 this.extrudeWall(x, y, s, card ? 0 : s * 0.85, color, false); // raised block
                 ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
                 ctx.beginPath(); ctx.rect(x - s, y - s, s * 2, s * 2);        // lit top face
@@ -2399,6 +2391,15 @@ class Main {
                     ctx.strokeStyle = this.shade(color, 0.24); ctx.lineWidth = Math.max(1.5, ib * 0.6);
                     ctx.beginPath(); ctx.moveTo(x - s + ib + 2, y - s + ib); ctx.lineTo(x + s - ib - 2, y - s + ib); ctx.stroke();
                     ctx.lineWidth = 1;
+                }
+                if (bn === "Tombstone") {
+                    // Its one identifying mark: a small cross on the face.
+                    ctx.strokeStyle = this.shade(color, -0.3); ctx.lineWidth = Math.max(2, s * 0.12); ctx.lineCap = "round";
+                    ctx.beginPath();
+                    ctx.moveTo(x, y - s * 0.4); ctx.lineTo(x, y + s * 0.35);
+                    ctx.moveTo(x - s * 0.26, y - s * 0.12); ctx.lineTo(x + s * 0.26, y - s * 0.12);
+                    ctx.stroke();
+                    ctx.lineCap = "butt"; ctx.lineWidth = 1;
                 }
             }
             if (FAUX3D) {
@@ -3760,23 +3761,38 @@ class Main {
 
     drawZapStrike(p) {
         // In-game zap renders NORMALLY (procedural bolt + flash) — the pixel-art sprite is
-        // only used on the deck card.
+        // only used on the deck card. On High graphics the strike FORKS (two thinner side
+        // bolts feeding the main one) with a glow at the strike point, and the impact pops
+        // an expanding electric ring with radial crackle.
+        const col = p.flashCol || "#7fdcff";
         if (p.life > 5) {
             ctx.save();
             ctx.lineCap = "round";
             const segs = 8;
-            const H = 140; // fixed bolt height — the strike is the same length wherever it's
-            //              placed (it no longer spans 0..p.y, which compacted it near the top)
-            const pts = [];
-            for (let i = 0; i <= segs; i++) {
-                let yy = (p.y - H) + (H / segs) * i;
-                let jit = (i === 0 || i === segs) ? 0 : Math.sin(i * 9.3 + Math.floor(Date.now() / 55)) * 13;
-                pts.push([p.x + jit, yy]);
+            const H = 140; // fixed bolt height — same strike length wherever it's placed
+            const bolt = (xoff, phase, w, alpha) => {
+                const pts = [];
+                for (let i = 0; i <= segs; i++) {
+                    let yy = (p.y - H) + (H / segs) * i;
+                    let jit = (i === 0 || i === segs) ? 0 : Math.sin(i * 9.3 + phase + Math.floor(Date.now() / 55)) * 13;
+                    pts.push([p.x + xoff * (1 - i / segs) + jit, yy]);
+                }
+                ctx.globalAlpha = alpha;
+                ctx.strokeStyle = col; ctx.lineWidth = w;
+                ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
+                ctx.strokeStyle = "#ffffff"; ctx.lineWidth = Math.max(1, w * 0.35);
+                ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
+                ctx.globalAlpha = 1;
+            };
+            bolt(0, 0, 4, 1);
+            if (this.gfxHigh) {
+                bolt(-26, 3.7, 2, 0.55);
+                bolt(26, 7.9, 2, 0.55);
+                ctx.globalAlpha = 0.5;
+                ctx.fillStyle = "#eaffff";
+                ctx.beginPath(); ctx.arc(p.x, p.y, 10 + Math.sin(Date.now() / 40) * 3, 0, Math.PI * 2); ctx.fill();
+                ctx.globalAlpha = 1;
             }
-            ctx.strokeStyle = p.flashCol || "#7fdcff"; ctx.lineWidth = 4;
-            ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
-            ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.4;
-            ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
             ctx.restore();
         } else {
             let a = Math.max(0, p.life / 5);
@@ -3784,6 +3800,24 @@ class Main {
             ctx.fillStyle = p.flashCol || "#cdf3ff";
             ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.fill();
             ctx.globalAlpha = 1;
+            if (this.gfxHigh) {
+                const k = 1 - a;
+                ctx.globalAlpha = 0.85 * a;
+                ctx.strokeStyle = "#eaffff"; ctx.lineWidth = 2.5;
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.rad * (0.55 + 0.5 * k), 0, Math.PI * 2); ctx.stroke();
+                ctx.lineWidth = 1.6; ctx.lineCap = "round";
+                for (let i = 0; i < 5; i++) {
+                    const ang = i * (Math.PI * 2 / 5) + 0.6;
+                    const r0 = p.rad * 0.35, r1 = p.rad * (0.75 + 0.3 * k);
+                    const mx = p.x + Math.cos(ang + 0.18) * (r0 + r1) / 2, my = p.y + Math.sin(ang + 0.18) * (r0 + r1) / 2;
+                    ctx.beginPath();
+                    ctx.moveTo(p.x + Math.cos(ang) * r0, p.y + Math.sin(ang) * r0);
+                    ctx.lineTo(mx, my);
+                    ctx.lineTo(p.x + Math.cos(ang - 0.1) * r1, p.y + Math.sin(ang - 0.1) * r1);
+                    ctx.stroke();
+                }
+                ctx.lineCap = "butt"; ctx.globalAlpha = 1;
+            }
         }
         ctx.lineWidth = 1;
     }

@@ -37,15 +37,14 @@ export default class Building extends Entity {
             return;
         }
 
-        // Tombstone: a spawner — one Skeleton every rt ticks (3.5s), alternating sides.
+        // Tombstone: a spawner — a PAIR of Skeletons every rt ticks (2 every 7s,
+        // the real cadence), one out each side, stepping toward the enemy.
         if (this.c.n === "Tombstone") {
             this.infernoTick++;
             if (this.infernoTick >= this.c.rt) {
                 this.infernoTick = 0;
-                this.spawnFlip = !this.spawnFlip;
-                const fx = this.x + (this.spawnFlip ? -14 : 14);
                 const fy = this.y + (this.tm === 0 ? -16 : 16); // toward the enemy
-                g.spawnLoose(this.tm, "Skeletons", [[fx, fy]]);
+                g.spawnLoose(this.tm, "Skeletons", [[this.x - 14, fy], [this.x + 14, fy]]);
             }
             return;
         }
