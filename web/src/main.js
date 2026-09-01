@@ -2392,57 +2392,57 @@ class Main {
                 ctx.beginPath(); ctx.arc(x, y, s * (e.atk ? 0.34 : 0.24), 0, Math.PI * 2); ctx.fill();
                 ctx.lineWidth = 1;
             } else if (bn === "Tesla") {
-                // The Tesla sinks into a pit and a WOODEN COVER slides over it when it
-                // has no target (untargetable / unhittable / walkable), and rises back
-                // out to zap. `cover` (0 = raised, 1 = covered) eases each frame so the
-                // transition animates. The card face always shows the raised tower.
+                // The Tesla RETRACTS into the ground (and a wooden lid closes over it)
+                // when it has no target, and rises back out to zap. `cover` (0 = raised,
+                // 1 = covered) eases each frame so it animates. The HEALTH BAR always
+                // shows — it just falls through to the normal bar stash below. The card
+                // face always draws the raised tower.
                 const ts = s * 0.85;
                 if (e._teslaCover === undefined) e._teslaCover = (e.teslaHidden && !card) ? 1 : 0;
                 const goal = (e.teslaHidden && !card) ? 1 : 0;
-                e._teslaCover += (goal - e._teslaCover) * 0.25;
+                e._teslaCover += (goal - e._teslaCover) * 0.22;
                 if (Math.abs(goal - e._teslaCover) < 0.02) e._teslaCover = goal;
                 const cover = card ? 0 : e._teslaCover;
 
-                // The tower body, sinking: it slides DOWN into the pit and is clipped at
-                // ground level, so it disappears below the lid as the cover closes.
-                if (cover < 0.98) {
+                // The tower body — vertically SQUASHED into the ground as it retracts
+                // (pivoting at the bottom of its footprint, so it sinks straight down;
+                // at cover 0 it's the FULL round tower, never a half-circle).
+                if (cover < 0.985) {
+                    const vh = 1 - cover; // 1 = full height, 0 = flat on the ground
                     ctx.save();
-                    ctx.beginPath(); ctx.rect(x - ts - 2, y - ts - 2, (ts + 2) * 2, ts + 2); ctx.clip(); // only the top half of the pit shows body
-                    const sink = cover * ts * 1.4; // how far it has dropped
-                    const cy2 = y + sink;
+                    ctx.translate(x, y + ts);
+                    ctx.scale(1, vh);
+                    ctx.translate(-x, -(y + ts));
                     ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
-                    ctx.beginPath(); ctx.arc(x, cy2, ts, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-                    if (cover < 0.4) this.tone2Circle(x, cy2, ts, color);
+                    ctx.beginPath(); ctx.arc(x, y, ts, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                    this.tone2Circle(x, y, ts, color);
                     ctx.fillStyle = "#1e3742";
-                    ctx.beginPath(); ctx.arc(x, cy2, ts * 0.5, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(x, y, ts * 0.5, 0, Math.PI * 2); ctx.fill();
                     ctx.fillStyle = e.atk ? "#eaffff" : "#9fdcf2";
-                    ctx.beginPath(); ctx.arc(x, cy2, ts * (e.atk ? 0.34 : 0.24), 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(x, y, ts * (e.atk ? 0.34 : 0.24), 0, Math.PI * 2); ctx.fill();
                     ctx.restore();
                     ctx.lineWidth = 1;
                 }
-                // The wooden lid: two halves that part when open and close when covering.
+                // Wooden lid: two panels that part as it opens, meet as it covers.
                 if (cover > 0.02) {
-                    const gap = (1 - cover) * s * 0.9; // halves slide apart as it opens
+                    const half = s * 0.85, gap = (1 - cover) * half; // panels slide apart when open
                     ctx.fillStyle = "#8a5c33"; ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1.5;
-                    for (const sgn of [-1, 1]) {
-                        ctx.save();
-                        ctx.beginPath(); ctx.rect(x - s * 0.85, y - s * 0.85, s * 1.7, s * 1.7); ctx.clip();
-                        this.drawRoundRect(x - s * 0.85 + sgn * gap + (sgn < 0 ? 0 : s * 0.85), y - s * 0.85, s * 0.85, s * 1.7, s * 0.18, true, false);
-                        ctx.stroke();
-                        ctx.restore();
-                    }
-                    if (cover > 0.85) { // plank seams once shut
+                    ctx.save();
+                    ctx.beginPath(); ctx.rect(x - half, y - half, half * 2, half * 2); ctx.clip(); // panels never spill past the pit
+                    this.drawRoundRect(x - half - gap, y - half, half, half * 2, half * 0.2, true, false); ctx.stroke(); // left panel
+                    this.drawRoundRect(x + gap, y - half, half, half * 2, half * 0.2, true, false); ctx.stroke();        // right panel
+                    ctx.restore();
+                    if (cover > 0.9) { // plank seams once fully shut
                         ctx.strokeStyle = "rgba(0,0,0,0.22)"; ctx.lineWidth = 1.3;
                         ctx.beginPath();
-                        ctx.moveTo(x - s * 0.75, y - s * 0.28); ctx.lineTo(x + s * 0.75, y - s * 0.28);
-                        ctx.moveTo(x - s * 0.75, y + s * 0.28); ctx.lineTo(x + s * 0.75, y + s * 0.28);
+                        ctx.moveTo(x - half * 0.88, y - half * 0.33); ctx.lineTo(x + half * 0.88, y - half * 0.33);
+                        ctx.moveTo(x - half * 0.88, y + half * 0.33); ctx.lineTo(x + half * 0.88, y + half * 0.33);
                         ctx.stroke();
                     }
                     ctx.lineWidth = 1;
                 }
-                // Hide the health bar the moment it starts sinking — a covered/sinking
-                // Tesla shows nothing (bulletproofs the drawHealthBars skip).
-                if (cover > 0.15) { e._barY = undefined; return; }
+                // NOTE: no early return — the Tesla falls through to the normal health-bar
+                // stash below, so its HP bar shows in every state (raised, sinking, covered).
             } else if (bn === "Bomb Tower") {
                 // Plain round stone tower — no bomb on show; just a darker inner disc.
                 ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
@@ -3679,7 +3679,6 @@ class Main {
         for (let e of this.eng.ents) {
             if (e._barY === undefined || e.hp <= 0) continue; // dying units are already gone
             if (e.isGhosted) continue; // phantoms show no bar
-            if (e.teslaHidden) continue; // a buried Tesla shows nothing at all
 
             let x = e._barX, barY = e._barY, barW = e._barW;
             // The shield has been damaged (not full)? Show the shield bar — and the

@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.5.8** — here's the whole road there.
+We're currently on **26.5.9** — here's the whole road there.
 
 ---
 
@@ -90,7 +90,8 @@ A major on request: not a new coat of paint this time, but the deepest gameplay-
 - **26.5.5** — **The zap you can actually SEE.** Found why electric chains felt invisible: a finished chain was clamped to an **8-tick (0.13-second!)** display life, so any single-target zap — the common case — flashed and was gone. Chains now linger a half second, and the current is REAL lightning: **jagged bolts that re-jitter every few frames, a bright white core, little forks flicking off the bends, and a spark on every zapped body**. Also: troops **funnel through the CENTRE of the bridge** (the path pins two centre waypoints at the crossing — no more hugging the bridge edge and grinding on the bank), the **Tesla's card art shows the raised tower** (not the buried state), and the concealed Tesla is a proper full-size **wooden cover** over the pit.
 - **26.5.6** — Rules tightened like the real game. **Tesla never chains**: one bolt, one target, full damage (the lightning look stays; the chain no longer even *draws* a hop it wouldn't deal). **Ghosts are truly untouchable**: buildings can't target them and electric chains can't arc to or stun them. **A spirit mid-hop can't be attacked** — no targeting, no damage, nothing lands until it does (its own landing explosion still fires). **Zappies deploy in a triangle**, and the **Witch summons her 4 skeletons in a clear ring around her every 7 seconds** (they used to spawn inside her body and get shoved around, reading as fewer).
 - **26.5.7** — **The Firecracker fires an actual FIREWORK**: a big pink rocket that pops on its target (full damage) and splits into **five smaller sparks that fly on through the enemy, PENETRATING every troop in their path** (56 each, one hit per troop per spark) — recoil hop intact. The **Witch's card face** now shows her real summon: four skeletons in a ring around her (not three at her feet). And the **Balloon draws bigger** — a properly balloon-sized envelope (its hitbox is unchanged).
-- **26.5.8** — The Tesla **sinks and rises with an animation**: instead of snapping between tower and box, it now **drops into its pit as a two-panel wooden lid slides shut** (and rises back out, lid parting, to zap). And its **health bar is gone the instant it starts sinking** — no more seeing a covered Tesla's health (the bar is cleared unconditionally while it's underground, closing an edge case where a just-hidden Tesla flashed its old bar for a frame).
+- **26.5.8** — The Tesla **sinks and rises with an animation**: instead of snapping between tower and box, it now **drops into its pit as a two-panel wooden lid slides shut** (and rises back out, lid parting, to zap).
+- **26.5.9** — Fixed 26.5.8's mistakes. The health bar is **supposed to stay visible** when the Tesla is covered (like the real game) — it's back. And the sink was drawn with a bad clip that **sliced the raised tower into a half-circle**; the retract is now a clean vertical **squash into the ground** (full round tower at rest, no clipping), with the wooden lid closing over it — and the HP bar shows in every state.
 
 ---
 
