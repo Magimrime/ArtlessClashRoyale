@@ -640,9 +640,11 @@ export default class Troop extends Entity {
                 // Throws his AXE: it flies out to his full range, then BOOMERANGS back to
                 // him, damaging everything it passes on BOTH legs (once per leg).
                 let ang = Math.atan2(this.lk.y - (this.lk.fly ? 22 : 0) - srcY, this.lk.x - this.x);
-                // Slow, heavy throw — you can watch it travel out and come back.
-                g.projs.push(new Proj(this.x, srcY, this.lk.x, this.lk.y, null, 3.2, false, 5, this.c.d, this.tm, false)
-                    .asAxe(this, ang, this.c.rn + 20));
+                // Slow, heavy throw. Like the real card, the axe FLIES FURTHER than his
+                // attack range (4.5 tiles range, ~6.3 tiles of travel), so it clips
+                // things standing well behind whatever he was aiming at.
+                g.projs.push(new Proj(this.x, srcY, this.lk.x, this.lk.y, null, 2.2, false, 5, this.c.d, this.tm, false)
+                    .asAxe(this, ang, this.c.rn + 48));
             } else if (this.c.n === "Goblin Demolisher") {
                 // Throws a stick of DYNAMITE — it arcs to the target (with a shadow) and
                 // bursts into an area fire blast on landing.

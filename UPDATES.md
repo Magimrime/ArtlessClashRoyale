@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.5.10** — here's the whole road there.
+We're currently on **26.5.11** — here's the whole road there.
 
 ---
 
@@ -96,6 +96,7 @@ A major on request: not a new coat of paint this time, but the deepest gameplay-
   - **Valkyrie** (4 elixir, 2224 hp, 322 dmg, 1.5s hit speed) — her swing is a true **360° spin**: every ground enemy touching her is hit, not just the one she's facing.
   - **Executioner** (5 elixir, 1289 hp, 267 area dmg, 2.4s, 4.5-tile range, hits air) — throws a **boomerang axe** that flies out and comes back, **damaging everything it passes on both legs**, so a line of troops takes it twice.
   - **Giant Snowball** (2 elixir, 159 dmg) — a big packed snowball that **slows 35% for 2.5s and knocks back**. Its arc and blast radius had been sitting unused in the engine all along; now it has a card to go with them.
+- **26.5.11** — Feel pass on the new three. The Executioner's **axe looks like an actual axe** (wooden haft, curved steel head), flies **bigger and slower**, and — like the real card — **travels further than his attack range** (4.5-tile range, ~6.3 tiles of travel), so it clips things standing behind his target. The **Valkyrie's spin is now a spin you can see**: her axe whips a full turn around her with a fading arc trail. And the **Firecracker's burst is much bigger** — 9 sparks in a wide fan (was 5), longer streaks, and a bigger pop.
 
 ---
 

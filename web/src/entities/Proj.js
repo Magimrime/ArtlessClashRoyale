@@ -99,8 +99,9 @@ export default class Proj {
         return this;
     }
 
-    // Valkyrie's 360° spin — a visual-only sweep ring.
-    asSpin() { this.isSpin = true; this.life = 9; return this; }
+    // Valkyrie's 360° spin — visual only; lasts long enough to SEE the blade go
+    // all the way around (the renderer animates it from spinMax → 0).
+    asSpin() { this.isSpin = true; this.life = 16; this.spinMax = 16; return this; }
 
     // Firecracker: the big rocket (bursts on its target into sparks)…
     asFirework() { this.firework = true; return this; }
@@ -306,7 +307,8 @@ export default class Proj {
                 if (e.tm === this.tm || e.hp <= 0) continue;
                 if (e.isGhosted || e.teslaHidden || e.sjT > 0) continue;
                 if (this.axeHit.includes(e)) continue;
-                if (Math.hypot(this.x - e.x, this.y - (e.y - (e.fly ? 22 : 0))) < 9 + g.getHitboxRadius(e)) {
+                // Wider clip to match the bigger blade.
+                if (Math.hypot(this.x - e.x, this.y - (e.y - (e.fly ? 22 : 0))) < 14 + g.getHitboxRadius(e)) {
                     e.hp -= this.dmg;
                     this.axeHit.push(e);
                 }
@@ -633,16 +635,19 @@ export default class Proj {
         if (d < this.spd) {
             this.life = 0;
             if (this.firework) {
-                // FIREWORK BURST: the rocket pops on its target (full damage), then
-                // FIVE sparks fly ON THROUGH in a cone, penetrating troops behind it.
+                // FIREWORK BURST: the rocket pops on its target (full damage), then a
+                // BIG spray of sparks flies on through in a wide cone, penetrating the
+                // troops behind it.
                 if (this.t) this.t.hp -= this.dmg;
-                for (let i = -2; i <= 2; i++) {
-                    let sp = new Proj(this.x, this.y, this.x, this.y, null, 5, false, 4, Math.round(this.dmg / 3), this.tm, false).asSpark(a + i * 0.3);
-                    if (this.t) sp.sparkHit.push(this.t); // the target already took the rocket
+                for (let i = -4; i <= 4; i++) {
+                    let sp = new Proj(this.x, this.y, this.x, this.y, null, 5.5, false, 4, Math.round(this.dmg / 3), this.tm, false).asSpark(a + i * 0.22);
+                    sp.life = 22;                          // they carry further
+                    if (this.t) sp.sparkHit.push(this.t);  // the target already took the rocket
                     g.projs.push(sp);
                 }
-                let flash = new Proj(this.x, this.y, this.x, this.y, null, 0, false, 24, 0, this.tm, false).asFireArea();
+                let flash = new Proj(this.x, this.y, this.x, this.y, null, 0, false, 44, 0, this.tm, false).asFireArea();
                 flash.flashCol = "#ff9ecb";
+                flash.life = 9;
                 g.projs.push(flash);
                 return;
             }

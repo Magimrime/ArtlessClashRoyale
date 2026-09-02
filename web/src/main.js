@@ -1517,25 +1517,56 @@ class Main {
                     return;
                 }
                 if (p.isAxe) {
-                    // The Executioner's axe — kept plain: a brown haft and a flat blade,
-                    // turning slowly as it flies.
+                    // The Executioner's axe — an actual AXE: a wooden haft with a
+                    // crescent-bladed head on one end, turning as it flies.
                     ctx.save();
                     ctx.translate(p.x, p.y);
                     ctx.rotate(p.axeSpin || 0);
-                    ctx.fillStyle = "#6b4a2a";
-                    ctx.fillRect(-9, -1.5, 18, 3);      // haft
-                    ctx.fillStyle = "#c8d2d8";
-                    ctx.fillRect(5, -6, 6, 12);         // blade
+                    // haft (runs left→right, head on the right)
+                    ctx.fillStyle = "#7a5228";
+                    ctx.fillRect(-16, -2.5, 30, 5);
+                    ctx.fillStyle = "#5d3d1c";
+                    ctx.fillRect(-16, -2.5, 6, 5);               // darker butt end
+                    // head: a curved blade that flares out from the haft
+                    ctx.fillStyle = "#cfd8de";
+                    ctx.beginPath();
+                    ctx.moveTo(7, -4);
+                    ctx.quadraticCurveTo(22, -14, 20, 0);        // outer cutting edge
+                    ctx.quadraticCurveTo(22, 14, 7, 4);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1.2; ctx.stroke();
+                    ctx.fillStyle = "#9aa6ae";                   // socket where head meets haft
+                    ctx.fillRect(5, -5, 5, 10);
                     ctx.restore();
+                    ctx.lineWidth = 1;
                     return;
                 }
                 if (p.isSpin) {
-                    // Valkyrie's 360° sweep: a quick expanding ring.
-                    const k = Math.max(0, Math.min(1, p.life / 9));
-                    ctx.globalAlpha = 0.7 * k;
-                    ctx.strokeStyle = "#ffd9a8"; ctx.lineWidth = 3;
-                    ctx.beginPath(); ctx.arc(p.x, p.y, p.rad * (1.35 - 0.35 * k), 0, Math.PI * 2); ctx.stroke();
-                    ctx.globalAlpha = 1; ctx.lineWidth = 1;
+                    // Valkyrie's 360° sweep — you actually SEE her axe whip around: a
+                    // blade travels a full turn (plus a bit) around her, dragging a
+                    // fading arc trail behind it.
+                    const maxL = p.spinMax || 16;
+                    const prog = Math.max(0, Math.min(1, 1 - p.life / maxL)); // 0 → 1
+                    const R = p.rad;
+                    const ang = prog * Math.PI * 2.3 - Math.PI / 2;           // where the blade is now
+                    // trailing arc (the blur of the swing)
+                    ctx.globalAlpha = 0.5 * (1 - prog * 0.5);
+                    ctx.strokeStyle = "#ffe3b8"; ctx.lineWidth = 5; ctx.lineCap = "round";
+                    ctx.beginPath(); ctx.arc(p.x, p.y, R * 0.92, ang - 1.5, ang); ctx.stroke();
+                    ctx.globalAlpha = 0.28;
+                    ctx.lineWidth = 3;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, R * 0.92, ang - 2.8, ang - 1.4); ctx.stroke();
+                    // the axe head itself, riding the leading edge
+                    const bx = p.x + Math.cos(ang) * R * 0.92, by = p.y + Math.sin(ang) * R * 0.92;
+                    ctx.globalAlpha = 0.95;
+                    ctx.save();
+                    ctx.translate(bx, by);
+                    ctx.rotate(ang + Math.PI / 2);
+                    ctx.fillStyle = "#6b4a2a"; ctx.fillRect(-2, -7, 4, 14);   // haft
+                    ctx.fillStyle = "#d8e2e8"; ctx.fillRect(-6, -9, 12, 7);   // blade
+                    ctx.restore();
+                    ctx.globalAlpha = 1; ctx.lineCap = "butt"; ctx.lineWidth = 1;
                     return;
                 }
                 if (p.firework) {
@@ -1550,14 +1581,16 @@ class Main {
                     return;
                 }
                 if (p.spark) {
-                    // A burst spark: tiny bright bullet with a short trail.
-                    ctx.strokeStyle = "rgba(255,217,236,0.7)"; ctx.lineWidth = 2; ctx.lineCap = "round";
+                    // A burst spark: a bright bullet with a long streaking trail.
+                    ctx.strokeStyle = "rgba(255,190,224,0.75)"; ctx.lineWidth = 3.5; ctx.lineCap = "round";
                     ctx.beginPath();
-                    ctx.moveTo(p.x - Math.cos(p.sparkAng) * 7, p.y - Math.sin(p.sparkAng) * 7);
+                    ctx.moveTo(p.x - Math.cos(p.sparkAng) * 14, p.y - Math.sin(p.sparkAng) * 14);
                     ctx.lineTo(p.x, p.y); ctx.stroke();
                     ctx.lineCap = "butt"; ctx.lineWidth = 1;
                     ctx.fillStyle = "#ffd9ec";
-                    ctx.beginPath(); ctx.arc(p.x, p.y, 2.6, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(p.x, p.y, 4.2, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = "#ffffff";
+                    ctx.beginPath(); ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2); ctx.fill();
                     return;
                 }
                 if (p.barrel) {
