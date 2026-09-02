@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Artless Clash Royale — pixel sprites</title>
+<style>
+ :root{color-scheme:dark}
+ body{margin:0;padding:26px 30px 70px;background:#12181f;color:#e8eef6;font:15px/1.5 "Baloo 2","Segoe UI",system-ui,sans-serif}
+ h1{margin:0 0 4px;font-size:25px} p.lead{margin:0 0 6px;color:#93a4b7;max-width:74ch}
+ code{background:#1b232d;padding:1px 5px;border-radius:4px;font-size:13px}
+ h2{margin:32px 0 12px;font-size:17px;text-transform:capitalize;border-bottom:1px solid #253040;padding-bottom:6px}
+ h2 .count{color:#6d8098;font-size:13px;font-weight:400;margin-left:6px}
+ .grid{display:grid;gap:13px;grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}
+ figure{margin:0;background:#1b232d;border:1px solid #26313f;border-radius:8px;padding:9px 6px 7px;text-align:center;cursor:pointer}
+ figure:hover{border-color:#4f8fe0}
+ figure img{image-rendering:pixelated;width:64px;height:64px;background:repeating-conic-gradient(#222b36 0% 25%,#1a222b 0% 50%) 50%/12px 12px;border-radius:4px}
+ figcaption{margin-top:6px;font-size:12px;color:#cfdcea;word-break:break-word}
+ figcaption span{display:block;color:#6d8098;font-size:10.5px}
+ .bar{position:fixed;right:18px;bottom:16px;background:#1b232d;border:1px solid #2c3949;border-radius:999px;padding:8px 15px;font-size:13px;color:#a8bdd4}
+</style></head><body>
+<h1>Pixel sprites — troops &amp; towers</h1>
+<p class="lead">All <strong>16×16</strong>, rendered by the game's own renderer and scaled down, so each sprite is exactly what the game draws today. <strong>Not wired into the game</strong> — these are standalone PNGs you can edit in any image editor.</p>
+<p class="lead">Towers ship as <strong>layers</strong>: <code>-base</code> (the block) and <code>-turret</code> (the cannon, barrel pointing right, pivot dead-centre) — draw the base, then draw the turret rotated to the aim angle. Kings also have a <code>-vent</code> layer.</p>
+<h2>towers <span class="count">14</span></h2>
+<div class="grid">
+  <figure onclick="window.open('towers/king-blue-base.png','_blank')"><img src="towers/king-blue-base.png" alt="king-blue-base"><figcaption>king-blue-base<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('towers/king-blue-turret.png','_blank')"><img src="towers/king-blue-turret.png" alt="king-blue-turret"><figcaption>king-blue-turret<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('towers/king-blue-vent.png','_blank')"><img src="towers/king-blue-vent.png" alt="king-blue-vent"><figcaption>king-blue-vent<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('towers/king-blue.png','_blank')"><img src="towers/king-blue.png" alt="king-blue"><figcaption>king-blue<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('towers/king-red-base.png','_blank')"><img src="towers/king-red-base.png" alt="king-red-base"><figcaption>king-red-base<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('towers/king-red-turret.png','_blank')"><img src="towers/king-red-turret.png" alt="king-red-turret"><figcaption>king-red-turret<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('towers/king-red-vent.png','_blank')"><img src="towers/king-red-vent.png" alt="king-red-vent"><figcaption>king-red-vent<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('towers/king-red.png','_blank')"><img src="towers/king-red.png" alt="king-red"><figcaption>king-red<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('towers/princess-blue-base.png','_blank')"><img src="towers/princess-blue-base.png" alt="princess-blue-base"><figcaption>princess-blue-base<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('towers/princess-blue-turret.png','_blank')"><img src="towers/princess-blue-turret.png" alt="princess-blue-turret"><figcaption>princess-blue-turret<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('towers/princess-blue.png','_blank')"><img src="towers/princess-blue.png" alt="princess-blue"><figcaption>princess-blue<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('towers/princess-red-base.png','_blank')"><img src="towers/princess-red-base.png" alt="princess-red-base"><figcaption>princess-red-base<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('towers/princess-red-turret.png','_blank')"><img src="towers/princess-red-turret.png" alt="princess-red-turret"><figcaption>princess-red-turret<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('towers/princess-red.png','_blank')"><img src="towers/princess-red.png" alt="princess-red"><figcaption>princess-red<span>16×16</span></figcaption></figure>
+</div>
+<h2>troops <span class="count">56</span></h2>
+<div class="grid">
+  <figure onclick="window.open('troops/archers.png','_blank')"><img src="troops/archers.png" alt="archers"><figcaption>archers<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/baby-dragon.png','_blank')"><img src="troops/baby-dragon.png" alt="baby-dragon"><figcaption>baby-dragon<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/balloon.png','_blank')"><img src="troops/balloon.png" alt="balloon"><figcaption>balloon<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/barbarians.png','_blank')"><img src="troops/barbarians.png" alt="barbarians"><figcaption>barbarians<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/bats.png','_blank')"><img src="troops/bats.png" alt="bats"><figcaption>bats<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/bowler.png','_blank')"><img src="troops/bowler.png" alt="bowler"><figcaption>bowler<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/cursed-hog.png','_blank')"><img src="troops/cursed-hog.png" alt="cursed-hog"><figcaption>cursed-hog<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/dark-prince.png','_blank')"><img src="troops/dark-prince.png" alt="dark-prince"><figcaption>dark-prince<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/electro-giant.png','_blank')"><img src="troops/electro-giant.png" alt="electro-giant"><figcaption>electro-giant<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/electro-spirit.png','_blank')"><img src="troops/electro-spirit.png" alt="electro-spirit"><figcaption>electro-spirit<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/elite-barbarians.png','_blank')"><img src="troops/elite-barbarians.png" alt="elite-barbarians"><figcaption>elite-barbarians<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/elite-musketeer.png','_blank')"><img src="troops/elite-musketeer.png" alt="elite-musketeer"><figcaption>elite-musketeer<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/elixir-blob.png','_blank')"><img src="troops/elixir-blob.png" alt="elixir-blob"><figcaption>elixir-blob<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/elixir-golem.png','_blank')"><img src="troops/elixir-golem.png" alt="elixir-golem"><figcaption>elixir-golem<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/elixir-golemite.png','_blank')"><img src="troops/elixir-golemite.png" alt="elixir-golemite"><figcaption>elixir-golemite<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/executioner.png','_blank')"><img src="troops/executioner.png" alt="executioner"><figcaption>executioner<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/fire-spirit.png','_blank')"><img src="troops/fire-spirit.png" alt="fire-spirit"><figcaption>fire-spirit<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/firecracker.png','_blank')"><img src="troops/firecracker.png" alt="firecracker"><figcaption>firecracker<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/giant.png','_blank')"><img src="troops/giant.png" alt="giant"><figcaption>giant<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/goblin-demolisher.png','_blank')"><img src="troops/goblin-demolisher.png" alt="goblin-demolisher"><figcaption>goblin-demolisher<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/goblins.png','_blank')"><img src="troops/goblins.png" alt="goblins"><figcaption>goblins<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/golem.png','_blank')"><img src="troops/golem.png" alt="golem"><figcaption>golem<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/golemite.png','_blank')"><img src="troops/golemite.png" alt="golemite"><figcaption>golemite<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/heal-spirit.png','_blank')"><img src="troops/heal-spirit.png" alt="heal-spirit"><figcaption>heal-spirit<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/hog-rider.png','_blank')"><img src="troops/hog-rider.png" alt="hog-rider"><figcaption>hog-rider<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/hopper.png','_blank')"><img src="troops/hopper.png" alt="hopper"><figcaption>hopper<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/ice-golem.png','_blank')"><img src="troops/ice-golem.png" alt="ice-golem"><figcaption>ice-golem<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/ice-spirit.png','_blank')"><img src="troops/ice-spirit.png" alt="ice-spirit"><figcaption>ice-spirit<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/inferno-dragon.png','_blank')"><img src="troops/inferno-dragon.png" alt="inferno-dragon"><figcaption>inferno-dragon<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/knight.png','_blank')"><img src="troops/knight.png" alt="knight"><figcaption>knight<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/lava-hound.png','_blank')"><img src="troops/lava-hound.png" alt="lava-hound"><figcaption>lava-hound<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/lava-pup.png','_blank')"><img src="troops/lava-pup.png" alt="lava-pup"><figcaption>lava-pup<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/lumberjack.png','_blank')"><img src="troops/lumberjack.png" alt="lumberjack"><figcaption>lumberjack<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/mega-knight.png','_blank')"><img src="troops/mega-knight.png" alt="mega-knight"><figcaption>mega-knight<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/mega-minion.png','_blank')"><img src="troops/mega-minion.png" alt="mega-minion"><figcaption>mega-minion<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/mini-pekka.png','_blank')"><img src="troops/mini-pekka.png" alt="mini-pekka"><figcaption>mini-pekka<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/minion-horde.png','_blank')"><img src="troops/minion-horde.png" alt="minion-horde"><figcaption>minion-horde<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/minions.png','_blank')"><img src="troops/minions.png" alt="minions"><figcaption>minions<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/mother-witch.png','_blank')"><img src="troops/mother-witch.png" alt="mother-witch"><figcaption>mother-witch<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/musketeer.png','_blank')"><img src="troops/musketeer.png" alt="musketeer"><figcaption>musketeer<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/p-e-k-k-a.png','_blank')"><img src="troops/p-e-k-k-a.png" alt="p-e-k-k-a"><figcaption>p-e-k-k-a<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/prince.png','_blank')"><img src="troops/prince.png" alt="prince"><figcaption>prince<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/royal-giant.png','_blank')"><img src="troops/royal-giant.png" alt="royal-giant"><figcaption>royal-giant<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/royal-hogs.png','_blank')"><img src="troops/royal-hogs.png" alt="royal-hogs"><figcaption>royal-hogs<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/royal-recruits.png','_blank')"><img src="troops/royal-recruits.png" alt="royal-recruits"><figcaption>royal-recruits<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/skeleton-army.png','_blank')"><img src="troops/skeleton-army.png" alt="skeleton-army"><figcaption>skeleton-army<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/skeleton-barrel.png','_blank')"><img src="troops/skeleton-barrel.png" alt="skeleton-barrel"><figcaption>skeleton-barrel<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/skeletons.png','_blank')"><img src="troops/skeletons.png" alt="skeletons"><figcaption>skeletons<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/sparky.png','_blank')"><img src="troops/sparky.png" alt="sparky"><figcaption>sparky<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/spear-goblins.png','_blank')"><img src="troops/spear-goblins.png" alt="spear-goblins"><figcaption>spear-goblins<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/three-musketeers.png','_blank')"><img src="troops/three-musketeers.png" alt="three-musketeers"><figcaption>three-musketeers<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/valkyrie.png','_blank')"><img src="troops/valkyrie.png" alt="valkyrie"><figcaption>valkyrie<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/wall-breakers.png','_blank')"><img src="troops/wall-breakers.png" alt="wall-breakers"><figcaption>wall-breakers<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/witch.png','_blank')"><img src="troops/witch.png" alt="witch"><figcaption>witch<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/wizard.png','_blank')"><img src="troops/wizard.png" alt="wizard"><figcaption>wizard<span>16×16</span></figcaption></figure>
+  <figure onclick="window.open('troops/zappies.png','_blank')"><img src="troops/zappies.png" alt="zappies"><figcaption>zappies<span>16×16</span></figcaption></figure>
+</div>
+<div class="bar">70 sprites</div>
+</body></html>
