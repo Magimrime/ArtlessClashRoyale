@@ -83,6 +83,25 @@ export default class Proj {
         return this;
     }
 
+    // Executioner's AXE: flies out along a fixed heading to `maxDist`, then boomerangs
+    // home to the thrower. It PENETRATES — everything it passes takes damage once per
+    // leg (out and back), so a line of troops is hit twice.
+    asAxe(owner, ang, maxDist) {
+        this.isAxe = true;
+        this.axeOwner = owner;
+        this.axeAng = ang;
+        this.axeMax = maxDist;
+        this.axeOut = true;      // outbound leg
+        this.axeHit = [];        // enemies already hit on THIS leg
+        this.axeSpin = 0;
+        this.ox = this.x; this.oy = this.y;
+        this.life = 240;
+        return this;
+    }
+
+    // Valkyrie's 360° spin — a visual-only sweep ring.
+    asSpin() { this.isSpin = true; this.life = 9; return this; }
+
     // Firecracker: the big rocket (bursts on its target into sparks)…
     asFirework() { this.firework = true; return this; }
     // …and one of the five SPARKS: an unlocked bullet flying a fixed heading that
@@ -214,6 +233,10 @@ export default class Proj {
                 if (this.spellKind === "fireball" && e instanceof Troop && !(e instanceof Tower) && !(e instanceof Building)) {
                     e.fbSlowDelay = 18;
                 }
+                // Giant Snowball: 35% slow for 2.5s (0.65x move speed — the standard slow).
+                if (this.snowSlow && e instanceof Troop && !(e instanceof Tower) && !(e instanceof Building)) {
+                    e.sl = Math.max(e.sl || 0, 150); e.slowMul = 0.65;
+                }
                 if (this.hasKnockback && e instanceof Troop && !(e instanceof Tower) && !(e instanceof Building)) {
                     // A Fireball shoves EVERY troop it hits — ground OR air — into a
                     // friction slide (heavies resist, handled in applyKnockback). Other
@@ -259,6 +282,38 @@ export default class Proj {
             if (this.chainHit.length >= this.chainMax) this.life = Math.min(this.life, 30);
             return;
         }
+        if (this.isAxe) {
+            this.life--;
+            this.axeSpin += 0.2;
+            if (this.axeOut) {
+                this.x += Math.cos(this.axeAng) * this.spd;
+                this.y += Math.sin(this.axeAng) * this.spd;
+                // Reached full throw: turn around and start a FRESH hit list for the
+                // return leg, so everything gets clipped a second time on the way back.
+                if (Math.hypot(this.x - this.ox, this.y - this.oy) >= this.axeMax) {
+                    this.axeOut = false;
+                    this.axeHit = [];
+                }
+            } else {
+                // Home back to the thrower (if he died, the axe just drops).
+                if (!this.axeOwner || this.axeOwner.hp <= 0) { this.life = 0; return; }
+                const back = Math.atan2(this.axeOwner.y - this.y, this.axeOwner.x - this.x);
+                this.x += Math.cos(back) * this.spd;
+                this.y += Math.sin(back) * this.spd;
+                if (Math.hypot(this.x - this.axeOwner.x, this.y - this.axeOwner.y) < this.spd + 6) { this.life = 0; return; }
+            }
+            for (let e of g.ents) {
+                if (e.tm === this.tm || e.hp <= 0) continue;
+                if (e.isGhosted || e.teslaHidden || e.sjT > 0) continue;
+                if (this.axeHit.includes(e)) continue;
+                if (Math.hypot(this.x - e.x, this.y - (e.y - (e.fly ? 22 : 0))) < 9 + g.getHitboxRadius(e)) {
+                    e.hp -= this.dmg;
+                    this.axeHit.push(e);
+                }
+            }
+            return;
+        }
+
         if (this.spark) {
             this.life--;
             this.x += Math.cos(this.sparkAng) * this.spd;
@@ -276,7 +331,7 @@ export default class Proj {
             return;
         }
 
-        if (this.chainTargets || this.barbBreak || this.isIceNova || this.shockBeams || this.isShockwave || this.isPhantom || this.isElectricRing) {
+        if (this.isSpin || this.chainTargets || this.barbBreak || this.isIceNova || this.shockBeams || this.isShockwave || this.isPhantom || this.isElectricRing) {
             this.life--; // brief visual-only flashes count down and vanish
             return;
         }

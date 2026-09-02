@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.5.9** — here's the whole road there.
+We're currently on **26.5.10** — here's the whole road there.
 
 ---
 
@@ -92,6 +92,10 @@ A major on request: not a new coat of paint this time, but the deepest gameplay-
 - **26.5.7** — **The Firecracker fires an actual FIREWORK**: a big pink rocket that pops on its target (full damage) and splits into **five smaller sparks that fly on through the enemy, PENETRATING every troop in their path** (56 each, one hit per troop per spark) — recoil hop intact. The **Witch's card face** now shows her real summon: four skeletons in a ring around her (not three at her feet). And the **Balloon draws bigger** — a properly balloon-sized envelope (its hitbox is unchanged).
 - **26.5.8** — The Tesla **sinks and rises with an animation**: instead of snapping between tower and box, it now **drops into its pit as a two-panel wooden lid slides shut** (and rises back out, lid parting, to zap).
 - **26.5.9** — Fixed 26.5.8's mistakes. The health bar is **supposed to stay visible** when the Tesla is covered (like the real game) — it's back. And the sink was drawn with a bad clip that **sliced the raised tower into a half-circle**; the retract is now a clean vertical **squash into the ground** (full round tower at rest, no clipping), with the wooden lid closing over it — and the HP bar shows in every state.
+- **26.5.10** — **Three new cards**, all on real Level-11 stats:
+  - **Valkyrie** (4 elixir, 2224 hp, 322 dmg, 1.5s hit speed) — her swing is a true **360° spin**: every ground enemy touching her is hit, not just the one she's facing.
+  - **Executioner** (5 elixir, 1289 hp, 267 area dmg, 2.4s, 4.5-tile range, hits air) — throws a **boomerang axe** that flies out and comes back, **damaging everything it passes on both legs**, so a line of troops takes it twice.
+  - **Giant Snowball** (2 elixir, 159 dmg) — a big packed snowball that **slows 35% for 2.5s and knocks back**. Its arc and blast radius had been sitting unused in the engine all along; now it has a card to go with them.
 
 ---
 

@@ -1516,6 +1516,28 @@ class Main {
                     ctx.lineCap = "butt"; ctx.lineWidth = 1;
                     return;
                 }
+                if (p.isAxe) {
+                    // The Executioner's axe — kept plain: a brown haft and a flat blade,
+                    // turning slowly as it flies.
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate(p.axeSpin || 0);
+                    ctx.fillStyle = "#6b4a2a";
+                    ctx.fillRect(-9, -1.5, 18, 3);      // haft
+                    ctx.fillStyle = "#c8d2d8";
+                    ctx.fillRect(5, -6, 6, 12);         // blade
+                    ctx.restore();
+                    return;
+                }
+                if (p.isSpin) {
+                    // Valkyrie's 360° sweep: a quick expanding ring.
+                    const k = Math.max(0, Math.min(1, p.life / 9));
+                    ctx.globalAlpha = 0.7 * k;
+                    ctx.strokeStyle = "#ffd9a8"; ctx.lineWidth = 3;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.rad * (1.35 - 0.35 * k), 0, Math.PI * 2); ctx.stroke();
+                    ctx.globalAlpha = 1; ctx.lineWidth = 1;
+                    return;
+                }
                 if (p.firework) {
                     // The BIG firework rocket: pink shell, white core, sparkle trail.
                     ctx.strokeStyle = "rgba(255,158,203,0.55)"; ctx.lineWidth = 3; ctx.lineCap = "round";
@@ -2672,6 +2694,7 @@ class Main {
             "Lumberjack": "#5a7a3a", "Balloon": "#9c2b3a", "Hopper": "#6db84a", "Skeleton Barrel": "#a5713a",
             "Inferno Tower": "#b5563a", "Elixir Collector": "#c46fb0", "Crate": "#9c7b4a",
             "Tesla": "#57b8d8", "Bomb Tower": "#8a8f99", "Tombstone": "#9aa0a8", "Firecracker": "#e87ea1",
+            "Valkyrie": "#d16f3a", "Executioner": "#3f8a72", "Giant Snowball": "#cfeeff",
             "Golemite": "#8a8a8a", "Lava Pup": "#ff8a4c", "Elixir Golemite": "#d56ab5",
             "Elixir Blob": "#d56ab5", "Cursed Hog": "#8e4fb0", "Golem": "#8a8a8a"
         };
@@ -2958,6 +2981,8 @@ class Main {
         else if (n === "Sparky" || n === "Bowler") m = 18;
         else if (n === "Balloon") m = 24;
         else if (n === "Skeleton Barrel") m = 12;
+        else if (n === "Valkyrie") m = 14;
+        else if (n === "Executioner") m = 13;
         else if (n.includes("Dragon") || n === "Lava Hound") m = 16;
         else if (["Giant", "Golem", "Elixir Golem", "Royal Giant", "Electro Giant"].includes(n)) m = 20;
         return m * 0.88;
@@ -3649,8 +3674,16 @@ class Main {
             ctx.beginPath(); ctx.moveTo(-13, -5); ctx.lineTo(13, -5); ctx.moveTo(-13, 5); ctx.lineTo(13, 5); ctx.stroke();
             ctx.lineWidth = 1;
         } else if (k === "snowball") {
-            ctx.fillStyle = "#dff1ff"; ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = "#9cc6e8"; ctx.lineWidth = 1.5; ctx.stroke();
+            // It's the GIANT Snowball — a big packed ball of snow (bigger than the
+            // Rocket), with a couple of shaded dimples so it reads as packed snow.
+            ctx.fillStyle = "#e9f6ff"; ctx.beginPath(); ctx.arc(0, 0, 21, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = "#93bcdc"; ctx.lineWidth = 2; ctx.stroke();
+            ctx.fillStyle = "#cfe4f5";
+            ctx.beginPath(); ctx.arc(6.5, 4.5, 6, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(-7, 7, 4, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath(); ctx.arc(-6.5, -7, 6.5, 0, Math.PI * 2); ctx.fill();
+            ctx.lineWidth = 1;
         } else if (k === "rocket") {
             // A big heavy brown ball with a white skull on it.
             ctx.fillStyle = "#6e4a2b"; ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();

@@ -155,7 +155,18 @@ export default class GameEngine {
             // Firecracker — real L11: 3 elixir, 300 hp, 168 spark-burst splash, 3s hit
             // speed, 6-tile range (engine scale ≈150), Fast, hits air; her shot kicks
             // HER backward (see Troop.js).
-            new Card("Firecracker", 3, 300, 168, 0.825, 150, 0, 100, 180, 160, false, true)
+            new Card("Firecracker", 3, 300, 168, 0.825, 150, 0, 100, 180, 160, false, true),
+            // Valkyrie — real L11: 4 elixir, 2224 hp, 322 damage, 1.5s hit speed (rt=90),
+            // Medium, melee "long", ground only. Her swing is a 360° SPIN that hits every
+            // ground enemy around her, not just her target (see Troop.js).
+            new Card("Valkyrie", 4, 2224, 322, 0.55, 20, 0, 100, 90, 150, false, false),
+            // Executioner — real L11: 5 elixir, 1289 hp, 267 area damage, 2.4s hit speed
+            // (rt=144), Medium, 4.5-tile range (≈117), hits air. Throws a spinning AXE
+            // that flies out and BOOMERANGS back, hitting everything on both passes.
+            new Card("Executioner", 5, 1289, 267, 0.55, 117, 0, 100, 144, 150, false, true),
+            // Giant Snowball — real L11: 2 elixir, 159 damage in a 2.5-tile radius; slows
+            // (35% for 2.5s) and knocks back. Its arc + radius were already wired up.
+            new Card("Giant Snowball", 2, 0, 159, 0, 0, 2, 0, 0, 0, false, true)
         ];
 
         // Role tags drive the enemy AI's counter logic. (Stats above are already
@@ -205,7 +216,8 @@ export default class GameEngine {
 
         // Area damage: splash attackers, strong against swarms.
         if (has(["Wizard", "Witch", "Baby Dragon", "Bowler", "Mega Knight",
-            "Dark Prince", "Mother Witch"]))
+            "Dark Prince", "Mother Witch", "Valkyrie", "Executioner", "Firecracker",
+            "Bomb Tower"]))
             tags.push("AOE");
 
         // High single-target DPS: melts tanks and win conditions.
@@ -216,7 +228,7 @@ export default class GameEngine {
 
         // Direct-damage / effect spells the AI can throw at a threat.
         if (has(["Fireball", "Zap", "Arrows", "Poison", "Freeze", "Vines",
-            "The Log", "Barbarian Barrel", "Royale Delivery"]))
+            "The Log", "Barbarian Barrel", "Royale Delivery", "Giant Snowball"]))
             tags.push("Spell");
 
         // Defensive buildings.
@@ -1132,6 +1144,9 @@ export default class GameEngine {
                 p.asSpellArc(cfg.arc, cfg.kind);
                 p.crownMult = crown;
                 if (c.n === "Fireball") p.hasKnockback = true;
+                // Giant Snowball: a lighter shove than the Fireball's, plus a 35% SLOW
+                // for 2.5s on everything it catches.
+                if (c.n === "Giant Snowball") { p.hasKnockback = true; p.snowSlow = true; }
                 this.projs.push(p);
             } else if (c.n === "Rage") {
                 // A pink bottle hops up then splashes into a 5s buff zone.

@@ -23,6 +23,8 @@ export default class Troop extends Entity {
         else if (c.n === "Cannon") mass = 15;
         else if (c.n === "Balloon") mass = 19;
         else if (c.n === "Skeleton Barrel") mass = 12;
+        else if (c.n === "Valkyrie") mass = 14;   // stocky spinner
+        else if (c.n === "Executioner") mass = 13;
         else if (c.n.includes("Dragon") || c.n === "Lava Hound") mass = 16;
         else if (["Giant", "Golem", "Elixir Golem", "Royal Giant", "Electro Giant"].includes(c.n) || c.t === 3) mass = 20;
         else if (c.n === "Elixir Golemite") mass = 10;
@@ -634,6 +636,13 @@ export default class Troop extends Entity {
                 p.flashCol = "#ff9ecb";
                 g.projs.push(p);
                 this.applyKnockback(Math.atan2(this.y - this.lk.y, this.x - this.lk.x), 22);
+            } else if (this.c.n === "Executioner") {
+                // Throws his AXE: it flies out to his full range, then BOOMERANGS back to
+                // him, damaging everything it passes on BOTH legs (once per leg).
+                let ang = Math.atan2(this.lk.y - (this.lk.fly ? 22 : 0) - srcY, this.lk.x - this.x);
+                // Slow, heavy throw — you can watch it travel out and come back.
+                g.projs.push(new Proj(this.x, srcY, this.lk.x, this.lk.y, null, 3.2, false, 5, this.c.d, this.tm, false)
+                    .asAxe(this, ang, this.c.rn + 20));
             } else if (this.c.n === "Goblin Demolisher") {
                 // Throws a stick of DYNAMITE — it arcs to the target (with a shadow) and
                 // bursts into an area fire blast on landing.
@@ -658,6 +667,14 @@ export default class Troop extends Entity {
                                 !e.jp && e.c.n !== "Hopper")
                                 this.launchKnockJump(g, e);
                         }
+                } else if (this.c.n === "Valkyrie") {
+                    // 360° SPIN: her axe sweeps all the way around, so every GROUND enemy
+                    // touching her gets hit — not just the one she's aiming at.
+                    for (let e of g.ents)
+                        if (e.tm !== this.tm && e.hp > 0 && !e.fly && !e.isGhosted &&
+                            e.dist(this) < 34 + g.getHitboxRadius(e))
+                            e.hp -= this.c.d;
+                    g.projs.push(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 34, 0, this.tm, false).asSpin());
                 } else if (this.c.n === "Skeleton Barrel") {
                     // Doesn't attack: connecting with its target pops the barrel — the
                     // death effects deal the area death damage and drop the crew.
