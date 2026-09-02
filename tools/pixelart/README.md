@@ -1,57 +1,54 @@
-# Pixel sprites — troops & towers
+# Pixel sprites
 
-16×16 sprites in `web/images/pixel/`. **Not wired into the game** — nothing in `web/src/`
-reads them. They're ordinary 8-bit RGBA PNGs, editable in any image editor.
+146 sprites, all **16×16**, in `web/images/pixel/`. **Not wired into the game** —
+nothing in `web/src/` reads them. Ordinary 8-bit RGBA PNGs, editable anywhere.
 
 Browse them: open `web/images/pixel/index.html`, or with the game server running,
 <http://localhost:8000/images/pixel/>.
 
-## How they were made
+## Regenerating
 
-They aren't hand-drawn — they're **the game drawing itself**. Each sprite is produced by
-calling the game's real `drawEntityBody()` on a real entity, cropping what it drew, and
-scaling it down to a 16×16 cell. So every sprite is exactly the shape, colour, rim band
-and highlight the game renders today.
+```bash
+node tools/pixelart/gen.js       # redraws every sprite
+node tools/pixelart/make-viewer.js
+```
 
-After the downscale each sprite gets a crisping pass, which is what keeps it from looking
-like a blurry thumbnail:
+- `tools/pixelart/lib.js` — a small PNG encoder plus the rasteriser
+- `tools/pixelart/gen.js` — the artwork itself, one block per sprite
 
-1. **hard alpha** — edge pixels are all-or-nothing, never half-transparent
-2. **posterise** — colours snap to bands, so the body reads as flat pixel colour
-3. **outline** — every opaque pixel touching empty space is darkened, giving a defined rim
+## How they're drawn
+
+Every sprite is plotted **pixel by pixel** — no anti-aliasing, no downscaling from a
+bigger image. That's what keeps circles perfectly round and palettes tiny:
+
+- `disc()` fills every pixel whose centre falls inside the radius, from a centre on the
+  pixel grid, so the result is symmetric on both axes. (Verified in the build.)
+- `rrect()` rounds corners with a quarter-disc test — the shape buildings and towers use.
+- `speckle()` scatters a texture colour deterministically inside the current shape.
+
+**Every sprite uses 6 colours or fewer**, and `gen.js` prints the worst offender per
+category so it stays that way.
+
+Unit colours and sizes are the game's own, copied from `main.js` `getUnitColor()` and
+`Troop.js` masses. Troops share one scale, so relative size reads at a glance: the
+smallest units are 6px across, giants 14px.
 
 ## Tower layers
 
-Towers ship as separate layers so the cannon can actually aim:
+Towers come apart so the cannon can aim:
 
 | File | What it is |
 |---|---|
-| `princess-blue.png` | the whole tower, one image |
-| `princess-blue-base.png` | just the block |
-| `princess-blue-turret.png` | just the cannon — **barrel points right (angle 0), pivot dead-centre** |
-| `king-blue-vent.png` | the king's spell vent (kings only) |
+| `princess-blue.png` | the assembled tower |
+| `princess-blue-base.png` | the rounded block |
+| `princess-blue-turret.png` | the cannon — **barrel points right, pivot dead-centre** |
+| `king-blue-vent.png` | the king's spell vent |
 
-To draw an aiming tower: blit `-base`, then blit `-turret` rotated about its centre to the
-tower's aim angle (kings: base → vent → turret). All layers share the same 16×16 frame, so
-they line up when stacked with no offset.
+Draw the base, then the turret rotated about its centre to the aim angle. All layers
+share the same 16×16 frame, so they stack with no offset.
 
-## Re-exporting
+## Spells
 
-The exporter runs inside the live game, so it needs a temporary hook:
-
-1. At the end of `web/src/main.js`, change `new Main();` to:
-   ```js
-   window.__ACR = new Main();
-   window.__ACR_CLASSES = { Troop, Tower, Building, GameEngine };
-   ```
-2. Load the game, then in the console: `__ACR.loop = function(){}` to freeze the render
-   loop so the canvas can be used as scratch space.
-3. Render each entity with `__ACR.drawEntityBody(entity, true)`, crop, downscale to 16×16,
-   apply the crisping pass, and save.
-4. **Remove the hook from `main.js`** when done.
-
-Then rebuild the contact sheet:
-
-```bash
-node tools/pixelart/make-viewer.js
-```
+The spell sprites are the **placed** footprint — a circle with a texture, so each zone
+has its own surface: bubbles for poison, sparks for rage, a swirl for clone and mirror,
+a plus for heal, a flake for freeze, headstones for graveyard, strands for vines.
