@@ -18,18 +18,13 @@ export default class Proj {
         this.rad = r;
         this.dmg = d;
         this.tm = tm;
-        this.barrel = bar;
         this.life = sp ? 10 : 1000;
 
         // Flags
         this.isRoot = false;
         this.isFreeze = false;
-        this.barbBarrel = false;
-        this.miniFireball = false;
         this.isHeal = false;
-        this.barbBreak = false;
         this.fireArea = false;
-        this.redArea = false;
         this.brownArea = false;
         this.poison = false;
         this.graveyard = false;
@@ -47,7 +42,6 @@ export default class Proj {
         this.isSpellArc = false;
         this.arcMax = 0;
         this.totalDist = 0;
-        this.arrowBurst = false;
         this.spellKind = null;
         this.barrelGoblins = false;
         this.flashCol = null;
@@ -59,12 +53,6 @@ export default class Proj {
         this.stunDuration = 30;
         this.chainTargets = null;
         this.hitEntities = [];
-    }
-
-    asChain(a, b) {
-        this.chainTargets = [a, b];
-        this.life = 10;
-        return this;
     }
 
     // Electro chain that propagates target-to-target over time (visible in real
@@ -115,14 +103,9 @@ export default class Proj {
         return this;
     }
 
-    asBarbBarrel() { this.barbBarrel = true; return this; }
-    asMiniFireball() { this.miniFireball = true; return this; }
     asHealEffect() { this.isHeal = true; return this; }
     asLightBlue() { this.isLightBlue = true; return this; }
-    asBarbBreak() { this.barbBreak = true; this.life = 6; return this; }
     asFireArea() { this.fireArea = true; this.life = 6; return this; }
-    asRedArea() { this.redArea = true; this.life = 12; return this; }
-    asBrownArea() { this.brownArea = true; this.life = 12; return this; }
     // Royale Delivery: a growing shadow as the crate falls (~1.5s) then it lands.
     asDelivery() { this.isDelivery = true; this.life = 95; this.deliveryMax = 95; return this; }
     asPoison() { this.poison = true; this.life = 480; return this; }       // ~8s, real Poison
@@ -141,9 +124,6 @@ export default class Proj {
         this.rageWindup = 28; this.rageMax = 28; this.life = 28 + dur;
         return this;
     }
-    // Balloon bomb: dropped on a target, sparks for ~0.5s, then explodes for area
-    // damage (dmg/rad set on the Proj). Ground-only blast.
-    asBomb() { this.isBomb = true; this.bombFuse = 48; this.bombMax = 48; this.life = 48; return this; }
     // Balloon DEATH bomb: when the balloon is shot down it drops a plain black
     // bomb that falls onto its shadow (dropFall ticks) and detonates after a
     // 1.5s (90-tick) fuse. Reuses the isBomb explosion path.
@@ -249,9 +229,7 @@ export default class Proj {
                 }
             }
         }
-        if (this.arrowBurst) {
-            g.projs.push(new Proj(this.tx, this.ty, this.tx, this.ty, null, 0, true, this.rad, 0, this.tm, false).asArrows());
-        } else {
+ {
             let f = new Proj(this.tx, this.ty, this.tx, this.ty, null, 0, false, this.rad, 0, this.tm, false);
             f.fireArea = true; f.life = 10; // brief, harmless explosion flash
             f.flashCol = (this.spellKind === "snowball") ? "#cfeeff" : "#ff7a1e";
@@ -333,7 +311,7 @@ export default class Proj {
             return;
         }
 
-        if (this.isSpin || this.chainTargets || this.barbBreak || this.isIceNova || this.shockBeams || this.isShockwave || this.isPhantom || this.isElectricRing) {
+        if (this.isSpin || this.chainTargets || this.isIceNova || this.shockBeams || this.isShockwave || this.isPhantom || this.isElectricRing) {
             this.life--; // brief visual-only flashes count down and vanish
             return;
         }
@@ -485,7 +463,7 @@ export default class Proj {
             return;
         }
 
-        if (this.spl || this.fireArea || this.redArea || this.brownArea) {
+        if (this.spl || this.fireArea || this.brownArea) {
             if (this.isHeal) {
                 this.life--;
                 if (this.life === 5) {
@@ -503,9 +481,9 @@ export default class Proj {
                 return;
             }
 
-            if (this.fireArea || this.redArea || this.brownArea) {
+            if (this.fireArea || this.brownArea) {
                 this.life--;
-                if (this.life === ((this.redArea || this.brownArea) ? 11 : 5)) {
+                if (this.life === (this.brownArea ? 11 : 5)) {
                     for (let e of g.ents) {
                         if (e.tm !== this.tm && Math.hypot(this.x - e.x, this.y - e.y) < this.rad + e.rad) {
                             e.hp -= this.dmg;
@@ -553,23 +531,6 @@ export default class Proj {
                     z2.asSpellDrop("zap", "#d98cff", 65); // 4x slower than the first strike
                     g.projs.push(z2);
                 }
-            }
-            return;
-        }
-
-        if (this.barbBarrel) return;
-
-        if (this.barrel) {
-            let a = Math.atan2(this.ty - this.y, this.tx - this.x);
-            let d = Math.hypot(this.tx - this.x, this.ty - this.y);
-            this.x += Math.cos(a) * this.spd;
-            this.y += Math.sin(a) * this.spd;
-            if (d < this.spd) {
-                this.life = 0;
-                let gob = g.getCard("Goblins") || new Card("Goblins", 0, 90, 100, 1.7, 12, 0, 2, 60, 200, false, false);
-                g.ents.push(new Troop(this.tm, this.x, this.y, gob));
-                g.ents.push(new Troop(this.tm, this.x - 10, this.y + 10, gob));
-                g.ents.push(new Troop(this.tm, this.x + 10, this.y + 10, gob));
             }
             return;
         }
@@ -658,7 +619,7 @@ export default class Proj {
                 g.projs.push(splash);
                 return;
             }
-            if (this.t && !this.miniFireball) {
+            if (this.t) {
                 if (this.isCurse && this.t instanceof Troop && this.t.isGhosted) {
                     // A ghost is a temporary phantom — the curse can't turn the ghost
                     // ITSELF into a hog. It just summons a regular hog for the witch's
@@ -673,7 +634,7 @@ export default class Proj {
                     if (this.shouldStun) this.t.st = this.stunDuration;
                 }
             }
-            if (this.spl || this.miniFireball) {
+            if (this.spl) {
                 for (let e of g.ents) {
                     if (e.tm !== this.tm && Math.hypot(this.x - e.x, this.y - e.y) < this.rad + e.rad) {
                         e.hp -= this.dmg;

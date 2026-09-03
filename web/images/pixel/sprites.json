@@ -99,6 +99,7 @@
   "mirror",
   "poison",
   "rage",
+  "rage-bottle",
   "rocket",
   "royale-delivery",
   "the-log",
@@ -129,6 +130,7 @@
   "arrows",
   "axe",
   "barbarian-barrel",
+  "barbarian-barrel-enemy",
   "bullet",
   "cannonball",
   "dynamite",
@@ -142,6 +144,7 @@
   "the-log-enemy"
  ],
  "ui": [
+  "button",
   "button-blue",
   "button-green",
   "button-orange",

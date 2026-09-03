@@ -5,6 +5,11 @@ import Building from './entities/Building.js';
 import MultiplayerManager from './multiplayer/MultiplayerManager.js';
 import { Pixel } from './render/Pixel.js';
 
+// Building card name -> sprite in images/pixel/buildings/. Tesla is handled on
+// its own (it has a raised and a covered state).
+const BUILDING_SPRITE = { "Cannon": "cannon", "Inferno Tower": "inferno-tower", "Bomb Tower": "bomb-tower",
+                          "Tombstone": "tombstone", "Elixir Collector": "elixir-collector", "Crate": "crate" };
+
 
 // --- DEBUG ERROR HANDLER ---
 window.logError = function (msg) {
@@ -60,7 +65,6 @@ const State = {
 // a ground contact shadow, and a small specular highlight so everything reads as rounded &
 // raised. OFF — troops and buildings wear the classic flat look. Flip to true to bring
 // the raised/shaded look back.
-const FAUX3D = false;
 
 class Main {
     constructor() {
@@ -98,8 +102,6 @@ class Main {
         this.mp = new MultiplayerManager(this.eng); // Pass Engine
 
         this.scale = 1.0;
-        this.xOffset = 0;
-        this.yOffset = 0;
 
         this.mouse = { x: -100, y: -100 };
         this.cheatOptionVisible = true;
@@ -124,7 +126,6 @@ class Main {
         // MP UI
         this.makeGameBtn = { x: 0, y: 0, w: 200, h: 60 };
         this.joinGameBtn = { x: 0, y: 0, w: 200, h: 60 };
-        this.codeInputs = []; // Rects for 5 digits (for join)
         this.enteredCode = "";
 
         // Sandbox mode UI — two button rows in the bottom strip plus popups.
@@ -434,13 +435,6 @@ class Main {
         this.scale = Math.min(sw, sh);
         canvas.style.width = `${W * this.scale}px`;
         canvas.style.height = `${H * this.scale}px`;
-    }
-
-    handleInput(e) {
-        const rect = canvas.getBoundingClientRect();
-        const mx = (e.clientX - rect.left) * (W / rect.width);
-        const my = (e.clientY - rect.top) * (H / rect.height);
-        this.handle(mx, my);
     }
 
     contains(rect, x, y) {
@@ -990,12 +984,13 @@ class Main {
                 ctx.fillStyle = "rgba(255,255,255,0.5)";
                 ctx.font = "600 12px 'Baloo 2', 'Segoe UI', sans-serif";
                 ctx.textAlign = "left";
-                ctx.fillText(`${this.visitorCount} plays`, 66, 40); // beside the gear button
+                this.txt(`${this.visitorCount} plays`, 66, 40, 12, ctx.fillStyle); // beside the gear button
             }
             ctx.textAlign = "center";
 
             // Title — white fill with a green outline and soft shadow for contrast.
             const titleY = H / 2 - 200;
+            if (!this.px.textShadow(ctx, "Clash Clone", W / 2, titleY, 48, "#ffffff", "center", "#1c6440")) {
             ctx.font = "800 48px 'Baloo 2', 'Segoe UI', sans-serif";
             ctx.fillStyle = "rgba(0,0,0,0.25)";
             ctx.fillText("Clash Clone", W / 2 + 2, titleY + 3);
@@ -1004,6 +999,7 @@ class Main {
             ctx.fillStyle = "#ffffff";
             ctx.fillText("Clash Clone", W / 2, titleY);
             ctx.lineWidth = 1;
+            }
 
             let validDeck = this.eng.myDeck.length === 8;
             this.drawBtn(this.playBtn, "PLAY", validDeck ? "#39c44e" : "#7f8b84");
@@ -1071,12 +1067,12 @@ class Main {
             ctx.fillStyle = "red";
             ctx.font = "bold 14px 'Baloo 2', 'Segoe UI', sans-serif";
             ctx.textAlign = "center";
-            ctx.fillText("NOTE: DEBUG FEATURES DISABLED IN MULTIPLAYER", W / 2, H - 20);
+            this.txt("NOTE: DEBUG FEATURES DISABLED IN MULTIPLAYER", W / 2, H - 20, 14, ctx.fillStyle, "center");
             if (this.mp.backendAvailable === false) {
                 ctx.fillStyle = "#ffcc00";
                 ctx.font = "12px 'Baloo 2', 'Segoe UI', sans-serif";
-                ctx.fillText("No game server reachable for this site.", W / 2, H - 50);
-                ctx.fillText("See README to host one (set MP_API_BASE).", W / 2, H - 36);
+                this.txt("No game server reachable for this site.", W / 2, H - 50, 12, ctx.fillStyle, "center");
+                this.txt("See README to host one (set MP_API_BASE).", W / 2, H - 36, 12, ctx.fillStyle, "center");
             }
             return;
         }
@@ -1106,7 +1102,7 @@ class Main {
             ctx.font = "bold 50px Courier New";
             ctx.fillStyle = "white";
             ctx.textAlign = "center";
-            ctx.fillText(codeStr.padEnd(5, '_').split('').join(' '), W / 2, H / 2);
+            this.txt(codeStr.padEnd(5, '_').split('').join(' '), W / 2, H / 2, 50, ctx.fillStyle, "center");
 
             this.drawCenteredString("Type digits on keyboard. Press Enter to Join.", W / 2, H / 2 + 60, "14px 'Baloo 2', 'Segoe UI', sans-serif", "#eee");
 
@@ -1244,12 +1240,21 @@ class Main {
         if (!(this.state === State.SANDBOX && this.eng.sandboxNoRiver)) {
             // Live positions — the sandbox world editor can move the river/bridges.
             const RY = this.eng.RIV_Y || RIV_Y;
-            ctx.fillStyle = "#3a8fd0";
-            ctx.fillRect(0, RY - 15, W, 30);
+            if (this.px.has("map/tile-river")) {
+                for (let tx = 0; tx < W; tx += 30) this.px.drawAt(ctx, "map/tile-river", tx, RY - 15, 30, 30);
+            } else {
+                ctx.fillStyle = "#3a8fd0";
+                ctx.fillRect(0, RY - 15, W, 30);
+            }
             // Bridges — solid wood, no plank lines.
             ctx.fillStyle = "#9c6b3a";
             for (const bx of (this.eng.bridgeXs || [W / 4, W * 3 / 4])) {
-                ctx.fillRect(bx - 26, RY - 20, 52, 40);
+                if (this.px.has("map/tile-bridge")) {
+                    for (let ty = RY - 20; ty < RY + 20; ty += 20) {
+                        this.px.drawAt(ctx, "map/tile-bridge", bx - 26, ty, 26, 20);
+                        this.px.drawAt(ctx, "map/tile-bridge", bx, ty, 26, 20);
+                    }
+                } else ctx.fillRect(bx - 26, RY - 20, 52, 40);
             }
         }
 
@@ -1425,8 +1430,10 @@ class Main {
                     ctx.fillStyle = "rgba(0,0,0,0.28)";
                     ctx.beginPath(); ctx.ellipse(p.x, p.y + 7, sh, sh * 0.45, 0, 0, Math.PI * 2); ctx.fill();
                     let by = p.y - drop;
-                    ctx.fillStyle = "#000000";
-                    ctx.beginPath(); ctx.arc(p.x, by, 11, 0, Math.PI * 2); ctx.fill();
+                    if (!this.px.draw(ctx, "effects/death-bomb", p.x, by, 32)) {
+                        ctx.fillStyle = "#000000";
+                        ctx.beginPath(); ctx.arc(p.x, by, 11, 0, Math.PI * 2); ctx.fill();
+                    }
                     return;
                 }
                 if (p.isBomb) {
@@ -1434,10 +1441,10 @@ class Main {
                     let f = p.bombFuse / (p.bombMax || 30);
                     ctx.fillStyle = "rgba(0,0,0,0.22)";
                     ctx.beginPath(); ctx.ellipse(p.x, p.y + 6, 7, 3, 0, 0, Math.PI * 2); ctx.fill();
-                    ctx.fillStyle = "#262629";
-                    ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2); ctx.fill();
-                    ctx.fillStyle = "rgba(255,255,255,0.25)";
-                    ctx.beginPath(); ctx.arc(p.x - 2, p.y - 2, 2, 0, Math.PI * 2); ctx.fill();
+                    if (!this.px.draw(ctx, "effects/death-bomb", p.x, p.y, 16)) {
+                        ctx.fillStyle = "#262629";
+                        ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2); ctx.fill();
+                    }
                     // fuse + spark (burns down as the fuse runs out)
                     ctx.strokeStyle = "#8a6a3a"; ctx.lineWidth = 1.5;
                     ctx.beginPath(); ctx.moveTo(p.x + 3, p.y - 5); ctx.lineTo(p.x + 5 + f * 3, p.y - 9 - f * 3); ctx.stroke();
@@ -1456,45 +1463,19 @@ class Main {
                         // landing shadow
                         ctx.fillStyle = "rgba(0,0,0,0.25)";
                         ctx.beginPath(); ctx.ellipse(p.x, p.y, 8, 3, 0, 0, Math.PI * 2); ctx.fill();
-                        // A rounded-trapezoid GLASS bottle (wider at the base) with pink
-                        // rage filling the lower part — plus a small cork.
-                        let cx = p.x, cy0 = by - 5;
-                        let topW = 13, botW = 21, bh = 15, r = 4;
-                        let tY = cy0 - bh / 2, bY = cy0 + bh / 2;
-                        const trap = (tw, bw, t0, b0) => {
-                            ctx.beginPath();
-                            ctx.moveTo(cx, t0);
-                            ctx.arcTo(cx + tw / 2, t0, cx + bw / 2, b0, r);
-                            ctx.arcTo(cx + bw / 2, b0, cx - bw / 2, b0, r);
-                            ctx.arcTo(cx - bw / 2, b0, cx - tw / 2, t0, r);
-                            ctx.arcTo(cx - tw / 2, t0, cx + tw / 2, t0, r);
-                            ctx.closePath();
-                        };
-                        // cork
-                        ctx.fillStyle = "#9a6a35";
-                        ctx.fillRect(cx - 3.5, tY - 4, 7, 4);
-                        // translucent glass body
-                        ctx.fillStyle = "rgba(216,232,242,0.42)";
-                        trap(topW, botW, tY, bY); ctx.fill();
-                        // pink rage filling the lower ~60% (width interpolated to fit inside)
-                        let midY = cy0 - 1;
-                        let midW = topW + (botW - topW) * ((midY - tY) / bh);
-                        ctx.fillStyle = "#ff5fb0";
-                        trap(midW - 3, botW - 3, midY, bY - 1.5); ctx.fill();
-                        // glass outline + a bright highlight streak (the shine)
-                        ctx.strokeStyle = "rgba(150,30,90,0.35)"; ctx.lineWidth = 1.2;
-                        trap(topW, botW, tY, bY); ctx.stroke();
-                        ctx.strokeStyle = "rgba(255,255,255,0.55)"; ctx.lineWidth = 1.4;
-                        ctx.beginPath(); ctx.moveTo(cx - topW / 2 + 3, tY + 3); ctx.lineTo(cx - botW / 2 + 4, bY - 3); ctx.stroke();
-                        ctx.lineWidth = 1;
+                        // The bottle, hopping before it splashes.
+                        if (!this.px.draw(ctx, "spells/rage-bottle", p.x, by - 6, 32)) {
+                            ctx.fillStyle = "#ff5fb0"; ctx.beginPath(); ctx.arc(p.x, by - 5, 8, 0, Math.PI * 2); ctx.fill();
+                        }
                     } else {
                         // Active rage pool — translucent PINK disc that gently pulses.
-                        let pulse = 0.16 + 0.06 * Math.sin(Date.now() / 160);
-                        ctx.fillStyle = `rgba(255,95,176,${pulse})`;
-                        ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.fill();
-                        ctx.strokeStyle = "rgba(255,130,195,0.6)"; ctx.lineWidth = 2;
-                        ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.stroke();
-                        ctx.lineWidth = 1;
+                        let pulse = 0.55 + 0.15 * Math.sin(Date.now() / 160);
+                        ctx.globalAlpha = pulse;
+                        if (!this.px.draw(ctx, "spells/rage", p.x, p.y, p.rad * 2)) {
+                            ctx.fillStyle = "rgba(255,95,176,0.4)";
+                            ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.fill();
+                        }
+                        ctx.globalAlpha = 1; ctx.lineWidth = 1;
                     }
                     return;
                 }
@@ -1528,7 +1509,8 @@ class Main {
                     // crescent-bladed head on one end, turning as it flies.
                     ctx.save();
                     ctx.translate(p.x, p.y);
-                    ctx.rotate(p.axeSpin || 0);
+                    ctx.rotate(Pixel.snap(p.axeSpin || 0));
+                    if (this.px.draw(ctx, "projectiles/axe", 0, 0, 48)) { ctx.restore(); ctx.lineWidth = 1; return; }
                     // haft (runs left→right, head on the right)
                     ctx.fillStyle = "#7a5228";
                     ctx.fillRect(-16, -2.5, 30, 5);
@@ -1567,12 +1549,14 @@ class Main {
                     // the axe head itself, riding the leading edge
                     const bx = p.x + Math.cos(ang) * R * 0.92, by = p.y + Math.sin(ang) * R * 0.92;
                     ctx.globalAlpha = 0.95;
-                    ctx.save();
-                    ctx.translate(bx, by);
-                    ctx.rotate(ang + Math.PI / 2);
-                    ctx.fillStyle = "#6b4a2a"; ctx.fillRect(-2, -7, 4, 14);   // haft
-                    ctx.fillStyle = "#d8e2e8"; ctx.fillRect(-6, -9, 12, 7);   // blade
-                    ctx.restore();
+                    if (!this.px.draw(ctx, "projectiles/axe", bx, by, 24, Pixel.snap(ang))) {
+                        ctx.save();
+                        ctx.translate(bx, by);
+                        ctx.rotate(ang + Math.PI / 2);
+                        ctx.fillStyle = "#6b4a2a"; ctx.fillRect(-2, -7, 4, 14);   // haft
+                        ctx.fillStyle = "#d8e2e8"; ctx.fillRect(-6, -9, 12, 7);   // blade
+                        ctx.restore();
+                    }
                     ctx.globalAlpha = 1; ctx.lineCap = "butt"; ctx.lineWidth = 1;
                     return;
                 }
@@ -1581,10 +1565,10 @@ class Main {
                     ctx.strokeStyle = "rgba(255,158,203,0.55)"; ctx.lineWidth = 3; ctx.lineCap = "round";
                     ctx.beginPath(); ctx.moveTo(p.lx, p.ly); ctx.lineTo(p.x, p.y); ctx.stroke();
                     ctx.lineCap = "butt"; ctx.lineWidth = 1;
-                    ctx.fillStyle = "#ff6fae";
-                    ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.fill();
-                    ctx.fillStyle = "#ffffff";
-                    ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill();
+                    if (!this.px.draw(ctx, "projectiles/firework-rocket", p.x, p.y, 32)) {
+                        ctx.fillStyle = "#ff6fae";
+                        ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.fill();
+                    }
                     return;
                 }
                 if (p.spark) {
@@ -1594,20 +1578,24 @@ class Main {
                     ctx.moveTo(p.x - Math.cos(p.sparkAng) * 14, p.y - Math.sin(p.sparkAng) * 14);
                     ctx.lineTo(p.x, p.y); ctx.stroke();
                     ctx.lineCap = "butt"; ctx.lineWidth = 1;
-                    ctx.fillStyle = "#ffd9ec";
-                    ctx.beginPath(); ctx.arc(p.x, p.y, 4.2, 0, Math.PI * 2); ctx.fill();
-                    ctx.fillStyle = "#ffffff";
-                    ctx.beginPath(); ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2); ctx.fill();
+                    if (!this.px.draw(ctx, "projectiles/firework-spark", p.x, p.y, 16)) {
+                        ctx.fillStyle = "#ffd9ec";
+                        ctx.beginPath(); ctx.arc(p.x, p.y, 4.2, 0, Math.PI * 2); ctx.fill();
+                    }
                     return;
                 }
-                if (p.barrel) {
-                    ctx.fillStyle = "#643200";
-                } else if (p.fireArea) {
+                if (p.fireArea) {
                     // Explosions read as a BURST now: core flash + an expanding, fading
                     // shockring + radial sparks (Graphics: Low keeps just the flash).
                     let size = p.rad * 2;
                     const lifeK = Math.max(0, Math.min(1, (p.life || 1) / 6)); // 1 → 0 as it fades
-                    if (p.isGray) {
+                    const burstWash = (!p.isGray && p.flashCol && p.flashCol !== "#ff4500") ? [p.flashCol, 0.6] : null;
+                    ctx.globalAlpha = 0.85 * (0.4 + 0.6 * lifeK);
+                    const burst = this.px.draw(ctx, p.isGray ? "effects/explosion-gray" : "effects/explosion-burst", p.x, p.y, Math.round(size / 4) * 4, 0, burstWash);
+                    ctx.globalAlpha = 1;
+                    if (burst) {
+                        // drawn
+                    } else if (p.isGray) {
                         ctx.fillStyle = "rgba(100, 100, 100, 0.7)";
                         ctx.beginPath(); ctx.arc(p.x, p.y, size / 2, 0, Math.PI * 2); ctx.fill();
                         ctx.fillStyle = "lightgray";
@@ -1640,10 +1628,10 @@ class Main {
                     }
                 } else if (p.isCannonball) {
                     // Royal Giant: a heavy dark cannonball with a highlight.
-                    ctx.fillStyle = "#2b2b2b";
-                    ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.fill();
-                    ctx.fillStyle = "#5a5a5a";
-                    ctx.beginPath(); ctx.arc(p.x - 2, p.y - 2, 2.5, 0, Math.PI * 2); ctx.fill();
+                    if (!this.px.draw(ctx, "projectiles/cannonball", p.x, p.y, 16)) {
+                        ctx.fillStyle = "#2b2b2b";
+                        ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.fill();
+                    }
                     return;
                 } else if (p.isDelivery) {
                     // Falling wooden crate: a shadow that grows over ~1.5s while the
@@ -1652,87 +1640,28 @@ class Main {
                     frac = Math.max(0, Math.min(1, frac));
                     ctx.fillStyle = "rgba(0,0,0,0.3)";
                     ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(4, p.rad * 0.75 * frac), 0, Math.PI * 2); ctx.fill();
-                    // A plain cardboard box showing TWO faces: a cardboard TOP (trapezoid
-                    // receding back) with a single seam line running through it, and a
-                    // cardboard FRONT carrying a small rotated post-it / shipping label.
-                    let cw = 42, hw = cw / 2, ch = 42, hy = ch / 2, dep = 9, fy = -hy + dep, inset = 6;
                     let ccy = p.y - (1 - frac) * 150;
-                    ctx.save(); ctx.translate(p.x, ccy);
-                    // cardboard TOP face (trapezoid receding straight back), a touch lighter
-                    ctx.fillStyle = "#d8ad6a";
-                    ctx.beginPath();
-                    ctx.moveTo(-hw, fy); ctx.lineTo(-hw + inset, -hy); ctx.lineTo(hw - inset, -hy); ctx.lineTo(hw, fy);
-                    ctx.closePath(); ctx.fill();
-                    // seam line going through the top (front edge → back edge, down the middle)
-                    ctx.strokeStyle = "rgba(90,60,25,0.7)"; ctx.lineWidth = 2;
-                    ctx.beginPath(); ctx.moveTo(0, fy); ctx.lineTo(0, -hy); ctx.stroke();
-                    // cardboard FRONT face
-                    ctx.fillStyle = "#c79a5e"; ctx.fillRect(-hw, fy, cw, ch - dep);
-                    // small rotated post-it / shipping label on the front
-                    ctx.save();
-                    ctx.translate(hw * 0.12, fy + (ch - dep) * 0.52);
-                    ctx.rotate(-0.22);
-                    ctx.fillStyle = "#f0e3a4"; // light yellowish note
-                    ctx.fillRect(-9, -10, 18, 20);
-                    ctx.strokeStyle = "rgba(120,100,40,0.55)"; ctx.lineWidth = 1; ctx.strokeRect(-9, -10, 18, 20);
-                    // faint writing lines so it reads as a label
-                    ctx.beginPath();
-                    ctx.moveTo(-6, -3); ctx.lineTo(6, -3); ctx.moveTo(-6, 2); ctx.lineTo(6, 2); ctx.moveTo(-6, 7); ctx.lineTo(3, 7);
-                    ctx.stroke();
-                    ctx.restore();
-                    // box outline
-                    ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = 1.5; ctx.strokeRect(-hw, fy, cw, ch - dep);
-                    ctx.lineWidth = 1;
-                    ctx.restore();
+                    if (!this.px.draw(ctx, "buildings/crate", p.x, ccy, 48)) {
+                        ctx.fillStyle = "#c79a5e"; ctx.fillRect(p.x - 21, ccy - 21, 42, 42);
+                    }
                     return;
                 } else if (p.isHeal) {
                     ctx.fillStyle = "rgba(0, 255, 0, 0.6)";
-                } else if (p.redArea) {
-                    ctx.fillStyle = "rgba(255, 0, 0, 0.6)";
                 } else if (p.brownArea) {
                     ctx.fillStyle = p.impactCol || "#8b4513"; // solid impact colour
-                } else if (p.poison) {
-                    ctx.fillStyle = "rgba(0, 128, 0, 0.4)";
-                    ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.fill();
-                } else if (p.graveyard) {
-                    ctx.fillStyle = "rgba(0, 0, 139, 0.4)";
-                    ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.fill();
+                } else if (p.poison || p.graveyard || p.isClone || p.isIceNova) {
+                    // A placed zone wears its textured footprint: bubbles, headstones,
+                    // the clone swirl, the ice flake.
+                    const zone = p.poison ? "spells/poison" : p.graveyard ? "spells/graveyard" : p.isClone ? "spells/clone" : "effects/ice-nova";
+                    ctx.globalAlpha = 0.7;
+                    if (!this.px.draw(ctx, zone, p.x, p.y, p.rad * 2)) {
+                        ctx.fillStyle = p.poison ? "rgba(0,128,0,0.6)" : p.graveyard ? "rgba(0,0,139,0.6)" : p.isClone ? "rgba(0,255,255,0.6)" : "rgba(135,206,250,0.9)";
+                        ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.fill();
+                    }
+                    ctx.globalAlpha = 1;
                 } else if (p.isLightBlue) {
                     ctx.fillStyle = "#64c8ff";
-                } else if (p.isClone) {
-                    ctx.fillStyle = "rgba(0, 255, 255, 0.4)";
-                } else if (p.isIceNova) {
-                    ctx.fillStyle = "rgba(135, 206, 250, 0.6)"; // Light Sky Blue
-                    // Instant size (no expansion animation)
-                    ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.fill();
-                    ctx.strokeStyle = "white";
-                    ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.stroke();
                 } else if (p.isRolling) {
-                    if (p.isLog) {
-                        if (p.barbBarrelLog) {
-                            // A proper BARREL (not a log): rounded wooden body rolling on
-                            // its side — two dark hoops around it, a stave seam along it.
-                            let w = 42, h = 26, rx = p.x - w / 2, ry = p.y - h / 2;
-                            ctx.fillStyle = (p.tm === 1) ? "#8b3a2e" : "#9c6b3a";
-                            this.drawRoundRect(rx, ry, w, h, h * 0.45, true, false);
-                            ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1.5;
-                            this.drawRoundRect(rx, ry, w, h, h * 0.45, false, false); ctx.stroke();
-                            ctx.strokeStyle = "#4d3018"; ctx.lineWidth = 3;
-                            ctx.beginPath();
-                            ctx.moveTo(p.x - w * 0.22, ry + 1.5); ctx.lineTo(p.x - w * 0.22, ry + h - 1.5);
-                            ctx.moveTo(p.x + w * 0.22, ry + 1.5); ctx.lineTo(p.x + w * 0.22, ry + h - 1.5);
-                            ctx.stroke();
-                            ctx.strokeStyle = "rgba(0,0,0,0.2)"; ctx.lineWidth = 1;
-                            ctx.beginPath(); ctx.moveTo(rx + 4, p.y); ctx.lineTo(rx + w - 4, p.y); ctx.stroke();
-                            return; // skip default circle rendering
-                        }
-                        if (p.tm === 1) ctx.fillStyle = "#8b0000"; // Dark Red for Enemy
-                        else ctx.fillStyle = "#8b4513"; // Brown for Player
-                        // Render as rectangle
-                        let w = 70, h = 20;
-                        ctx.fillRect(p.x - w / 2, p.y - h / 2, w, h);
-                        return; // Skip default circle rendering
-                    }
                     ctx.fillStyle = "#640096";
                 } else {
                     ctx.fillStyle = p.flashCol || (p.spl ? (p.rad < 10 ? "cyan" : "orange") : "lightgray");
@@ -1741,10 +1670,14 @@ class Main {
                 // chainTargets / shockBeams draw their OWN lines below, and the heal effect
                 // draws its own green ring in drawProj — none of them should ALSO drop the
                 // default circle here (that was the stray "ghost dot").
-                if (!p.fireArea && !p.poison && !p.graveyard && !p.chainTargets && !p.shockBeams && !p.isHeal) {
+                if (!p.fireArea && !p.poison && !p.graveyard && !p.isClone && !p.isIceNova && !p.chainTargets && !p.shockBeams && !p.isHeal) {
                     let size = p.rad * 2;
-                    if (!p.spl && !p.barrel && !p.redArea && !p.brownArea && !p.isHeal && !p.barbBreak && !p.isRolling && !p.isLightBlue) size = 8;
-                    ctx.beginPath(); ctx.arc(p.x, p.y, size / 2, 0, Math.PI * 2); ctx.fill();
+                    if (!p.spl && !p.brownArea && !p.isRolling && !p.isLightBlue) size = 8;
+                    // Plain shots are the bullet sprite; one with a colour of its own washes it.
+                    const col = ctx.fillStyle;
+                    if (!(size === 8 && this.px.draw(ctx, "projectiles/bullet", p.x, p.y, 16, 0, col !== "lightgray" ? [col, 0.7] : null))) {
+                        ctx.beginPath(); ctx.arc(p.x, p.y, size / 2, 0, Math.PI * 2); ctx.fill();
+                    }
                 }
 
                 if (p.chainTargets) {
@@ -1972,27 +1905,33 @@ class Main {
 
                 // Elixir bar — full width, one screen edge to the other.
                 const ebX = 0, ebY = H - 146, ebW = W, ebH = 16;
-                ctx.fillStyle = "#2a1430";
-                this.drawRoundRect(ebX, ebY, ebW, ebH, 11, true, false);
                 let elxPct = Math.max(0, Math.min(1, this.eng.p1.elx / 10.0));
-                if (elxPct > 0.001) {
+                const pxBar = this.px.elixirBar(ctx, ebX, ebY, ebW, elxPct);
+                if (!pxBar) {
+                    ctx.fillStyle = "#2a1430";
+                    this.drawRoundRect(ebX, ebY, ebW, ebH, 11, true, false);
+                }
+                if (!pxBar && elxPct > 0.001) {
                     ctx.fillStyle = "#d426c8";
                     this.drawRoundRect(ebX, ebY, ebW * elxPct, ebH, 11, true, false);
                 }
-                ctx.strokeStyle = "rgba(0,0,0,0.35)";
-                ctx.lineWidth = 1;
-                for (let i = 1; i < 10; i++) {
-                    let px = ebX + i * (ebW / 10);
-                    ctx.beginPath(); ctx.moveTo(px, ebY + 3); ctx.lineTo(px, ebY + ebH - 3); ctx.stroke();
+                if (!pxBar) {
+                    ctx.strokeStyle = "rgba(0,0,0,0.35)";
+                    ctx.lineWidth = 1;
+                    for (let i = 1; i < 10; i++) {
+                        let px = ebX + i * (ebW / 10);
+                        ctx.beginPath(); ctx.moveTo(px, ebY + 3); ctx.lineTo(px, ebY + ebH - 3); ctx.stroke();
+                    }
                 }
-                this.drawCenteredString(`${Math.floor(this.eng.p1.elx)}`, W / 2, ebY + ebH - 6, "bold 15px 'Baloo 2', 'Segoe UI', sans-serif", "white");
+                if (!this.px.textShadow(ctx, `${Math.floor(this.eng.p1.elx)}`, W / 2, ebY + ebH - 2, 15, "#ffffff", "center"))
+                    this.drawCenteredString(`${Math.floor(this.eng.p1.elx)}`, W / 2, ebY + ebH - 6, "bold 15px 'Baloo 2', 'Segoe UI', sans-serif", "white");
 
                 // Debug Opponent Elixir
                 if (this.eng.debugEnemyElixir) {
                     ctx.fillStyle = "red";
                     ctx.font = "bold 20px 'Baloo 2', 'Segoe UI', sans-serif";
                     ctx.textAlign = "right";
-                    ctx.fillText(`OPP: ${Math.floor(this.eng.p2.elx)}`, W - 10, 60);
+                    this.txt(`OPP: ${Math.floor(this.eng.p2.elx)}`, W - 10, 60, 20, "red", "right");
                 }
 
                 // Cards
@@ -2000,7 +1939,6 @@ class Main {
                     if (i < this.eng.p1.h.length) {
                         let c = this.eng.p1.h[i];
                         let r = this.cardRects[i];
-                        let hoverOff = this.cardOffsets[i] || 0;
 
                         let isSel = this.eng.sel === c;
                         let canAfford = this.eng.p1.elx >= c.c;
@@ -2052,8 +1990,10 @@ class Main {
                 if (this.eng.p1.pile.length > 0) {
                     let nextC = this.eng.p1.pile[0];
                     let nr = this.nextCardRect;
-                    ctx.fillStyle = "rgba(255,255,255,0.18)";
-                    this.drawRoundRect(nr.x, nr.y, nr.w, nr.h, 5, true, false);
+                    if (!this.px.nine(ctx, "cards/slot", nr.x, nr.y, nr.w, nr.h, 8)) {
+                        ctx.fillStyle = "rgba(255,255,255,0.18)";
+                        this.drawRoundRect(nr.x, nr.y, nr.w, nr.h, 5, true, false);
+                    }
                     this.drawCenteredString("Next", nr.x + nr.w / 2, nr.y + 14, "600 9px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.85)");
                     // Stack the name word-by-word in a small font so it fits the card.
                     let words = nextC.n.split(' ');
@@ -2098,7 +2038,7 @@ class Main {
                     ctx.fillStyle = (remaining <= 10 && remaining % 1 > 0.5) ? "red" : "black"; // Blink effect
                     if (this.eng.tiebreaker) ctx.fillStyle = "red";
                     ctx.font = "bold 20px 'Baloo 2', 'Segoe UI', sans-serif";
-                    ctx.fillText(timeStr, W - 40, 30);
+                    this.txt(timeStr, W - 40, 30, 20, ctx.fillStyle, ctx.textAlign);
 
                     // Save & quit the match (single-player only — MP can't pause/park).
                     if (!this.eng.isMultiplayer && this.state === State.PLAY) {
@@ -2287,11 +2227,6 @@ class Main {
             y -= 20 * Math.sin(prog * Math.PI);
         }
 
-        // Faux-3D: every unit casts a soft contact shadow on the ground (e.x/e.y is the
-        // ground point — the body floats above it for fliers/leapers). Skipped on the
-        // deck card, which sits on a flat coloured tile.
-        if (!card) this.unitShadow(e.x, e.y, e.rad * 0.88, !!(e.fly && !isLeaping));
-
         // (Sparky / Zappies charge ring is drawn once in drawCharge — no duplicate
         // aura here.)
         let name = e.c ? e.c.n : "";
@@ -2324,27 +2259,26 @@ class Main {
         if (e.isClone) ctx.globalAlpha *= 0.5; // cloned troops are translucent
         if (e.isGhosted) ctx.globalAlpha *= 0.4; // ghosts are see-through, like clones
         if (e.c && e.c.isFake) ctx.globalAlpha *= 0.8; // fakes read slightly ghostly
+
+        // The same status tints, for a sprite: a colour wash laid over the art with
+        // its shading kept (a flat recolour would erase the drawing).
+        let wash = null;
+        if (!(e instanceof Tower)) {
+            if (e.fr > 0) wash = ["#bfe8ff", 0.65];
+            else if (e.sl > 0 && !(e.slowMul > 0 && e.slowMul < 0.6)) wash = ["#9ad2f5", 0.5];
+            else if (e.isClone || e.isGhosted) wash = ["#bce8ff", 0.55];
+            else if (e.c && e.c.isFake) wash = ["#c4e3a6", 0.55];
+            else if (e.isSkeleGeneral) wash = ["#a35cd6", 0.6];
+        }
         ctx.fillStyle = color;
         ctx.strokeStyle = "rgba(0,0,0,0.3)"; // soft outline, not harsh black
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         if (e instanceof Tower) {
-            // ROUNDED TOWER
             let r = radius;
-            this.extrudeWall(x, y, r, card ? 0 : r * 0.85, color, false); // raised block
-            ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
-            this.drawRoundRect(x - r, y - r, r * 2, r * 2, 8, true, false); // lit top face
-            ctx.stroke();
-            // Flat two-tone finish: a darker inner border band inside the rim.
-            if (this.gfxHigh && typeof color === "string" && color[0] === "#") {
-                const tb = Math.max(3, r * 0.13);
-                ctx.strokeStyle = this.shade(color, -0.12); ctx.lineWidth = tb;
-                this.drawRoundRect(x - r + tb / 2 + 1, y - r + tb / 2 + 1, 2 * r - tb - 2, 2 * r - tb - 2, 6, false, false);
-                ctx.stroke();
-                ctx.lineWidth = 1;
-            }
-            // Turret(s) rotate to aim at the tower's current target, each with a
-            // barrel sticking out. The KING also has a smaller "shooter" above.
+            const team = isFriend ? "blue" : "red", kind = e.kg ? "king" : "princess";
+            // Whole-pixel scales: the king base at 6x (96px), the princess at 5x (80px).
+            const S = e.kg ? 96 : 80;
             // Smoothly ease the displayed turret angle toward the aim angle (along
             // the shortest arc) so the barrel turns instead of snapping.
             let aim = (e.aimAngle !== undefined) ? e.aimAngle : (isFriend ? -Math.PI / 2 : Math.PI / 2);
@@ -2353,62 +2287,27 @@ class Main {
             while (da > Math.PI) da -= 2 * Math.PI;
             while (da < -Math.PI) da += 2 * Math.PI;
             e.dispAngle += da * 0.16;
-            let ang = e.dispAngle;
-            const turret = (cx, cy, tr, withBarrel) => {
-                // barrel (drawn first, under the base, pointing toward the target)
-                if (withBarrel) {
-                    ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang);
-                    ctx.fillStyle = "#3a3e44";
-                    ctx.fillRect(tr * 0.3, -tr * 0.34, tr * 1.35, tr * 0.68);
-                    ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1;
-                    ctx.strokeRect(tr * 0.3, -tr * 0.34, tr * 1.35, tr * 0.68);
-                    ctx.restore();
+            const tq = Pixel.snap(e.dispAngle);   // 16-step rotation keeps the turret crisp
+            const fs = isFriend ? -1 : 1;          // front = toward the enemy half
+            if (this.px.draw(ctx, `towers/${kind}-${team}-base`, x, y, S)) {
+                // The turret and vent layers share the base's 16x16 frame, so they are
+                // blitted at the base's size and position; the art carries the offset.
+                if (e.noTurret) {
+                    // Heist king: keeps the big spell vent, has no shooter (never fires).
+                    this.px.draw(ctx, `towers/king-${team}-vent`, x, y, S);
+                } else if (!e.kg) {
+                    this.px.draw(ctx, `towers/${kind}-${team}-turret`, x, y, S, tq); // princess cannon, aims
+                } else {
+                    // King: the spell vent, plus the aiming shooter that rises out of the
+                    // front on activation (its size is the "opening" animation).
+                    this.px.draw(ctx, `towers/king-${team}-vent`, x, y, S);
+                    let p = !e.actv ? 0 : (e.activateAnim > 0 ? 1 - e.activateAnim / 45 : 1);
+                    let sp = Math.max(0, (p - 0.2) / 0.8);
+                    if (sp > 0) this.px.draw(ctx, `towers/king-${team}-turret`, x, y + fs * r * 0.52, Math.round(S * 0.7 * sp), tq);
                 }
-                // turret base + muzzle
-                ctx.fillStyle = "#4a4e55";
-                ctx.beginPath(); ctx.arc(cx, cy, tr, 0, Math.PI * 2); ctx.fill();
-                ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1; ctx.stroke();
-                ctx.fillStyle = "#26282c";
-                ctx.beginPath(); ctx.arc(cx, cy, tr * 0.44, 0, Math.PI * 2); ctx.fill();
-            };
-            if (e.noTurret) {
-                // Heist king: keeps the big spell-vent cannon, but has no shooter
-                // station or hatch (and never fires — see Tower.act).
-                let fs = isFriend ? -1 : 1;
-                turret(x, y - fs * r * 0.32, r * 0.4, false);
-            } else if (!e.kg) {
-                turret(x, y, r * 0.5, true); // princess cannon — barrel, aims
             } else {
-                // King: big spell vent (no barrel) pushed BACK; the aiming shooter
-                // lives in a box toward the FRONT and rises out of it on activation.
-                let fs = isFriend ? -1 : 1;                   // front = toward the enemy half
-                turret(x, y - fs * r * 0.32, r * 0.4, false); // spell vent, pushed back
-                let shY = y + fs * r * 0.52, bs = r * 0.32;   // shooter station, toward the front
-                // rounded-rect path (keeps the soft outline, slightly rounded corners)
-                const rr = (rx, ry, rw, rh, rad) => {
-                    rad = Math.min(rad, rw / 2, rh / 2);
-                    ctx.beginPath();
-                    ctx.moveTo(rx + rad, ry);
-                    ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, rad);
-                    ctx.arcTo(rx + rw, ry + rh, rx, ry + rh, rad);
-                    ctx.arcTo(rx, ry + rh, rx, ry, rad);
-                    ctx.arcTo(rx, ry, rx + rw, ry, rad);
-                    ctx.closePath();
-                };
-                // box mount
-                ctx.fillStyle = "#3a3e44"; rr(x - bs, shY - bs, bs * 2, bs * 2, 5); ctx.fill();
-                ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = 1.5; ctx.stroke();
-                ctx.lineWidth = 1;
-                // open fraction: 0 asleep, 0→1 during the wake animation, 1 active
-                let p = !e.actv ? 0 : (e.activateAnim > 0 ? 1 - e.activateAnim / 45 : 1);
-                let sp = Math.max(0, (p - 0.2) / 0.8); // shooter scales up as the lids part
-                if (sp > 0) turret(x, shY, r * 0.28 * sp, sp > 0.55);
-                // Two lids: meet in the middle when closed, slide apart as it opens,
-                // and REMAIN open at the sides afterwards (they never disappear).
-                let slide = p * (bs + 2);
-                ctx.fillStyle = "#5a5f66"; ctx.strokeStyle = "rgba(0,0,0,0.4)";
-                rr(x - bs - slide, shY - bs, bs + 1, bs * 2, 4); ctx.fill(); ctx.stroke();
-                rr(x + slide - 1, shY - bs, bs + 1, bs * 2, 4); ctx.fill(); ctx.stroke();
+                // Until the art loads: a plain team-coloured block.
+                this.drawRoundRect(x - r, y - r, r * 2, r * 2, 8, true, false); ctx.stroke();
             }
             ctx.lineWidth = 1;
         } else if (e instanceof Building) {
@@ -2423,171 +2322,55 @@ class Main {
             while (da < -Math.PI) da += 2 * Math.PI;
             e.dispAngle += da * 0.15;
 
-            if (bn === "Cannon") {
-                // A round WOODEN base with an actual cannon on top, aimed at its target.
-                ctx.fillStyle = "#8a5c33"; ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1.5;
-                ctx.beginPath(); ctx.arc(x, y, s * 1.05, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-                if (this.gfxHigh) { // plank seams
-                    ctx.strokeStyle = "rgba(0,0,0,0.22)"; ctx.lineWidth = 1.2;
-                    ctx.beginPath();
-                    ctx.moveTo(x - s * 0.95, y - s * 0.35); ctx.lineTo(x + s * 0.95, y - s * 0.35);
-                    ctx.moveTo(x - s * 0.95, y + s * 0.35); ctx.lineTo(x + s * 0.95, y + s * 0.35);
-                    ctx.stroke();
-                }
-                ctx.save(); ctx.translate(x, y); ctx.rotate(e.dispAngle);
-                ctx.fillStyle = "#33373d";                                 // barrel
-                this.drawRoundRect(0, -s * 0.26, s * 1.35, s * 0.52, s * 0.2, true, false);
-                ctx.fillStyle = "#22252a";                                 // muzzle
-                ctx.fillRect(s * 1.12, -s * 0.3, s * 0.24, s * 0.6);
-                ctx.fillStyle = "#4a4e55";                                 // breech
-                ctx.beginPath(); ctx.arc(0, 0, s * 0.48, 0, Math.PI * 2); ctx.fill();
-                ctx.restore();
-                ctx.lineWidth = 1;
-            } else if (bn === "Inferno Tower") {
-                // Round base with a glowing core that flares while it burns a target.
-                ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
-                ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-                this.tone2Circle(x, y, s, color);
-                ctx.fillStyle = "#2c2118";
-                ctx.beginPath(); ctx.arc(x, y, s * 0.5, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = e.atk ? "#ffb63c" : "#e06a2c";
-                ctx.beginPath(); ctx.arc(x, y, s * (e.atk ? 0.34 : 0.24), 0, Math.PI * 2); ctx.fill();
-                ctx.lineWidth = 1;
-            } else if (bn === "Tesla") {
-                // The Tesla RETRACTS into the ground (and a wooden lid closes over it)
-                // when it has no target, and rises back out to zap. `cover` (0 = raised,
-                // 1 = covered) eases each frame so it animates. The HEALTH BAR always
-                // shows — it just falls through to the normal bar stash below. The card
-                // face always draws the raised tower.
-                const ts = s * 0.85;
+            const S = 32; // every building at 2x
+            const sprite = BUILDING_SPRITE[bn];
+            let drawn = false;
+            if (bn === "Tesla") {
+                // The Tesla RETRACTS into the ground (a wooden lid closes over it) when it
+                // has no target, and rises back out to zap. `cover` (0 = raised, 1 = covered)
+                // eases each frame so it animates: the raised tower cross-fades into the
+                // shut lid. The HEALTH BAR always shows — it falls through to the normal
+                // bar stash below. The card face always draws the raised tower.
                 if (e._teslaCover === undefined) e._teslaCover = (e.teslaHidden && !card) ? 1 : 0;
                 const goal = (e.teslaHidden && !card) ? 1 : 0;
                 e._teslaCover += (goal - e._teslaCover) * 0.22;
                 if (Math.abs(goal - e._teslaCover) < 0.02) e._teslaCover = goal;
                 const cover = card ? 0 : e._teslaCover;
-
-                // The tower body — vertically SQUASHED into the ground as it retracts
-                // (pivoting at the bottom of its footprint, so it sinks straight down;
-                // at cover 0 it's the FULL round tower, never a half-circle).
-                if (cover < 0.985) {
-                    const vh = 1 - cover; // 1 = full height, 0 = flat on the ground
-                    ctx.save();
-                    ctx.translate(x, y + ts);
-                    ctx.scale(1, vh);
-                    ctx.translate(-x, -(y + ts));
-                    ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
-                    ctx.beginPath(); ctx.arc(x, y, ts, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-                    this.tone2Circle(x, y, ts, color);
-                    ctx.fillStyle = "#1e3742";
-                    ctx.beginPath(); ctx.arc(x, y, ts * 0.5, 0, Math.PI * 2); ctx.fill();
-                    ctx.fillStyle = e.atk ? "#eaffff" : "#9fdcf2";
-                    ctx.beginPath(); ctx.arc(x, y, ts * (e.atk ? 0.34 : 0.24), 0, Math.PI * 2); ctx.fill();
-                    ctx.restore();
-                    ctx.lineWidth = 1;
-                }
-                // Wooden lid: two panels that part as it opens, meet as it covers.
-                if (cover > 0.02) {
-                    const half = s * 0.85, gap = (1 - cover) * half; // panels slide apart when open
-                    ctx.fillStyle = "#8a5c33"; ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1.5;
-                    ctx.save();
-                    ctx.beginPath(); ctx.rect(x - half, y - half, half * 2, half * 2); ctx.clip(); // panels never spill past the pit
-                    this.drawRoundRect(x - half - gap, y - half, half, half * 2, half * 0.2, true, false); ctx.stroke(); // left panel
-                    this.drawRoundRect(x + gap, y - half, half, half * 2, half * 0.2, true, false); ctx.stroke();        // right panel
-                    ctx.restore();
-                    if (cover > 0.9) { // plank seams once fully shut
-                        ctx.strokeStyle = "rgba(0,0,0,0.22)"; ctx.lineWidth = 1.3;
-                        ctx.beginPath();
-                        ctx.moveTo(x - half * 0.88, y - half * 0.33); ctx.lineTo(x + half * 0.88, y - half * 0.33);
-                        ctx.moveTo(x - half * 0.88, y + half * 0.33); ctx.lineTo(x + half * 0.88, y + half * 0.33);
-                        ctx.stroke();
-                    }
-                    ctx.lineWidth = 1;
-                }
-                // NOTE: no early return — the Tesla falls through to the normal health-bar
-                // stash below, so its HP bar shows in every state (raised, sinking, covered).
-            } else if (bn === "Bomb Tower") {
-                // Plain round stone tower — no bomb on show; just a darker inner disc.
-                ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
-                ctx.beginPath(); ctx.arc(x, y, s, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-                this.tone2Circle(x, y, s, color);
-                ctx.fillStyle = this.shade(color, -0.22);
-                ctx.beginPath(); ctx.arc(x, y, s * 0.42, 0, Math.PI * 2); ctx.fill();
-                ctx.lineWidth = 1;
-            } else {
-                // (Tombstone deliberately falls through here: it looks almost like any
-                // other tower — the standard square — plus a small cross on the face.)
-                this.extrudeWall(x, y, s, card ? 0 : s * 0.85, color, false); // raised block
-                ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
-                ctx.beginPath(); ctx.rect(x - s, y - s, s * 2, s * 2);        // lit top face
-                ctx.fill();
-                ctx.stroke();
-                // Flat two-tone finish: darker inner border band + a lighter top edge.
-                if (this.gfxHigh && typeof color === "string" && color[0] === "#" && s > 8) {
-                    const ib = Math.min(5, Math.max(2, s * 0.18));
-                    ctx.strokeStyle = this.shade(color, -0.13); ctx.lineWidth = ib;
-                    ctx.strokeRect(x - s + ib / 2 + 1, y - s + ib / 2 + 1, 2 * (s - ib / 2 - 1), 2 * (s - ib / 2 - 1));
-                    ctx.strokeStyle = this.shade(color, 0.24); ctx.lineWidth = Math.max(1.5, ib * 0.6);
-                    ctx.beginPath(); ctx.moveTo(x - s + ib + 2, y - s + ib); ctx.lineTo(x + s - ib - 2, y - s + ib); ctx.stroke();
-                    ctx.lineWidth = 1;
-                }
-                if (bn === "Tombstone") {
-                    // Its one identifying mark: a small cross on the face.
-                    ctx.strokeStyle = this.shade(color, -0.3); ctx.lineWidth = Math.max(2, s * 0.12); ctx.lineCap = "round";
-                    ctx.beginPath();
-                    ctx.moveTo(x, y - s * 0.4); ctx.lineTo(x, y + s * 0.35);
-                    ctx.moveTo(x - s * 0.26, y - s * 0.12); ctx.lineTo(x + s * 0.26, y - s * 0.12);
-                    ctx.stroke();
-                    ctx.lineCap = "butt"; ctx.lineWidth = 1;
+                const a0 = ctx.globalAlpha;
+                if (cover < 0.985) { ctx.globalAlpha = a0 * (1 - cover); drawn = this.px.draw(ctx, "buildings/tesla-up", x, y, S, 0, wash) || drawn; }
+                if (cover > 0.02) { ctx.globalAlpha = a0 * cover; drawn = this.px.draw(ctx, "buildings/tesla-covered", x, y, S) || drawn; }
+                ctx.globalAlpha = a0;
+            } else if (bn === "Cannon") {
+                // The sprite's barrel points up; the base is round, so the whole thing
+                // turns to aim without the rotation showing on the base.
+                drawn = this.px.draw(ctx, "buildings/cannon", x, y, S, Pixel.snap(e.dispAngle + Math.PI / 2), wash);
+            } else if (sprite) {
+                drawn = this.px.draw(ctx, "buildings/" + sprite, x, y, S, 0, wash);
+                if (drawn && bn === "Inferno Tower" && e.atk) {
+                    // The lock-on tell: the core flares while it burns a target.
+                    ctx.fillStyle = "#ffb63c";
+                    ctx.beginPath(); ctx.arc(x, y - 1, 3, 0, Math.PI * 2); ctx.fill();
                 }
             }
-            if (FAUX3D) {
-                // raised bevel (flat solid edges, no gradient): bright top-left, dark bottom-right
-                ctx.lineWidth = 2.2;
-                ctx.strokeStyle = "rgba(255,255,255,0.30)";
-                ctx.beginPath(); ctx.moveTo(x - s, y + s); ctx.lineTo(x - s, y - s); ctx.lineTo(x + s, y - s); ctx.stroke();
-                ctx.strokeStyle = "rgba(0,0,0,0.34)";
-                ctx.beginPath(); ctx.moveTo(x + s, y - s); ctx.lineTo(x + s, y + s); ctx.lineTo(x - s, y + s); ctx.stroke();
-                ctx.lineWidth = 1;
+            if (!drawn) {
+                ctx.fillStyle = color;
+                ctx.beginPath(); ctx.rect(x - s, y - s, s * 2, s * 2); ctx.fill(); ctx.stroke();
             }
-        } else if (e.c && e.c.n === "Skeleton Barrel") {
-            // A wooden barrel: brown disc with two darker hoop bands.
-            ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-            ctx.strokeStyle = "rgba(60,36,14,0.55)"; ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(x - radius * 0.9, y - radius * 0.35); ctx.lineTo(x + radius * 0.9, y - radius * 0.35);
-            ctx.moveTo(x - radius * 0.9, y + radius * 0.35); ctx.lineTo(x + radius * 0.9, y + radius * 0.35);
-            ctx.stroke(); ctx.lineWidth = 1;
-            ctx.beginPath(); // keep the generic stroke below happy (no-op path)
         } else if (e.c && e.c.n === "Balloon") {
-            // A PLAIN balloon in the team's colour (blue = yours, red = enemy): a blank
-            // round envelope over a simple rectangle basket that peeks out underneath —
-            // the balloon covers the basket's top. No ropes, seams, or decorations.
-            // Drawn a bit larger than its hitbox so it reads properly balloon-sized.
-            let R = radius * 1.3;
-            let ey = y - R * 0.35;                       // envelope centre (raised up)
-            let bw = R * 0.62, bh = R * 0.85;
-            // basket FIRST so the envelope overlaps it
-            ctx.fillStyle = "#8a5c33";
-            ctx.fillRect(x - bw / 2, ey + R * 0.5, bw, bh);
-            ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1;
-            ctx.strokeRect(x - bw / 2, ey + R * 0.5, bw, bh);
-            // blank CIRCLE envelope on top (with the flat two-tone edge band)
-            const envCol = isFriend ? "#4f8fe0" : "#e05555";
-            ctx.fillStyle = envCol;
-            ctx.beginPath(); ctx.arc(x, ey, R, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5; ctx.stroke();
-            this.tone2Circle(x, ey, R, envCol);
-            ctx.lineWidth = 1;
+            // Drawn larger than its hitbox, with its visual centre ABOVE e.y — the curse
+            // ring, the deploy clock and the health bar all use this same offset.
+            let R = radius * 1.3, ey = y - R * 0.35;
+            if (!this.px.draw(ctx, isFriend ? "troops/balloon" : "troops/balloon-red", x, ey, 48, 0, wash)) {
+                ctx.fillStyle = isFriend ? "#4f8fe0" : "#e05555";
+                ctx.beginPath(); ctx.arc(x, ey, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            }
             ctx.beginPath(); // keep the generic stroke below happy (no-op path)
         } else {
-            this.extrudeWall(x, y, radius, card ? 0 : radius * 0.7, color, true); // raised cylinder
-            ctx.fillStyle = color; ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2);              // lit top face
-            ctx.fill();
-            ctx.stroke();
-            this.tone2Circle(x, y, radius, color); // flat two-tone finish
-            this.specDot(x, y, radius); // upper-left glint (flat, no gradient)
+            // Every other troop: its own sprite at 2x. The art already carries each
+            // unit's relative size, so every troop shares one pixel scale.
+            if (!this.px.draw(ctx, this.px.troop(e.c ? e.c.n : name), x, y, 32, 0, wash)) {
+                ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            }
         }
         ctx.globalAlpha = 1;
         ctx.lineWidth = 1;
@@ -2701,6 +2484,7 @@ class Main {
         // outline (see drawEntityBody) and the health-bar colour, not the name.
         if (name && name.length > 0 && !card) {
             let fontSize = Math.max(9, Math.min(13, 8 + radius * 0.4));
+            if (this.px.textShadow(ctx, name, x, e._barY - (e.shield > 0 ? 9 : 4), 9, "rgba(255,255,255,0.9)", "center")) return;
             ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
             ctx.font = `${fontSize}px 'Baloo 2', 'Segoe UI', sans-serif`;
             ctx.textAlign = "center";
@@ -2751,77 +2535,6 @@ class Main {
         return `rgb(${r},${g},${b})`;
     }
 
-    // === Faux-3D shading (flat tones only — NO gradients) ====================
-    // Extrude a footprint into a raised block: draws the darker "height" wall
-    // dropping `h` px BELOW the body, so the normal flat top face (drawn by the
-    // caller afterward) reads as the lit top of a solid block. Vertical extrusion
-    // only — unit x/y positions are unchanged. `round` = cylinder vs box wall.
-    // Flat solid side tone, no gradient.
-    extrudeWall(x, yTop, r, h, top, round) {
-        if (!FAUX3D || h <= 0) return;
-        const yb = yTop + h;
-        ctx.fillStyle = this.shade(top, -0.34);
-        if (round) {
-            ctx.beginPath(); ctx.arc(x, yb, r, 0, Math.PI * 2); ctx.fill(); // rounded base
-            ctx.fillRect(x - r, yTop, 2 * r, h);                           // straight walls
-        } else {
-            ctx.fillRect(x - r, yTop, 2 * r, h);
-        }
-        // dark silhouette on the visible wall edges
-        ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(x - r, yTop); ctx.lineTo(x - r, yb);
-        if (round) ctx.arc(x, yb, r, Math.PI, 0, false); else ctx.lineTo(x + r, yb);
-        ctx.lineTo(x + r, yTop);
-        ctx.stroke();
-        ctx.lineWidth = 1;
-    }
-
-    // A soft elliptical contact shadow on the GROUND at (gx, gy). Fliers cast a
-    // smaller, fainter shadow so they read as airborne.
-    unitShadow(gx, gy, radius, fly) {
-        if (!FAUX3D) return;
-        const a = ctx.globalAlpha;
-        ctx.globalAlpha = fly ? 0.13 : 0.24;
-        ctx.fillStyle = "#0a0e14";
-        const rx = radius * (fly ? 0.68 : 0.92), ry = rx * 0.42;
-        ctx.beginPath();
-        ctx.ellipse(gx, gy + radius * 0.66, rx, ry, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = a;
-    }
-
-    // === Flat two-tone finish ===============================================
-    // "Slightly more complicated but simple": a darker flat edge band inside the
-    // rim plus one short lighter arc, all solid tones — no gradients, shadows,
-    // or speculars. Tiny swarm bodies stay plain so they don't get noisy.
-    tone2Circle(x, y, radius, color) {
-        if (!this.gfxHigh) return; // Graphics: Low = plain flat bodies
-        if (radius < 5.5 || typeof color !== "string" || color[0] !== "#") return;
-        const bw = Math.min(6, Math.max(1.5, radius * 0.22));
-        ctx.strokeStyle = this.shade(color, -0.14);
-        ctx.lineWidth = bw;
-        ctx.beginPath(); ctx.arc(x, y, radius - bw / 2 - 0.5, 0, Math.PI * 2); ctx.stroke();
-        ctx.strokeStyle = this.shade(color, 0.26);
-        ctx.lineWidth = Math.min(3.5, Math.max(1.2, radius * 0.14));
-        ctx.lineCap = "round";
-        ctx.beginPath(); ctx.arc(x, y, radius * 0.52, Math.PI * 1.05, Math.PI * 1.55); ctx.stroke();
-        ctx.lineCap = "butt"; ctx.lineWidth = 1;
-    }
-
-    // A small specular highlight (upper-left) on a round body — the glint that
-    // sells the sphere. Respects the current globalAlpha (clones/ghosts stay dim).
-    specDot(x, y, radius) {
-        if (!FAUX3D) return;
-        const a = ctx.globalAlpha;
-        ctx.globalAlpha = a * 0.5;
-        ctx.fillStyle = "#ffffff";
-        ctx.beginPath();
-        ctx.arc(x - radius * 0.34, y - radius * 0.40, radius * 0.20, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = a;
-    }
-
     paintBg(color) {
         ctx.fillStyle = color;
         ctx.fillRect(0, 0, W, H);
@@ -2829,12 +2542,6 @@ class Main {
 
     // The active background style (Ocean / Grass / Indigo).
     theme() { return this.themes[this.themeKey] || this.themes.ocean; }
-    cycleTheme() {
-        let i = this.themeOrder.indexOf(this.themeKey);
-        this.themeKey = this.themeOrder[(i + 1) % this.themeOrder.length];
-        try { localStorage.setItem("acr_theme", this.themeKey); } catch (e) { }
-    }
-
     setTheme(key) {
         if (this.themes[key]) { this.themeKey = key; try { localStorage.setItem("acr_theme", key); } catch (e) { } }
     }
@@ -2857,6 +2564,7 @@ class Main {
     // A small SOLID cog: filled gear silhouette (8 squared teeth) with a punched
     // centre hole (even-odd fill, so the background shows through the middle).
     drawGearIcon(cx, cy, r) {
+        if (this.px.draw(ctx, "ui/gear", cx, cy, r * 2.4)) return;
         ctx.save();
         ctx.translate(cx, cy);
         ctx.fillStyle = "rgba(255,255,255,0.92)";
@@ -3039,13 +2747,6 @@ class Main {
         return [{ dx: 0, dy: 0, r }];
     }
 
-    elixirColor(c) {
-        if (c <= 2) return "#3a8f5a";
-        if (c <= 4) return "#3a6f9f";
-        if (c <= 6) return "#6a4a9f";
-        return "#9f3a6a";
-    }
-
     // A deck-builder card tile: elixir-tinted body, unit-color swatch, name,
     // elixir badge, and a gold ring + check when it's in the deck.
     // Purple evolution indicator: `req` larger DIAMOND gems (the cycle count).
@@ -3058,6 +2759,12 @@ class Main {
         for (let i = 0; i < req; i++) {
             let px = startX + i * gap, on = i < filled;
             if (on && glow) { ctx.shadowColor = "#e08bff"; ctx.shadowBlur = 10; }
+            if (this.px.has("ui/evo-gem")) {
+                ctx.globalAlpha = on ? 1 : 0.4;
+                this.px.draw(ctx, "ui/evo-gem", px, cy, 16);
+                ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+                continue;
+            }
             ctx.fillStyle = on ? "#c45cff" : "rgba(120,80,160,0.5)";
             ctx.beginPath();
             ctx.moveTo(px, cy - s); ctx.lineTo(px + s, cy); ctx.lineTo(px, cy + s); ctx.lineTo(px - s, cy); ctx.closePath();
@@ -3076,6 +2783,7 @@ class Main {
     drawEvoGem(gx, gy, radius, glow) {
         ctx.save();
         if (glow) { ctx.shadowColor = "#e08bff"; ctx.shadowBlur = 14; }
+        if (this.px.draw(ctx, "ui/evo-gem", gx, gy, Math.max(8, Math.round(radius * 2.4)))) { ctx.restore(); return; }
         ctx.fillStyle = glow ? "#c45cff" : "rgba(150,90,200,0.75)";
         ctx.beginPath(); ctx.arc(gx, gy, radius, 0, Math.PI * 2); ctx.fill();
         ctx.shadowBlur = 0;
@@ -3129,14 +2837,20 @@ class Main {
 
     // The card NAME across the top of a card, wrapped onto two lines when it's long.
     drawCardName(name, cx, cy, w) {
+        // The cost badge owns the top-left corner, so the name is centred in the
+        // space to its right. A one-word name gets the 2x font when it fits there;
+        // anything longer wraps onto two lines at 1x, which is crisp and never
+        // runs into the badge.
+        const mx = cx + w / 2 + 9;
         let words = name.split(' ');
         if (words.length <= 1) {
-            this.drawCenteredString(name, cx + w / 2, cy + 15, "700 12px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
+            const big = this.px.ready && this.px.measure(name, 12) <= w - 34;
+            this.drawCenteredString(name, mx, cy + 15, big ? "12px" : "9px", "#252525");
         } else {
             let mid = Math.ceil(words.length / 2);
             let l1 = words.slice(0, mid).join(' '), l2 = words.slice(mid).join(' ');
-            this.drawCenteredString(l1, cx + w / 2, cy + 12, "700 11px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
-            this.drawCenteredString(l2, cx + w / 2, cy + 23, "700 11px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
+            this.drawCenteredString(l1, mx, cy + 12, "9px", "#252525");
+            this.drawCenteredString(l2, mx, cy + 23, "9px", "#252525");
         }
     }
 
@@ -3150,6 +2864,11 @@ class Main {
         const R = Math.min(Math.min(w, h) * 0.46, (sr && sr.val ? sr.val : 100) * 0.4);
         const gem = () => { if (isEvo) this.drawEvoGem(ccx, ccy, 6, true); };
         const disc = (col, a = 1, rr = R) => { ctx.globalAlpha = a; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(ccx, ccy, rr, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; };
+
+        // Zone spells show their placed footprint — the same textured sprite the field uses.
+        const face = { "Freeze": "freeze", "Vines": "vines", "Poison": "poison", "Graveyard": "graveyard", "Clone": "clone",
+                       "Rage": "rage", "Heal": "heal", "Mirror": "mirror", "Royale Delivery": "royale-delivery" }[n];
+        if (face && this.px.draw(ctx, "spells/" + face, ccx, ccy, Math.round(R / 4) * 8)) { gem(); return; }
 
         // Thrown ARC spells — show the projectile IN THE AIR with its shadow below, using
         // the exact renderer from the battlefield (drawSpellArc).
@@ -3207,11 +2926,6 @@ class Main {
             ctx.beginPath(); ctx.arc(ccx, ccy, R, 0, Math.PI * 2); ctx.stroke();
             ctx.lineWidth = 1; gem(); return;
         }
-        if (n === "Tornado") {
-            ctx.strokeStyle = "rgba(155,188,208,0.85)"; ctx.lineWidth = 3;
-            for (let i = 0; i < 4; i++) { let rr = R * (0.4 + i * 0.2), yy = ccy - R + i * (R * 0.55); ctx.beginPath(); ctx.ellipse(ccx, yy, rr, rr * 0.32, 0, 0, Math.PI * 2); ctx.stroke(); }
-            ctx.lineWidth = 1; gem(); return;
-        }
         if (n === "Royale Delivery") {
             // the in-game cardboard delivery crate (landed), scaled to the card
             let k = Math.min(w, h) / 70;
@@ -3239,7 +2953,7 @@ class Main {
     spellColor(n) {
         const M = {
             "Fireball": "#ff5a2c", "Rocket": "#ff7043", "Giant Snowball": "#9fd8f0", "Arrows": "#caa15a",
-            "Poison": "#7fbf4f", "Zap": "#ffe14d", "Freeze": "#7fd8ff", "Rage": "#d24bd2", "Tornado": "#9bbcd0",
+            "Poison": "#7fbf4f", "Zap": "#ffe14d", "Freeze": "#7fd8ff", "Rage": "#d24bd2",
             "Vines": "#5fae4f", "The Log": "#8b5a2b", "Barbarian Barrel": "#8b5a2b", "Goblin Barrel": "#79b44a",
             "Clone": "#7fe0e0", "Graveyard": "#7a5a8a", "Royale Delivery": "#c0703a", "Mirror": "#cf8fe0",
         };
@@ -3318,6 +3032,28 @@ class Main {
         for (const gp of entries) ext = Math.max(ext, Math.hypot(gp.dx, gp.dy) + gp.r);
         const box = Math.min(w, h) * 0.46;
         const scale = Math.min(Math.min(w, h) * 0.011, box / ext);
+        if (this.px.ready) {
+            // Sprites are blitted at a whole-pixel scale here, never through the
+            // fractional ctx.scale below (which smeared them): a lone unit at 3x,
+            // a group at 2x so the formation still fits the card. The layout's
+            // offsets keep the formation shape.
+            const S = entries.length === 1 ? 48 : 32;
+            for (const gp of entries) {
+                let card = gp.unit ? this.eng.getCard(gp.unit) : uc;
+                if (isEvo && !gp.general && card && this.eng.isEvoCapable(card.n)) card = this.eng.makeEvoCard(card);
+                const x = Math.round(ccx + gp.dx * scale), y = Math.round(ccy + gp.dy * scale);
+                const sprite = card.t === 3
+                    ? "buildings/" + (card.n === "Tesla" ? "tesla-up" : BUILDING_SPRITE[card.n])
+                    : (card.n === "Balloon" ? "troops/balloon" : this.px.troop(card.n));
+                if (!this.px.draw(ctx, sprite, x, y, S, 0, gp.general ? ["#a35cd6", 0.6] : null)) {
+                    ctx.fillStyle = this.getUnitColor(card.n);
+                    ctx.beginPath(); ctx.arc(x, y, gp.r * scale, 0, Math.PI * 2); ctx.fill();
+                }
+                // Evo units carry the gem; the Skeleton Army general wears it instead of a crown.
+                if ((card.isEvo && !skeleGen) || gp.general) this.drawEvoGem(x + S * 0.22, y - S * 0.22, 5, true);
+            }
+            return;
+        }
         ctx.save();
         ctx.translate(ccx, ccy);
         ctx.scale(scale, scale);
@@ -3337,9 +3073,19 @@ class Main {
     // A full card FACE — the same look used in your hand and in the deck builder:
     // white body, NAME across the top, the unit VISUAL filling the area beneath it,
     // and the elixir badge. (Selection / evo chrome is added by the caller.)
+    // Which 9-slice frame a card wears: by elixir cost, evo purple, or the grey
+    // locked frame when it can't be afforded (`bg` is the old tint callers pass).
+    cardFrame(c, bg, isEvo) {
+        if (bg === "#b9bdb7") return "cards/frame-locked";
+        if (isEvo) return "cards/frame-evo";
+        if (bg === "#f2e7fa") return "cards/frame-3";
+        return c.c <= 2 ? "cards/frame-1" : c.c <= 4 ? "cards/frame-2" : c.c <= 6 ? "cards/frame-3" : "cards/frame-4";
+    }
     drawCardFace(cx, cy, w, h, c, bg = "#ffffff", isEvo = false) {
-        ctx.fillStyle = bg;
-        this.drawRoundRect(cx, cy, w, h, Math.min(10, w * 0.09), true, false);
+        if (!this.px.nine(ctx, this.cardFrame(c, bg, isEvo), cx, cy, w, h, 8)) {
+            ctx.fillStyle = bg;
+            this.drawRoundRect(cx, cy, w, h, Math.min(10, w * 0.09), true, false);
+        }
         this.drawCardName(c.n, cx, cy, w);
         let top = cy + 28, bot = cy + h - 9;
         // Cards are STATIC: freeze Date.now() so the reused in-game renderers (zap flicker,
@@ -3410,7 +3156,15 @@ class Main {
             drawRect.h = h;
         }
 
-        // Solid body with a soft drop shadow (no gradient, no gloss).
+        // Pixel button: the neutral pill multiplied by this button's colour over a
+        // hard shadow, label in the bitmap font. (Vector version below until it loads.)
+        if (this.px.has("ui/button")) {
+            ctx.fillStyle = "rgba(0,0,0,0.3)";
+            this.drawRoundRect(drawRect.x, drawRect.y + 3, drawRect.w, drawRect.h, 12, true, false);
+            this.px.button(ctx, drawRect.x, drawRect.y, drawRect.w, drawRect.h, color);
+            this.px.textShadow(ctx, txt, drawRect.x + drawRect.w / 2, drawRect.y + drawRect.h / 2 + 7, 17, "#ffffff", "center");
+            return;
+        }
         ctx.save();
         ctx.shadowColor = "rgba(0,0,0,0.3)";
         ctx.shadowBlur = 7;
@@ -3439,15 +3193,21 @@ class Main {
         ctx.textBaseline = "alphabetic"; // Reset
     }
 
+    // Text is the bitmap font now. `font` is the old CSS string the call sites
+    // already pass — only its px size matters — so nothing upstream had to change.
+    fontPx(font) { const m = /([0-9]+(?:[.][0-9]+)?)px/.exec(font || ""); return m ? parseFloat(m[1]) : 14; }
+    txt(str, x, y, size, color, align = "left") {
+        if (this.px.text(ctx, str, x, y, size, color, align)) return;
+        ctx.fillStyle = color; ctx.textAlign = align; ctx.fillText(str, x, y);   // until the font loads
+    }
     drawCenteredString(txt, x, y, font, color) {
-        ctx.fillStyle = color;
-        ctx.font = font;
-        ctx.textAlign = "center";
-        ctx.fillText(txt, x, y);
+        if (this.px.text(ctx, txt, x, y, this.fontPx(font), color, "center")) return;
+        ctx.fillStyle = color; ctx.font = font; ctx.textAlign = "center"; ctx.fillText(txt, x, y);
     }
 
     drawElixirCost(x, y, val) {
-        // Just the cost as a purple number (no circle), with a dark outline for legibility.
+        // The elixir badge with the cost on it, in the bitmap font.
+        if (this.px.draw(ctx, "elixir/badge", x, y, 24)) { this.px.textShadow(ctx, val, x, y + 5, 14, "#ffffff", "center"); return; }
         ctx.font = "bold 16px 'Baloo 2', 'Segoe UI', sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
@@ -3499,7 +3259,8 @@ class Main {
             ctx.beginPath(); ctx.ellipse(p.x, p.y + 3, 9 * sh, 2.6 * sh, 0, 0, Math.PI * 2); ctx.fill();
             ctx.save();
             ctx.translate(p.x, p.y - arc);
-            ctx.rotate(prog * 5 + 0.5);
+            ctx.rotate(Pixel.snap(prog * 5 + 0.5));
+            if (this.px.draw(ctx, "projectiles/dynamite", 0, 0, 16)) { ctx.restore(); return; }
             ctx.fillStyle = "#cc2b2b"; ctx.fillRect(-2.5, -6, 5, 12);       // red stick
             ctx.strokeStyle = "#7a1414"; ctx.lineWidth = 1; ctx.strokeRect(-2.5, -6, 5, 12);
             ctx.fillStyle = "#f0e3b0"; ctx.fillRect(-2.5, -6, 5, 2.5);       // pale cap
@@ -3518,22 +3279,11 @@ class Main {
             let col = p.flashCol || "#d98cff";
             let flick = (Math.floor(Date.now() / 45) % 4 === 0) ? 0.55 : 1;
             ctx.save();
-            // smooth main ring
-            ctx.strokeStyle = col;
-            ctx.globalAlpha = 0.8 * fade * flick;
-            ctx.lineWidth = 2.5 * fade + 1;
-            ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
-            // thin, only slightly jagged crackle overlay
-            ctx.globalAlpha = 0.6 * fade * flick;
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            for (let i = 0; i <= 28; i++) {
-                let a = (i / 28) * Math.PI * 2;
-                let jr = r + (i % 2 === 0 ? 0 : 2.5);
-                let px = p.x + Math.cos(a) * jr, py = p.y + Math.sin(a) * jr;
-                i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+            ctx.globalAlpha = 0.85 * fade * flick;
+            if (!this.px.draw(ctx, "effects/electric-ring", p.x, p.y, Math.round(r / 2) * 4, 0, col !== "#d98cff" ? [col, 0.6] : null)) {
+                ctx.strokeStyle = col; ctx.lineWidth = 2.5 * fade + 1;
+                ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
             }
-            ctx.closePath(); ctx.stroke();
             ctx.restore();
             ctx.globalAlpha = 1; ctx.lineWidth = 1;
             return;
@@ -3569,19 +3319,10 @@ class Main {
             let r = Math.max(4, p.rad * prog);
             let fade = 1 - prog;
             ctx.save();
-            ctx.globalAlpha = 0.30 * fade;
-            ctx.fillStyle = "#7ce39a";
-            ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
-            ctx.globalAlpha = 0.65 * fade;
-            ctx.strokeStyle = "#9ff5b6"; ctx.lineWidth = 3.5 * fade + 1;
-            ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
             ctx.globalAlpha = 0.8 * fade;
-            ctx.fillStyle = "#e6fff0";
-            for (let i = 0; i < 6; i++) {
-                let a = i * Math.PI / 3 + prog * 2.2;
-                let wx = p.x + Math.cos(a) * r * 0.85;
-                let wy = p.y + Math.sin(a) * r * 0.85 - prog * 12;
-                ctx.beginPath(); ctx.arc(wx, wy, 2.4 * fade + 0.8, 0, Math.PI * 2); ctx.fill();
+            if (!this.px.draw(ctx, "effects/phantom-burst", p.x, p.y, Math.round(r / 2) * 4)) {
+                ctx.strokeStyle = "#9ff5b6"; ctx.lineWidth = 3.5 * fade + 1;
+                ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
             }
             ctx.restore();
             ctx.globalAlpha = 1; ctx.lineWidth = 1;
@@ -3594,25 +3335,10 @@ class Main {
             let r = Math.max(6, p.rad * prog);
             let fade = 1 - prog;
             ctx.save();
-            // inner haze
-            ctx.globalAlpha = 0.28 * fade;
-            ctx.fillStyle = "#cbb9a2";
-            ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
-            // dust ring (thick, fading)
-            ctx.globalAlpha = 0.75 * fade;
-            ctx.strokeStyle = "#b9a98e"; ctx.lineWidth = 7 * fade + 2;
-            ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
-            // bright leading edge
-            ctx.globalAlpha = 0.9 * fade;
-            ctx.strokeStyle = "#f3ead8"; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.arc(p.x, p.y, r + 2, 0, Math.PI * 2); ctx.stroke();
-            // a few flying dust chips around the ring
-            ctx.fillStyle = "#d9cbb2";
-            for (let i = 0; i < 8; i++) {
-                let a = i * Math.PI / 4 + prog * 0.6;
-                let dr = r + 4 + prog * 6;
-                ctx.globalAlpha = 0.7 * fade;
-                ctx.beginPath(); ctx.arc(p.x + Math.cos(a) * dr, p.y + Math.sin(a) * dr, 2.2 * fade + 0.6, 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha = 0.85 * fade;
+            if (!this.px.draw(ctx, "effects/shockwave", p.x, p.y, Math.round(r / 2) * 4)) {
+                ctx.strokeStyle = "#b9a98e"; ctx.lineWidth = 7 * fade + 2;
+                ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
             }
             ctx.restore();
             ctx.globalAlpha = 1; ctx.lineWidth = 1;
@@ -3636,6 +3362,10 @@ class Main {
             // the roll direction so it reads as rolling.
             let w = p.barbBarrelLog ? 46 : 70;
             let h = 20;
+            const logSprite = p.barbBarrelLog
+                ? (p.tm === 1 ? "projectiles/barbarian-barrel-enemy" : "projectiles/barbarian-barrel")
+                : (p.tm === 1 ? "projectiles/the-log-enemy" : "projectiles/the-log");
+            if (this.px.draw(ctx, logSprite, 0, 0, p.barbBarrelLog ? 48 : 64)) { ctx.restore(); return; }
             ctx.fillStyle = "#6b4423";
             this.drawRoundRect(-w / 2, -h / 2, w, h, 9, true, false);
             let dir = (p.tm === 0) ? -1 : 1;
@@ -3645,35 +3375,6 @@ class Main {
                 let yy = (((phase + k * (h / 2)) % h) + h) % h - h / 2;
                 ctx.fillRect(-w / 2 + 3, yy - 1.5, w - 6, 3);
             }
-        } else if (p.isRolling) {
-            // Bowler boulder
-            ctx.fillStyle = "#5a4a6a";
-            ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = "#2e2440"; ctx.lineWidth = 2; ctx.stroke();
-            ctx.lineWidth = 1;
-        } else if (p.poison || p.graveyard || p.isHeal) {
-            // Area effects
-            ctx.fillStyle = p.isHeal ? "rgba(255, 255, 0, 0.3)" : (p.poison ? "rgba(255, 165, 0, 0.3)" : "rgba(128, 128, 128, 0.3)");
-            ctx.beginPath();
-            ctx.arc(0, 0, r, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = p.isHeal ? "yellow" : (p.poison ? "orange" : "gray");
-            ctx.lineWidth = 2;
-            ctx.stroke();
-        } else {
-            // Standard Projectile (Ball)
-            let color = "orange"; // Fireball
-            if (r < 10) color = "gray"; // Arrow
-            if (p.tm === 0) color = "#3296ff"; // Blueish for friend
-            else color = "#ff3232"; // Red for enemy
-
-            if (p.isHeal) color = "yellow";
-
-            ctx.fillStyle = color;
-            ctx.beginPath();
-            ctx.arc(0, 0, r, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
         }
 
         ctx.restore();
@@ -3694,53 +3395,12 @@ class Main {
         ctx.save();
         ctx.translate(p.x, p.y - h);
         const k = p.spellKind;
-        if (k === "arrows") {
-            // a fan of arrows spreading outward as they fly toward the target
-            for (let i = -2; i <= 2; i++) {
-                ctx.save();
-                ctx.rotate(i * 0.17);
-                ctx.strokeStyle = "#6b4423"; ctx.lineWidth = 1.5;
-                ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(0, 6); ctx.stroke();
-                ctx.fillStyle = "#d9d9d9";
-                ctx.beginPath(); ctx.moveTo(0, 9); ctx.lineTo(-2, 5); ctx.lineTo(2, 5); ctx.closePath(); ctx.fill();
-                ctx.restore();
-            }
-        } else if (k === "barrel") {
-            // Bigger barrel that tumbles end-over-end as it flies.
-            ctx.rotate(Date.now() / 60 * (p.tm === 0 ? -1 : 1));
-            ctx.fillStyle = "#8a5a2c";
-            this.drawRoundRect(-13, -16, 26, 32, 6, true, false);
-            ctx.strokeStyle = "#5c3a18"; ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.moveTo(-13, -5); ctx.lineTo(13, -5); ctx.moveTo(-13, 5); ctx.lineTo(13, 5); ctx.stroke();
-            ctx.lineWidth = 1;
-        } else if (k === "snowball") {
-            // It's the GIANT Snowball — a big packed ball of snow (bigger than the
-            // Rocket), with a couple of shaded dimples so it reads as packed snow.
-            ctx.fillStyle = "#e9f6ff"; ctx.beginPath(); ctx.arc(0, 0, 21, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = "#93bcdc"; ctx.lineWidth = 2; ctx.stroke();
-            ctx.fillStyle = "#cfe4f5";
-            ctx.beginPath(); ctx.arc(6.5, 4.5, 6, 0, Math.PI * 2); ctx.fill();
-            ctx.beginPath(); ctx.arc(-7, 7, 4, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = "#ffffff";
-            ctx.beginPath(); ctx.arc(-6.5, -7, 6.5, 0, Math.PI * 2); ctx.fill();
-            ctx.lineWidth = 1;
-        } else if (k === "rocket") {
-            // A big heavy brown ball with a white skull on it.
-            ctx.fillStyle = "#6e4a2b"; ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = "#46301c"; ctx.lineWidth = 2; ctx.stroke();
-            ctx.fillStyle = "#8a5f38"; ctx.beginPath(); ctx.arc(-4.5, -4.5, 4.5, 0, Math.PI * 2); ctx.fill(); // highlight
-            ctx.fillStyle = "#f2eede";                                              // skull
-            ctx.beginPath(); ctx.arc(0, -1.5, 7.5, 0, Math.PI * 2); ctx.fill();
-            ctx.fillRect(-4, 3, 8, 4.8);                                            // jaw
-            ctx.fillStyle = "#241509";                                             // eyes + nose
-            ctx.beginPath(); ctx.arc(-3, -1.8, 2.1, 0, Math.PI * 2); ctx.fill();
-            ctx.beginPath(); ctx.arc(3, -1.8, 2.1, 0, Math.PI * 2); ctx.fill();
-            ctx.beginPath(); ctx.moveTo(0, 0.5); ctx.lineTo(-1.5, 3); ctx.lineTo(1.5, 3); ctx.closePath(); ctx.fill();
-            ctx.lineWidth = 1;
-        } else {
-            // fireball — a small, solid flaming ball (two layers)
+        const arcSprite = { arrows: ["projectiles/arrows", 32], barrel: ["projectiles/goblin-barrel", 32],
+                            snowball: ["projectiles/giant-snowball", 48], rocket: ["projectiles/rocket", 32] }[k] || ["projectiles/fireball", 32];
+        // The goblin barrel tumbles end over end; everything else flies level.
+        const spin = k === "barrel" ? Pixel.snap(Date.now() / 60 * (p.tm === 0 ? -1 : 1)) : 0;
+        if (!this.px.draw(ctx, arcSprite[0], 0, 0, arcSprite[1], spin)) {
             ctx.fillStyle = "#e8521a"; ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = "#ffb13a"; ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fill();
         }
         ctx.restore();
     }
@@ -3842,20 +3502,14 @@ class Main {
             let wt = (elapsed - s) / (e - s);          // 0..1 within this wave
             let fall = (1 - wt) * 55;
             ctx.globalAlpha = wt > 0.8 ? Math.max(0, (1 - wt) / 0.2) : 1; // fade as they land
-            for (let i = 0; i < perWave; i++) {
-                let ang = i * 2.399963 + w * 1.3;
-                let rr = Math.sqrt((i + 0.5) / perWave) * p.rad * 0.88;
-                let ax = p.x + Math.cos(ang) * rr;
-                let ay = p.y + Math.sin(ang) * rr;
-                ctx.save();
-                ctx.translate(ax, ay - fall);
+            if (!this.px.draw(ctx, "spells/arrows", p.x, p.y - fall, Math.round(p.rad / 2) * 4)) {
                 ctx.strokeStyle = "#6b4423"; ctx.lineWidth = 2;
-                ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(0, 8); ctx.stroke();
-                ctx.fillStyle = "#d9d9d9";
-                ctx.beginPath(); ctx.moveTo(0, 11); ctx.lineTo(-3, 6); ctx.lineTo(3, 6); ctx.closePath(); ctx.fill();
-                ctx.strokeStyle = "#eaeaea"; ctx.lineWidth = 1.5;
-                ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(-3, -11); ctx.moveTo(0, -8); ctx.lineTo(3, -11); ctx.stroke();
-                ctx.restore();
+                for (let i = 0; i < perWave; i++) {
+                    let ang = i * 2.399963 + w * 1.3;
+                    let rr = Math.sqrt((i + 0.5) / perWave) * p.rad * 0.88;
+                    let ax = p.x + Math.cos(ang) * rr, ay = p.y + Math.sin(ang) * rr - fall;
+                    ctx.beginPath(); ctx.moveTo(ax, ay - 8); ctx.lineTo(ax, ay + 8); ctx.stroke();
+                }
             }
         }
         ctx.globalAlpha = 1;
@@ -3919,34 +3573,14 @@ class Main {
         // an expanding electric ring with radial crackle.
         const col = p.flashCol || "#7fdcff";
         if (p.life > 5) {
-            ctx.save();
-            ctx.lineCap = "round";
-            const segs = 8;
-            const H = 140; // fixed bolt height — same strike length wherever it's placed
-            const bolt = (xoff, phase, w, alpha) => {
-                const pts = [];
-                for (let i = 0; i <= segs; i++) {
-                    let yy = (p.y - H) + (H / segs) * i;
-                    let jit = (i === 0 || i === segs) ? 0 : Math.sin(i * 9.3 + phase + Math.floor(Date.now() / 55)) * 13;
-                    pts.push([p.x + xoff * (1 - i / segs) + jit, yy]);
-                }
-                ctx.globalAlpha = alpha;
-                ctx.strokeStyle = col; ctx.lineWidth = w;
-                ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
-                ctx.strokeStyle = "#ffffff"; ctx.lineWidth = Math.max(1, w * 0.35);
-                ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
-                ctx.globalAlpha = 1;
-            };
-            bolt(0, 0, 4, 1);
-            if (this.gfxHigh) {
-                bolt(-26, 3.7, 2, 0.55);
-                bolt(26, 7.9, 2, 0.55);
-                ctx.globalAlpha = 0.5;
-                ctx.fillStyle = "#eaffff";
-                ctx.beginPath(); ctx.arc(p.x, p.y, 10 + Math.sin(Date.now() / 40) * 3, 0, Math.PI * 2); ctx.fill();
-                ctx.globalAlpha = 1;
+            // The strike IS the hand-drawn zap: the bolt lands with its burst on the
+            // target point. 9x is the 140px bolt height the vector version used.
+            const S = 144;
+            const evo = !!(p.isEvoZap || p.evo || (p.flashCol && p.flashCol !== "#7fdcff" && p.flashCol !== "#cfeeff"));
+            if (!this.px.draw(ctx, evo ? "effects/zap-strike-evo" : "effects/zap-strike", p.x, p.y - S / 2 + 9, S)) {
+                ctx.strokeStyle = col; ctx.lineWidth = 4;
+                ctx.beginPath(); ctx.moveTo(p.x, p.y - 140); ctx.lineTo(p.x, p.y); ctx.stroke();
             }
-            ctx.restore();
         } else {
             let a = Math.max(0, p.life / 5);
             ctx.globalAlpha = 0.5 * a + 0.12;

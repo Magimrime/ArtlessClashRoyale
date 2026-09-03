@@ -58,18 +58,6 @@ export default class Troop extends Entity {
         this.currentTarget = null;
         this.moveTarget = null;
         this.currentWaypoint = null;
-        this.crossedRiver = false;
-        this.crossT = 0;        // ticks the target has recently been across the river
-        this.crossing = false;  // sticky: committed to finishing a bridge crossing
-
-        this.lastPos = { x: 0, y: 0 };
-        this.stuckTimer = 0;
-        this.isStuck = false;
-        this.stuckDir = 0;
-        this.seekingPathDir = 0;
-
-        this.kbX = 0;
-        this.kbY = 0;
         this.kbTime = 0;
         this.fbSlowDelay = 0; // ticks until a Fireball's delayed slow+shove lands
         this.fbSlow2 = 0;     // queued follow-up (1s/80%) slow after the first wears off
@@ -93,7 +81,6 @@ export default class Troop extends Entity {
             this.maxShield = 199;
         }
 
-        if (c.n === "Princess") this.sightRange = 400;
         if (c.n === "Prince") this.rad = 12;
         // Size / collision tweak: spirits read a touch smaller.
         if (c.n.includes("Spirit")) this.rad = 8;  // down from 10
@@ -1082,32 +1069,6 @@ export default class Troop extends Entity {
             }
         }
         return false;
-    }
-
-    getBlockingObstacle(g, x1, y1, x2, y2) {
-        if (this.fly) return null; // flying units never need to path around buildings
-        let obstacle = null;
-        let minDist = Number.MAX_VALUE;
-        let myHitbox = g.getHitboxRadius(this);
-
-        for (let e of g.ents) {
-            if (e === this) continue;
-            if (e.constructor.name === "Tower" || e.constructor.name === "Building") {
-                if (e === this.currentTarget) continue; // never route around our own target
-                if (e.teslaHidden) continue;
-                let hR = e.rad;
-                let safeDist = hR + myHitbox + 5;
-                let d = this.ptSegDist(x1, y1, x2, y2, e.x, e.y);
-                if (d < safeDist) {
-                    let distToObj = this.dist(e);
-                    if (distToObj < minDist) {
-                        minDist = distToObj;
-                        obstacle = e;
-                    }
-                }
-            }
-        }
-        return obstacle;
     }
 
     // Electro Giant: shock every enemy in the aura (damage + brief stun) and spawn a

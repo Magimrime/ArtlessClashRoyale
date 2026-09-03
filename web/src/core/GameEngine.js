@@ -42,7 +42,6 @@ export default class GameEngine {
 
         // Multiplayer Stats
         this.isMultiplayer = false;
-        this.serverParams = null; // If client, stores server config
 
         // SNAPSHOT INTERPOLATION
         // Deterministic Lockstep doesn't need state buffering
@@ -871,7 +870,6 @@ export default class GameEngine {
         if (c.n === "Barbarian Barrel") return { type: 'rect', w: 46, h: 16 };
         if (c.n === "Goblin Barrel") return { type: 'circle', val: 31 };
         if (c.n === "Clone") return { type: 'circle', val: 79 };
-        if (c.n === "Tornado") return { type: 'circle', val: 127 };
         // NOTE: spirits are TROOPS, not spells — they must return null here. Returning a
         // (truthy) zero-radius shape made the placement preview render them down the SPELL
         // path, whose white "center marker" dot looked like a stray gray dot under the
@@ -1024,17 +1022,6 @@ export default class GameEngine {
             };
         }
         return this._formations[n] || null;
-    }
-
-    // Assign lanes to the LAST `lanes.length` spawned troops (0 = left, 1 = right).
-    // The units keep their normal spawn formation — the assignment makes them
-    // PATHFIND to their lane's bridge and tower instead.
-    splitLanes(lanes) {
-        const n = lanes.length;
-        for (let i = 0; i < n; i++) {
-            const t = this.ents[this.ents.length - n + i];
-            if (t) t.laneAssign = lanes[i];
-        }
     }
 
     addU(tm, c, x, y, isEvo = false) {
@@ -1736,16 +1723,6 @@ export default class GameEngine {
             if (d.t <= 0 || (d.age > 4 && !unitDeploying)) { this.deploys.splice(i, 1); i--; }
             else d.age = (d.age || 0) + 1;
         }
-    }
-
-    // Placeholder for render, will be handled in Main.js or a separate Renderer
-    render(ctx) {
-        // ...
-    }
-
-    spawnTroop(team, x, y, card) {
-        if (!card) return;
-        this.ents.push(new Troop(team, x, y, card));
     }
 
     handleCrateDeath(building) {

@@ -18,7 +18,6 @@ export default class Entity {
         this.fr = 0; // freeze
         this.rt = 0; // root
         this.infernoTick = 0;
-        this.stuckFrames = 0;
         this.sl = 0; // slow timer
         this.ragedTime = 0; // Rage buff timer (faster attack + movement while > 0)
         this.kbVX = 0; this.kbVY = 0; // knockback velocity (friction slide)

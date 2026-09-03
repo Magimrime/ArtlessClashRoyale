@@ -568,6 +568,38 @@ const ELX = '#d426c8', ELX_BG = '#2a1430';
   }
 }
 
+// ============================ ADDED FOR THE GAME =============================
+// A neutral grey button the game multiplies by any colour, so one sprite serves
+// every button. 9-sliced at 2x with a 10px corner (see Pixel.button).
+{
+  const sp = new Sprite();
+  sp.rrect(0, 1, 16, 14, 7, '#5a5a5a');        // rim
+  sp.rrect(1, 2, 14, 12, 6, '#d8d8d8');        // body
+  sp.hline(3, 12, 2, '#ffffff');               // top bevel
+  sp.hline(2, 13, 13, '#9a9a9a');              // bottom shade
+  save(sp, 'ui', 'button');
+}
+// The enemy's barbarian barrel — the vector version was team-coloured.
+proj('barbarian-barrel-enemy', sp => { sp.rrect(1,3,14,10,4,'#3c1410'); sp.rrect(2,4,12,8,3,'#8b3a2e');
+                                       sp.vline(5,4,11,'#5c2418'); sp.vline(10,4,11,'#5c2418'); sp.hline(3,12,5,'#b0584a'); });
+// Rage's wind-up: the bottle that hops before it splashes. A cork, glass, and
+// pink rage filling the lower half.
+{
+  const sp = new Sprite();
+  sp.rect(6, 1, 4, 2, '#9a6a35');                                 // cork
+  for (let y = 3; y <= 14; y++) {                                 // flares out toward the base
+    const hw = 2.5 + (y - 3) * 0.35;
+    sp.hline(Math.round(8 - hw), Math.round(7 + hw), y, '#cfe3ee');
+  }
+  for (let y = 9; y <= 14; y++) {                                 // the rage inside
+    const hw = 2.5 + (y - 3) * 0.35 - 1;
+    sp.hline(Math.round(8 - hw), Math.round(7 + hw), y, '#ff5fb0');
+  }
+  sp.rim('#6e8a99');
+  sp.vline(5, 5, 8, '#ffffff');                                   // the shine
+  save(sp, 'spells', 'rage-bottle');
+}
+
 // ---------------------------------------------------------------------------
 const byCat = {};
 for (const m of made) (byCat[m.cat] = byCat[m.cat] || []).push(m);

@@ -28,7 +28,6 @@ export default class MultiplayerManager {
         // Lockstep Queues
         this.pendingRequests = []; // For Host to collect incoming requests
         this.framePulses = {}; // For Client to collect incoming frames { tick: { actions: [] } }
-        this.highestReceivedTick = -1;
     }
 
     // Probe whether a multiplayer backend is actually reachable. Updates
@@ -122,9 +121,6 @@ export default class MultiplayerManager {
             } else if (data.type === 'frame_pulse') {
                 if (!this.isHost) {
                     this.framePulses[data.tick] = data;
-                    if (data.tick > this.highestReceivedTick) {
-                        this.highestReceivedTick = data.tick;
-                    }
                 }
             }
         } else if (msg.type === 'opponent_disconnected') {

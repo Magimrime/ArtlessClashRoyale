@@ -1,7 +1,9 @@
 # Pixel sprites
 
-146 sprites, all **16×16**, in `web/images/pixel/`. **Not wired into the game** —
-nothing in `web/src/` reads them. Ordinary 8-bit RGBA PNGs, editable anywhere.
+168 sprites in `web/images/pixel/` — all 16×16 except the font sheet, the 9-slice card
+frames (24×24) and the elixir-bar pieces. **The game draws with these:** `web/src/render/Pixel.js`
+loads `sprites.json` and blits them with smoothing off at whole-pixel scales. They are
+ordinary 8-bit RGBA PNGs, editable anywhere — and anything you edit stays edited (below).
 
 Browse them: open `web/images/pixel/index.html`, or with the game server running,
 <http://localhost:8000/images/pixel/>.

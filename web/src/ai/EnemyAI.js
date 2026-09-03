@@ -47,18 +47,6 @@ export default class EnemyAI {
         for (let i = 0; i < 4 && this.p.pile.length > 0; i++) this.p.h.push(this.p.pile.shift());
     }
 
-    hasWinCondition(deck) { return deck.some(c => c.t === 1); }
-    countType(deck, type) { return deck.filter(c => c.t === type).length; }
-    hasCheapOrMiniTank(deck) { return deck.some(c => c.c <= 2 || (c.hp > 800 && c.c <= 4)); }
-    hasRanged(deck) { return deck.some(c => c.rn > 2 && c.t === 0); }
-    hasBuilding(deck) { return deck.some(c => c.t === 3); }
-    hasAreaDamage(deck) { return deck.some(c => c.ar); }
-
-    findCard(pool, condition) {
-        let candidates = pool.filter(condition);
-        if (candidates.length === 0) return null;
-        return candidates[Math.floor(Math.random() * candidates.length)];
-    }
 
     addCard(deck, c) {
         if (!deck.includes(c)) deck.push(c);

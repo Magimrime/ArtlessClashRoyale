@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.5.11** — here's the whole road there.
+We're currently on **26.6.0** — here's the whole road there.
 
 ---
 
@@ -98,7 +98,29 @@ A major on request: not a new coat of paint this time, but the deepest gameplay-
   - **Giant Snowball** (2 elixir, 159 dmg) — a big packed snowball that **slows 35% for 2.5s and knocks back**. Its arc and blast radius had been sitting unused in the engine all along; now it has a card to go with them.
 - **26.5.11** — Feel pass on the new three. The Executioner's **axe looks like an actual axe** (wooden haft, curved steel head), flies **bigger and slower**, and — like the real card — **travels further than his attack range** (4.5-tile range, ~6.3 tiles of travel), so it clips things standing behind his target. The **Valkyrie's spin is now a spin you can see**: her axe whips a full turn around her with a fading arc trail. And the **Firecracker's burst is much bigger** — 9 sparks in a wide fan (was 5), longer streaks, and a bigger pop.
 
+## 26.6.x — Pixel (2026)
+The game is pixel art now — every troop, tower, building, projectile, effect, spell zone, button, card and letter.
+
+- **26.6.0** — **Everything is pixel art.** Every unit on the field is a 16x16 sprite drawn at a whole-pixel
+  scale (troops and buildings at 2x, princess towers at 5x, kings at 6x) so nothing ever smears; the canvas
+  itself now upscales with hard edges. Troops keep their status tints (freeze, slow, clone, ghost, fake, the
+  Skeleton Army general) as a colour wash over the sprite with the art's shading intact. Towers are layered —
+  base, vent, turret — and the turret aims in 16 crisp steps. Buildings: the Cannon turns to aim, the Tesla
+  cross-fades between raised and covered, the Inferno Tower's core flares while it burns. Every projectile,
+  explosion, ring and placed spell zone is a sprite; **placed spells wear their textures** (poison bubbles,
+  graveyard headstones, the clone swirl, rage sparks, the ice flake). **The Zap is the hand-drawn zap art.**
+  All text is a **hand-drawn 5x8 bitmap font** — 95 glyphs, proportionally spaced — the title, buttons, HUD,
+  card names, unit names, the timer. The **elixir bar** is built from crisp pieces with a proper cost badge on
+  every card; **cards wear 9-slice frames** coloured by elixir cost (green, blue, purple, pink), purple for a
+  charged evolution, grey when you can't afford them, with the unit drawn big and sharp on the face and the
+  formation cards laid out as they deploy. The river and bridges are tiled. Hand-edited sprites in
+  `web/images/pixel/` are never overwritten by the generator. Under the hood: the service worker's precache was
+  pointing at two deleted files and failing to install (offline play was dead) — fixed; and ~450 lines of code
+  that could never run were removed (the faux-3D toggle and its helpers, seven unused projectile factories, the
+  old pre-spell goblin-barrel path, seven unused AI helpers, two placeholder engine methods, an orphaned
+  multiplayer module and stylesheet, cards that don't exist, and a dozen fields that were written but never read).
+
 ---
 
-*The very first background was a dark indigo, then the green arena from 26.3.0; everything from 26.4.0 on wears the ocean blue.
+*The very first background was a dark indigo, then the green arena from 26.3.0; everything from 26.4.0 on wears the ocean blue, and from 26.6.0 the whole game is pixel art.
 The major number restarts at 1 each new year, and ticks up within a year whenever the game gets another whole new look.*
