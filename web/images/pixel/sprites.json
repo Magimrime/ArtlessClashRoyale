@@ -130,6 +130,7 @@
   "zap-strike-evo"
  ],
  "projectiles": [
+  "arrow",
   "arrows",
   "axe",
   "barbarian-barrel",

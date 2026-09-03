@@ -1,7 +1,9 @@
 {
  "note": "sprites = what the generator wrote, and may overwrite. yours = sprites you replaced; the generator leaves these alone forever. To hand one back, delete the file (or its line here) and re-run.",
  "yours": {
+  "troops/skeleton-barrel.png": "2106414fc50dd73d",
   "buildings/tombstone.png": "2185260f2e214da2",
+  "spells/rage.png": "5a43d0777b32ba9b",
   "projectiles/firework-rocket.png": "1976697c5600a726",
   "ui/gear.png": "d0b315bf52285e37"
  },
@@ -67,7 +69,6 @@
   "troops/graveyard-skeleton.png": "22a05c75a4b49158",
   "troops/balloon.png": "b7efe977de8b3c5d",
   "troops/balloon-red.png": "1ec991c47f476e88",
-  "troops/skeleton-barrel.png": "a7ac9b20386d1d32",
   "towers/princess-blue-base.png": "a96f1997986c9e63",
   "towers/princess-blue-turret.png": "f0b7605f93e572ba",
   "towers/princess-blue.png": "3967e9c98258dfcd",
@@ -90,7 +91,6 @@
   "buildings/elixir-collector.png": "f4ecb9f3fc821b12",
   "buildings/crate.png": "2f0b3e3a3208424a",
   "spells/poison.png": "870519950447726c",
-  "spells/rage.png": "80893c4f4dbcf3c7",
   "spells/clone.png": "262a1a60a52b4ff4",
   "spells/mirror.png": "802d292dccf02c84",
   "spells/heal.png": "d4d26e5bf1e9c7f1",
@@ -172,6 +172,7 @@
   "cards/back.png": "eef62e35e9323063",
   "cards/slot.png": "8f3df8ee0cebd91d",
   "ui/button.png": "a87f9d77260e5891",
+  "projectiles/arrow.png": "0256e4f363414f45",
   "projectiles/barbarian-barrel-enemy.png": "cad26419ffe7cbdd",
   "spells/rage-bottle.png": "bc27f0869328f287"
  }

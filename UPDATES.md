@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.6.4** — here's the whole road there.
+We're currently on **26.6.5** — here's the whole road there.
 
 ---
 
@@ -147,6 +147,10 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
   out exactly as the card deploys, instead of plain discs. **The Zap is animated again**: the hand-drawn bolt drops in
   from the top, flickers and twitches like live current, forks into two side bolts on High graphics with a glow at the
   strike point, then the impact flash and ring play as before.
+- **26.6.5** — **Turrets turn as one piece.** A turning sprite is now simply rotated as a whole image about its
+  centre — nothing is redrawn or resampled per angle — which the high-resolution backing store keeps clean.
+  **Arrows look like arrows again**: three waves of seven individual pixel arrows, each leaning a little, falling
+  onto its spot and fading as it lands with a puff of dust — instead of one blown-up fan per wave.
 
 ---
 

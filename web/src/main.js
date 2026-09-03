@@ -3557,13 +3557,22 @@ class Main {
             let wt = (elapsed - s) / (e - s);          // 0..1 within this wave
             let fall = (1 - wt) * 55;
             ctx.globalAlpha = wt > 0.8 ? Math.max(0, (1 - wt) / 0.2) : 1; // fade as they land
-            if (!this.px.draw(ctx, "spells/arrows", p.x, p.y - fall, Math.round(p.rad / 2) * 4)) {
-                ctx.strokeStyle = "#6b4423"; ctx.lineWidth = 2;
-                for (let i = 0; i < perWave; i++) {
-                    let ang = i * 2.399963 + w * 1.3;
-                    let rr = Math.sqrt((i + 0.5) / perWave) * p.rad * 0.88;
-                    let ax = p.x + Math.cos(ang) * rr, ay = p.y + Math.sin(ang) * rr - fall;
-                    ctx.beginPath(); ctx.moveTo(ax, ay - 8); ctx.lineTo(ax, ay + 8); ctx.stroke();
+            // Seven real arrows per wave, each its own pixel arrow leaning a little,
+            // falling onto its spot in the spread and fading as it lands - with a puff
+            // of dust where each one hits.
+            for (let i = 0; i < perWave; i++) {
+                let ang = i * 2.399963 + w * 1.3;
+                let rr = Math.sqrt((i + 0.5) / perWave) * p.rad * 0.88;
+                let ax = p.x + Math.cos(ang) * rr, ay = p.y + Math.sin(ang) * rr;
+                const tilt = Math.sin(i * 1.7 + w) * 0.25;
+                if (wt > 0.8) {
+                    ctx.globalAlpha = 0.7 * (1 - (wt - 0.8) / 0.2);
+                    this.px.draw(ctx, "effects/explosion-gray", ax, ay + 2, 16);
+                    ctx.globalAlpha = Math.max(0, (1 - wt) / 0.2);
+                }
+                if (!this.px.draw(ctx, "projectiles/arrow", ax, ay - fall, 32, tilt)) {
+                    ctx.strokeStyle = "#6b4423"; ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.moveTo(ax, ay - fall - 8); ctx.lineTo(ax, ay - fall + 8); ctx.stroke();
                 }
             }
         }

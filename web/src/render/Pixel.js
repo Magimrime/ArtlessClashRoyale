@@ -90,28 +90,6 @@ export class Pixel {
         });
     }
 
-    // A sprite turned by `angle` - ANY angle - rotated at its OWN resolution: the
-    // 16px art is spun with nearest-neighbour sampling into a small scratch
-    // frame, and that frame is what gets scaled up. Rotating the already-upscaled
-    // image put every edge on a sub-pixel diagonal and read as blur; this keeps
-    // each turned pixel a whole block. It is redrawn every call (a 24px draw is
-    // nothing), so turrets turn freely instead of stepping between fixed headings.
-    // The frame is 1.5x the sprite so a turned corner never clips.
-    rotated(src, key, angle) {
-        const w = src.width, h = src.height, D = Math.ceil(Math.max(w, h) * 1.5);
-        const k = "scratch|" + D;
-        let c = this._cache.get(k);
-        if (!c) { c = document.createElement("canvas"); c.width = D; c.height = D; this._cache.set(k, c); }
-        const g = c.getContext("2d");
-        g.setTransform(1, 0, 0, 1, 0, 0);
-        g.clearRect(0, 0, D, D);
-        g.imageSmoothingEnabled = false;
-        g.translate(D / 2, D / 2);
-        g.rotate(angle);
-        g.drawImage(src, -w / 2, -h / 2);
-        return c;
-    }
-
     // --- blitting -------------------------------------------------------------
     // Draw a sprite CENTRED on (x, y) at `size` pixels across, optionally rotated.
     // `wash` = [colour, alpha] lays a status tint over it. Returns false when the
@@ -123,11 +101,12 @@ export class Pixel {
         ctx.save();
         ctx.imageSmoothingEnabled = false;
         if (angle) {
-            // Turned at source resolution, then scaled by the same factor as an
-            // unturned sprite, so its pixels stay the same size as everyone else's.
-            const fr = this.rotated(im, name + (wash ? "|" + wash[0] + wash[1] : ""), angle);
-            const scale = s / im.width, fs = Math.round(fr.width * scale);
-            ctx.drawImage(fr, this.q(x - fs / 2), this.q(y - fs / 2), fs, fs);
+            // The whole sprite turns as one rigid image about its centre - nothing is
+            // redrawn or resampled per angle. With the 2-3x backing store the turned
+            // edges land on fine device pixels, so it stays clean.
+            ctx.translate(this.q(x), this.q(y));
+            ctx.rotate(angle);
+            ctx.drawImage(im, -s / 2, -s / 2, s, s);
         } else {
             ctx.drawImage(im, this.q(x - s / 2), this.q(y - s / 2), s, s);
         }

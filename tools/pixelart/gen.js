@@ -599,6 +599,15 @@ const ELX = '#d426c8', ELX_BG = '#2a1430';
   sp.hline(2, 13, 13, '#9a9a9a');              // bottom shade
   save(sp, 'ui', 'button');
 }
+// A single arrow, point DOWN, for the Arrows volley: shaft, steel head, fletching.
+proj('arrow', sp => {
+  sp.vline(8, 2, 11, '#6b4423');                                  // shaft
+  sp.plot(7, 2, '#e8e8e8'); sp.plot(9, 2, '#e8e8e8');             // fletching
+  sp.plot(7, 3, '#e8e8e8'); sp.plot(9, 3, '#e8e8e8');
+  sp.plot(6, 4, '#e8e8e8'); sp.plot(10, 4, '#e8e8e8');
+  sp.plot(8, 12, '#cfd8de'); sp.hline(7, 9, 13, '#cfd8de');       // head
+  sp.plot(8, 14, '#9aa6ae');                                      // point
+});
 // The enemy's barbarian barrel — the vector version was team-coloured.
 proj('barbarian-barrel-enemy', sp => { sp.rrect(1,3,14,10,4,'#3c1410'); sp.rrect(2,4,12,8,3,'#8b3a2e');
                                        sp.vline(5,4,11,'#5c2418'); sp.vline(10,4,11,'#5c2418'); sp.hline(3,12,5,'#b0584a'); });
