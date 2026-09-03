@@ -31,6 +31,50 @@ function encodePNG(w, h, rgba) {
   ]);
 }
 
+// ---------- PNG in ----------
+// Reads a hand-drawn PNG back into a Sprite, so artwork drawn by hand can be
+// adopted into the set instead of being redrawn by the generator.
+function decodePNG(file) {
+  const b = fs.readFileSync(file);
+  let p = 8, w = 0, h = 0, ct = 0, bd = 8; const idat = [];
+  while (p + 8 <= b.length) {
+    const len = b.readUInt32BE(p), t = b.toString('ascii', p + 4, p + 8);
+    if (t === 'IHDR') { w = b.readUInt32BE(p + 8); h = b.readUInt32BE(p + 12); bd = b[p + 16]; ct = b[p + 17]; }
+    else if (t === 'IDAT') idat.push(b.slice(p + 8, p + 8 + len));
+    else if (t === 'IEND') break;
+    p += len + 12;
+  }
+  if (bd !== 8 || (ct !== 6 && ct !== 2)) throw new Error(`${file}: need 8-bit RGB/RGBA, got depth ${bd} type ${ct}`);
+  const bpp = ct === 6 ? 4 : 3, raw = zlib.inflateSync(Buffer.concat(idat));
+  const out = new Uint8Array(w * h * 4), prev = new Uint8Array(w * bpp), cur = new Uint8Array(w * bpp);
+  let o = 0;
+  for (let y = 0; y < h; y++) {
+    const ft = raw[o++];
+    for (let i = 0; i < w * bpp; i++) {                       // undo the per-row filter
+      const x = raw[o + i], a = i >= bpp ? cur[i - bpp] : 0, up = prev[i], ul = i >= bpp ? prev[i - bpp] : 0;
+      let v;
+      switch (ft) {
+        case 0: v = x; break;
+        case 1: v = x + a; break;
+        case 2: v = x + up; break;
+        case 3: v = x + ((a + up) >> 1); break;
+        default: {                                            // Paeth
+          const pa = Math.abs(up - ul), pb = Math.abs(a - ul), pc = Math.abs(a + up - 2 * ul);
+          v = x + (pa <= pb && pa <= pc ? a : pb <= pc ? up : ul);
+        }
+      }
+      cur[i] = v & 255;
+    }
+    o += w * bpp;
+    for (let x = 0; x < w; x++) {
+      const d = (y * w + x) * 4, s = x * bpp;
+      out[d] = cur[s]; out[d+1] = cur[s+1]; out[d+2] = cur[s+2]; out[d+3] = bpp === 4 ? cur[s+3] : 255;
+    }
+    prev.set(cur);
+  }
+  return { w, h, data: out };
+}
+
 // ---------- colour ----------
 function hex(c) {
   let h = String(c).replace('#', '');
@@ -104,6 +148,12 @@ class Sprite {
     for (let i = 0; i < this.w*this.h; i++) if (this.data[i*4+3]) set.add(this.data.slice(i*4, i*4+3).join(','));
     return set;
   }
+  // Adopt a hand-drawn PNG as-is.
+  static load(file) {
+    const { w, h, data } = decodePNG(file);
+    if (w !== h) throw new Error(`${file}: expected a square sprite, got ${w}x${h}`);
+    const sp = new Sprite(w); sp.data.set(data); return sp;
+  }
   save(file) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, encodePNG(this.w, this.h, this.data));
@@ -111,4 +161,4 @@ class Sprite {
   }
 }
 
-module.exports = { Sprite, shade, hex, encodePNG };
+module.exports = { Sprite, shade, hex, encodePNG, decodePNG };

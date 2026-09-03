@@ -13,6 +13,11 @@ const out = (cat, name) => path.join(OUT, cat, name + '.png');
 const made = [];
 const save = (sp, cat, name) => { sp.save(out(cat, name)); made.push({ cat, name, colours: sp.palette().size }); return sp; };
 
+// Some art is hand-drawn rather than generated — the zap effect in web/images/.
+// Adopt those files as-is so a rebuild never paints over them.
+const HAND = path.join(__dirname, '..', '..', 'web', 'images');
+const adopt = (file, cat, name) => save(Sprite.load(path.join(HAND, file)), cat, name);
+
 // ============================ TROOPS =========================================
 // The game's colour per card (main.js getUnitColor).
 const C = {
@@ -259,15 +264,7 @@ save(zone('royale-delivery', '#c0a06a', { texture:'stone' }), 'spells', 'royale-
   sp.disc(10, 10, 2, '#cfe4f5'); sp.disc(5, 11, 1.4, '#cfe4f5'); sp.disc(5, 5, 2, '#ffffff');
   save(sp, 'spells', 'giant-snowball');
 }
-{ // Zap — the bolt
-  const sp = new Sprite();
-  const bolt = [[9,1],[8,2],[8,3],[7,4],[7,5],[9,5],[8,6],[8,7],[7,8],[7,9],[6,10],[6,11],[8,9],[9,8]];
-  for (const [x,y] of bolt) { sp.plot(x, y, '#2b7fa0'); }
-  for (const [x,y] of [[8,2],[7,4],[8,6],[7,8],[6,10]]) sp.plot(x, y, '#7fdcff');
-  for (const [x,y] of [[8,3],[7,5],[8,7],[7,9]]) sp.plot(x, y, '#eaffff');
-  sp.disc(8, 13, 2.6, '#2b7fa0'); sp.disc(8, 13, 1.6, '#7fdcff');
-  save(sp, 'spells', 'zap');
-}
+adopt('zap.png', 'spells', 'zap');   // hand-drawn, not generated
 { // Arrows — a fan of three
   const sp = new Sprite();
   for (const x of [3, 8, 13]) {
@@ -325,12 +322,9 @@ eff('evo-gem',         sp => { for (let y=0;y<16;y++) for (let x=0;x<16;x++) { c
                                if (d<=7) sp.plot(x,y,'#4a1273'); if (d<=5.5) sp.plot(x,y,'#c45cff'); if (d<=2.5) sp.plot(x,y,'#f0c4ff'); } });
 eff('elixir-drop',     sp => { for (let y=0;y<16;y++) for (let x=0;x<16;x++) { const d=Math.abs(x-7.5)+Math.abs(y-7.5);
                                if (d<=6) sp.plot(x,y,'#4a1152'); if (d<=4.5) sp.plot(x,y,'#e05fe8'); if (d<=2) sp.plot(x,y,'#f7b8fb'); } });
-eff('zap-strike',      sp => { for (const [x,y] of [[9,0],[8,1],[8,2],[7,3],[7,4],[9,4],[8,5],[8,6],[7,7],[7,8],[6,9],[6,10]]) sp.plot(x,y,'#7fdcff');
-                               for (const [x,y] of [[8,1],[7,3],[8,5],[7,7],[6,9]]) sp.plot(x,y,'#eaffff');
-                               sp.disc(8,13,2.6,'#2b7fa0'); sp.disc(8,13,1.4,'#eaffff'); });
-eff('zap-strike-evo',  sp => { for (const [x,y] of [[9,0],[8,1],[8,2],[7,3],[7,4],[9,4],[8,5],[8,6],[7,7],[7,8],[6,9],[6,10]]) sp.plot(x,y,'#d98cff');
-                               for (const [x,y] of [[8,1],[7,3],[8,5],[7,7],[6,9]]) sp.plot(x,y,'#f7e6ff');
-                               sp.disc(8,13,2.6,'#6b2b9c'); sp.disc(8,13,1.4,'#f2d9ff'); });
+// The zap strikes are hand-drawn art, adopted whole.
+adopt('zap.png',     'effects', 'zap-strike');
+adopt('evo_zap.png', 'effects', 'zap-strike-evo');
 
 // ========================== PROJECTILES ======================================
 const proj = (name, fn) => { const sp = new Sprite(); fn(sp); save(sp, 'projectiles', name); };

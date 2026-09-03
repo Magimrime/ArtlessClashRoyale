@@ -13,8 +13,21 @@ node tools/pixelart/gen.js       # redraws every sprite
 node tools/pixelart/make-viewer.js
 ```
 
-- `tools/pixelart/lib.js` — a small PNG encoder plus the rasteriser
+- `tools/pixelart/lib.js` — a small PNG encoder/decoder plus the rasteriser
 - `tools/pixelart/gen.js` — the artwork itself, one block per sprite
+
+## Hand-drawn art
+
+Not everything is generated. `adopt()` pulls a hand-drawn PNG in from `web/images/`
+and copies it through untouched, so rebuilding never paints over it:
+
+| Sprite | Source |
+|---|---|
+| `spells/zap.png`, `effects/zap-strike.png` | `web/images/zap.png` |
+| `effects/zap-strike-evo.png` | `web/images/evo_zap.png` |
+
+To hand-draw another sprite, save a 16×16 PNG in `web/images/` and add one
+`adopt()` line. The build checks its palette alongside the generated ones.
 
 ## How they're drawn
 
