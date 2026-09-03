@@ -3,6 +3,7 @@ import Troop from './entities/Troop.js';
 import Tower from './entities/Tower.js';
 import Building from './entities/Building.js';
 import MultiplayerManager from './multiplayer/MultiplayerManager.js';
+import { Pixel } from './render/Pixel.js';
 
 
 // --- DEBUG ERROR HANDLER ---
@@ -169,8 +170,14 @@ class Main {
         // Animated sprite sheets — each a vertical column of 16x16 frames (frame count is
         // auto-detected from the image height). Add more with addSprite("name","images/x.png").
         this.sprites = {};
-        this.addSprite("zap", "images/zap.png");
-        this.addSprite("evozap", "images/evo_zap.png");
+        // The hand-drawn zap art lives in the pixel set now (images/zap.png was
+        // removed); these are the same pixels, byte for byte.
+        this.addSprite("zap", "images/pixel/spells/zap.png");
+        this.addSprite("evozap", "images/pixel/effects/zap-strike-evo.png");
+
+        // The pixel-art set: sprites, 9-slice frames and the bitmap font.
+        this.px = new Pixel();
+        this.px.load().catch(() => { });     // never let missing art block startup
 
         this.init();
     }

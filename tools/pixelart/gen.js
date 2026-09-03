@@ -581,6 +581,14 @@ if (fat.length) console.log('\nover 6 colours:', fat.map(m => `${m.cat}/${m.name
 else console.log('\nevery sprite uses 6 colours or fewer');
 
 fs.mkdirSync(OUT, { recursive: true });
+// A manifest of every sprite, so the game can preload the set without hardcoding
+// a list that drifts out of date.
+{
+  const byFolder = {};
+  for (const m of made) (byFolder[m.cat] = byFolder[m.cat] || []).push(m.name);
+  for (const k of Object.keys(byFolder)) byFolder[k].sort();
+  fs.writeFileSync(path.join(OUT, 'sprites.json'), JSON.stringify(byFolder, null, 1) + '\n');
+}
 if (fontMetrics) fs.writeFileSync(path.join(OUT, 'font', 'metrics.json'), JSON.stringify(fontMetrics, null, 1) + '\n');
 fs.writeFileSync(MANIFEST, JSON.stringify({
   note: 'sprites = what the generator wrote, and may overwrite. yours = sprites you replaced; the generator leaves these alone forever. To hand one back, delete the file (or its line here) and re-run.',

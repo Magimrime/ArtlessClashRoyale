@@ -21,14 +21,15 @@ const PRECACHE = [
     'src/entities/Entity.js',
     'src/entities/Proj.js',
     'src/entities/Tower.js',
+    'src/render/Pixel.js',
     'src/entities/Troop.js',
     'src/ai/EnemyAI.js',
     'src/models/Card.js',
     'src/multiplayer/MultiplayerManager.js',
-    'src/multiplayer/RemoteInputHandler.js',
     'images/eraser.png',
-    'images/zap.png',
-    'images/evo_zap.png',
+    'images/pixel/sprites.json',
+    'images/pixel/font/sheet.png',
+    'images/pixel/font/metrics.json',
     'icons/icon-192.png',
     'icons/icon-512.png'
 ];
