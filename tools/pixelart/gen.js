@@ -6,17 +6,86 @@
 // downscaling — so circles are perfectly round and each sprite keeps a tiny
 // palette. Colours are the game's own (copied from main.js getUnitColor).
 const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 const { Sprite, shade } = require('./lib.js');
 
-const OUT = path.join(__dirname, '..', '..', 'web', 'images', 'pixel');
+// PIXEL_OUT lets test-guard.js run against a scratch dir instead of the real art.
+const OUT = process.env.PIXEL_OUT || path.join(__dirname, '..', '..', 'web', 'images', 'pixel');
 const out = (cat, name) => path.join(OUT, cat, name + '.png');
 const made = [];
-const save = (sp, cat, name) => { sp.save(out(cat, name)); made.push({ cat, name, colours: sp.palette().size }); return sp; };
+const kept = [];
+
+// ---------------------------------------------------------------------------
+// YOUR EDITS WIN.
+//
+// Replace or repaint any sprite in web/images/pixel/ and the generator will
+// never overwrite it again — not on the next run, not even if the drawing
+// code for that sprite changes.
+//
+// How it knows: it hashes every file it writes into .generated.json. A sprite
+// still matching its hash is the generator's own output and may be replaced.
+// A sprite that does not match is yours, and is left alone. With no hash on
+// record it compares against what it would draw right now, so the very first
+// run already protects edits made before any of this existed.
+//
+//   node tools/pixelart/gen.js            keep everything you have touched
+//   node tools/pixelart/gen.js --force    overwrite it all, discarding edits
+//
+// To hand a sprite back to the generator, delete it (or its .generated.json
+// line) and re-run.
+const MANIFEST = path.join(OUT, '.generated.json');
+const FORCE = process.argv.includes('--force');
+const sha = buf => crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16);
+
+// Two separate records, and the distinction is the whole point:
+//   sprites — the hash of what the generator itself wrote
+//   yours   — the hash of a sprite you replaced, which it must never touch
+// A hash of yours is NEVER filed under `sprites`. Conflating the two is what
+// let a "kept" sprite get overwritten on the following run.
+let prev = { sprites: {}, yours: {} };
+try {
+  const j = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
+  prev = { sprites: j.sprites || {}, yours: j.yours || {} };
+} catch { /* first run */ }
+const nowGen = {}, nowYours = {};
+
+const save = (sp, cat, name) => {
+  const rel = `${cat}/${name}.png`, file = out(cat, name);
+  const fresh = sp.bytes(), freshHash = sha(fresh);
+  made.push({ cat, name, colours: sp.palette().size });
+  const claim = () => { sp.save(file); nowGen[rel] = freshHash; return sp; };
+
+  if (FORCE) return claim();
+  if (!fs.existsSync(file)) return claim();   // deleted on purpose -> hand it back
+
+  const diskHash = sha(fs.readFileSync(file));
+  const mine = () => { nowYours[rel] = diskHash; kept.push(rel); return sp; };
+
+  if (prev.yours[rel] === diskHash) return mine();          // already yours, still untouched
+  // Is this the generator's own output? With nothing on record, compare against
+  // what it would draw right now — so edits made before any of this existed are
+  // still recognised as yours on the very first run.
+  const wasOurs = rel in prev.sprites ? diskHash === prev.sprites[rel] : diskHash === freshHash;
+  if (!wasOurs) return mine();                              // you changed it
+
+  if (diskHash !== freshHash) sp.save(file);
+  nowGen[rel] = freshHash;
+  return sp;
+};
 
 // Some art is hand-drawn rather than generated — the zap effect in web/images/.
 // Adopt those files as-is so a rebuild never paints over them.
 const HAND = path.join(__dirname, '..', '..', 'web', 'images');
-const adopt = (file, cat, name) => save(Sprite.load(path.join(HAND, file)), cat, name);
+const orphaned = [];
+const adopt = (file, cat, name) => {
+  const src = path.join(HAND, file), dest = out(cat, name);
+  if (fs.existsSync(src)) return save(Sprite.load(src), cat, name);
+  // Source gone — keep the copy already in the set rather than redrawing it.
+  if (fs.existsSync(dest)) { orphaned.push(`${cat}/${name}.png (source ${file} is missing)`); return save(Sprite.load(dest), cat, name); }
+  orphaned.push(`${cat}/${name}.png (SKIPPED — no ${file} and nothing in the set)`);
+  return null;
+};
 
 // ============================ TROOPS =========================================
 // The game's colour per card (main.js getUnitColor).
@@ -398,3 +467,17 @@ for (const [cat, list] of Object.entries(byCat)) {
 const fat = made.filter(m => m.colours > 6);
 if (fat.length) console.log('\nover 6 colours:', fat.map(m => `${m.cat}/${m.name}=${m.colours}`).join(', '));
 else console.log('\nevery sprite uses 6 colours or fewer');
+
+fs.mkdirSync(OUT, { recursive: true });
+fs.writeFileSync(MANIFEST, JSON.stringify({
+  note: 'sprites = what the generator wrote, and may overwrite. yours = sprites you replaced; the generator leaves these alone forever. To hand one back, delete the file (or its line here) and re-run.',
+  yours: nowYours,
+  sprites: nowGen,
+}, null, 1) + '\n');
+
+if (FORCE) console.log('\n--force: everything overwritten, INCLUDING sprites of yours');
+else if (kept.length) {
+  console.log(`\nkept ${kept.length} sprite${kept.length > 1 ? 's' : ''} of yours (not regenerated):`);
+  for (const r of kept) console.log('  ' + r);
+}
+if (orphaned.length) { console.log('\nhand-drawn sources:'); for (const o of orphaned) console.log('  ' + o); }

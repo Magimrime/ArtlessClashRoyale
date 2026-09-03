@@ -9,9 +9,23 @@ Browse them: open `web/images/pixel/index.html`, or with the game server running
 ## Regenerating
 
 ```bash
-node tools/pixelart/gen.js       # redraws every sprite
+node tools/pixelart/gen.js         # redraws every sprite you have not edited
 node tools/pixelart/make-viewer.js
+node tools/pixelart/test-guard.js  # proves your edits survive
 ```
+
+## Your edits win
+
+Replace or repaint any sprite in `web/images/pixel/` and the generator will not
+overwrite it again — not on the next run, not even if the drawing code for that
+sprite changes. It hashes everything it writes into `.generated.json`; a sprite
+that no longer matches its hash is yours and is left alone. Files it has no
+record of are treated as yours too, so a lost manifest makes it more cautious,
+not less. Each run prints what it kept.
+
+To hand a sprite back, delete it (or its `.generated.json` line) and re-run.
+`--force` overwrites everything including your art — that is the only way to
+lose it, and it says so when it runs.
 
 - `tools/pixelart/lib.js` — a small PNG encoder/decoder plus the rasteriser
 - `tools/pixelart/gen.js` — the artwork itself, one block per sprite

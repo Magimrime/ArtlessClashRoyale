@@ -154,9 +154,12 @@ class Sprite {
     if (w !== h) throw new Error(`${file}: expected a square sprite, got ${w}x${h}`);
     const sp = new Sprite(w); sp.data.set(data); return sp;
   }
+  // The encoded PNG, without touching the disk — lets the caller compare against
+  // what is already there before deciding whether it may overwrite.
+  bytes() { return encodePNG(this.w, this.h, this.data); }
   save(file) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, encodePNG(this.w, this.h, this.data));
+    fs.writeFileSync(file, this.bytes());
     return this;
   }
 }
