@@ -74,6 +74,22 @@ Towers come apart so the cannon can aim:
 Draw the base, then the turret rotated about its centre to the aim angle. All layers
 share the same 16×16 frame, so they stack with no offset.
 
+## Font, elixir and cards
+
+`font/sheet.png` is a 5x8 bitmap font — all 95 printable ASCII glyphs, drawn in
+`font.js`, packed into a 16-column sheet of 6x9 cells. It is pure white on
+transparent so the game can tint it. `font/metrics.json` carries the cell size
+and a per-glyph ink width, so text is spaced proportionally rather than on a
+fixed grid.
+
+`elixir/` holds the droplet, the cost badge, and the bar in pieces — a left cap,
+a stretchable middle, a right cap and a tick — so the full-width bar stays crisp
+at both ends. `cards/` holds 9-slice frames (24x24 with 8px corners) in the four
+elixir-cost colours from `elixirColor()`, plus evo, locked, back and slot.
+
+`node tools/pixelart/preview-ui.js` renders `ui-preview.png`, which proves the
+font metrics and the 9-slice by drawing real card names and real card sizes.
+
 ## Spells
 
 The spell sprites are the **placed** footprint — a circle with a texture, so each zone

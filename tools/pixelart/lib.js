@@ -90,7 +90,8 @@ function shade(c, amt) {
 
 // ---------- raster ----------
 class Sprite {
-  constructor(size = 16) { this.w = this.h = size; this.data = new Uint8Array(size*size*4); }
+  // Square by default; pass a height for sheets (the font sheet is 96x48).
+  constructor(w = 16, h = w) { this.w = w; this.h = h; this.data = new Uint8Array(w*h*4); }
   plot(x, y, col) {
     x = Math.round(x); y = Math.round(y);
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return;
@@ -142,6 +143,18 @@ class Sprite {
       if (rnd() < density) this.plot(x, y, col);
     }
   }
+  // Darken the outer edge of whatever is drawn, without growing the silhouette —
+  // this is what gives the small sprites their readable outline.
+  rim(col) {
+    const w = this.w, solid = new Uint8Array(w * this.h);
+    for (let y = 0; y < this.h; y++) for (let x = 0; x < w; x++) solid[y*w + x] = this.at(x, y) ? 1 : 0;
+    const off = (x, y) => (x < 0 || y < 0 || x >= w || y >= this.h) ? 0 : solid[y*w + x];
+    for (let y = 0; y < this.h; y++) for (let x = 0; x < w; x++) {
+      if (!solid[y*w + x]) continue;
+      if (!off(x-1,y) || !off(x+1,y) || !off(x,y-1) || !off(x,y+1)) this.plot(x, y, col);
+    }
+    return this;
+  }
   // Count distinct colours — used by the build to keep palettes honest.
   palette() {
     const set = new Set();
@@ -151,8 +164,7 @@ class Sprite {
   // Adopt a hand-drawn PNG as-is.
   static load(file) {
     const { w, h, data } = decodePNG(file);
-    if (w !== h) throw new Error(`${file}: expected a square sprite, got ${w}x${h}`);
-    const sp = new Sprite(w); sp.data.set(data); return sp;
+    const sp = new Sprite(w, h); sp.data.set(data); return sp;
   }
   // The encoded PNG, without touching the disk — lets the caller compare against
   // what is already there before deciding whether it may overwrite.

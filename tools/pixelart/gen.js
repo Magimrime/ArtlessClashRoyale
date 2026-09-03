@@ -456,6 +456,118 @@ tile('tile-bridge', '#9c6b3a', sp => { for (const y of [3, 7, 11, 15]) sp.hline(
 tile('tile-menu', '#236480');
 tile('tile-deck', '#152c3a');
 
+// ============================ FONT ===========================================
+// The 5x7 glyphs drawn in font.js, packed into one sheet. Pure white on
+// transparent, so the game tints it to whatever colour the text needs.
+let fontMetrics = null;
+{
+  const F = require('./font.js');
+  const COLS = 16, ROWS = Math.ceil((F.LAST - F.FIRST + 1) / COLS);
+  const sheet = new Sprite(COLS * F.CELL_W, ROWS * F.CELL_H);
+  const width = {};
+  for (let code = F.FIRST; code <= F.LAST; code++) {
+    const ch = String.fromCharCode(code), art = F.GLYPHS[ch];
+    if (!art) continue;
+    const i = code - F.FIRST, ox = (i % COLS) * F.CELL_W, oy = Math.floor(i / COLS) * F.CELL_H;
+    let ink = -1;
+    for (let y = 0; y < F.ART_H; y++) for (let x = 0; x < F.ART_W; x++) {
+      if (art[y][x] !== '#') continue;
+      sheet.plot(ox + x, oy + y, '#ffffff');
+      if (x > ink) ink = x;
+    }
+    width[ch] = ink < 0 ? 2 : ink + 1;   // blank right columns trimmed -> proportional
+  }
+  save(sheet, 'font', 'sheet');
+  fontMetrics = { cell: { w: F.CELL_W, h: F.CELL_H }, art: { w: F.ART_W, h: F.ART_H },
+                  cols: COLS, first: F.FIRST, last: F.LAST, gap: 1, width };
+}
+
+// ============================ ELIXIR =========================================
+// The game's own elixir colours (main.js: the bar is #d426c8 on #2a1430).
+const ELX = '#d426c8', ELX_BG = '#2a1430';
+
+{ // The droplet — a taper into a round bulb, the shape everything else echoes.
+  const drop = (name, col) => {
+    const sp = new Sprite();
+    for (let y = 2; y <= 9; y++) {                     // taper from the point down
+      const hw = (y - 2) * 0.62;
+      for (let x = Math.round(8 - hw); x <= Math.round(7 + hw); x++) sp.plot(x, y, col);
+    }
+    sp.disc(8, 10, 5, col);                            // the bulb, a perfect circle
+    sp.rim(shade(col, -0.28));
+    sp.disc(6, 9, 1.3, shade(col, 0.3));               // highlight
+    save(sp, 'elixir', name);
+  };
+  drop('drop', ELX);
+  drop('drop-gold', '#e8b33c');                        // the collector's payout
+}
+
+{ // Cost badge — the droplet again, but flattened into a coin so a numeral fits.
+  const sp = new Sprite();
+  sp.disc(8, 8, 7, ELX);
+  sp.rim(shade(ELX, -0.32));
+  sp.disc(6, 5, 1.6, shade(ELX, 0.3));
+  save(sp, 'elixir', 'badge');
+}
+
+{ // Bar pieces. The bar is full-width and 16px tall, so it is built from a left
+  // cap, a stretched middle and a right cap — the caps stay crisp at any width.
+  const piece = (name, w, h, draw) => { const sp = new Sprite(w, h); draw(sp); save(sp, 'elixir', name); };
+  const capL = (col) => sp => { sp.rrect(0, 2, 12, 12, 5, col); sp.rim(shade(col, -0.32)); };
+  const capR = (col) => sp => { sp.rrect(-6, 2, 12, 12, 5, col); sp.rim(shade(col, -0.32)); };
+  const mid  = (col) => sp => {
+    sp.rect(0, 2, sp.w, 12, col);
+    sp.hline(0, sp.w - 1, 2, shade(col, -0.32));       // only top/bottom get an edge,
+    sp.hline(0, sp.w - 1, 13, shade(col, -0.32));      // so tiled copies show no seam
+    sp.hline(0, sp.w - 1, 3, shade(col, 0.18));
+  };
+  piece('bar-cap-left',       6, 16, capL(ELX_BG));
+  piece('bar-cap-right',      6, 16, capR(ELX_BG));
+  piece('bar-mid',            4, 16, mid(ELX_BG));
+  piece('bar-fill-cap-left',  6, 16, capL(ELX));
+  piece('bar-fill-cap-right', 6, 16, capR(ELX));
+  piece('bar-fill-mid',       4, 16, mid(ELX));
+  piece('bar-tick',           2, 16, sp => { sp.vline(0, 3, 12, '#1b0c20'); sp.vline(1, 3, 12, shade(ELX_BG, 0.12)); });
+}
+
+// ============================ CARDS ==========================================
+// Card frames are 9-slice: 24x24 with 8px corners, so one frame fits the 110x122
+// hand card, the 72x100 next-card slot and the 140-tall deck tile without ever
+// stretching a corner. Colours follow main.js elixirColor().
+{
+  const frame = (name, col, face = '#f4efe6') => {
+    const sp = new Sprite(24, 24);
+    sp.rrect(0, 0, 24, 24, 6, shade(col, -0.38));   // outer edge
+    sp.rrect(1, 1, 22, 22, 5, col);                 // the band
+    sp.rrect(2, 2, 20, 20, 4, shade(col, 0.16));    // bevel
+    sp.rrect(3, 3, 18, 18, 3, face);                // the face; the centre stretches
+    save(sp, 'cards', name);
+  };
+  frame('frame-1', '#3a8f5a');   // <=2 elixir
+  frame('frame-2', '#3a6f9f');   // <=4
+  frame('frame-3', '#6a4a9f');   // <=6
+  frame('frame-4', '#9f3a6a');   // 7+
+  frame('frame-evo', '#c45cff');
+  frame('frame-locked', '#6b6f75', '#b9bdb7');
+
+  { // Card back — the crown-less skull mark the app icon uses, kept simple.
+    const sp = new Sprite(24, 24);
+    sp.rrect(0, 0, 24, 24, 6, '#2b1c3a');
+    sp.rrect(2, 2, 20, 20, 4, '#4a2f6b');
+    sp.disc(12, 11, 5, '#e8e2d6');
+    sp.rect(10, 13, 2, 2, '#2b1c3a'); sp.rect(14, 13, 2, 2, '#2b1c3a');
+    sp.rect(10, 16, 6, 3, '#e8e2d6');
+    save(sp, 'cards', 'back');
+  }
+  { // Empty slot — a dashed well for the next-card position.
+    const sp = new Sprite(24, 24);
+    sp.rrect(0, 0, 24, 24, 6, '#3a3f47');
+    sp.rrect(2, 2, 20, 20, 4, '#22262c');
+    for (let i = 3; i < 21; i += 4) { sp.plot(i, 2, '#555b64'); sp.plot(i, 21, '#555b64'); sp.plot(2, i, '#555b64'); sp.plot(21, i, '#555b64'); }
+    save(sp, 'cards', 'slot');
+  }
+}
+
 // ---------------------------------------------------------------------------
 const byCat = {};
 for (const m of made) (byCat[m.cat] = byCat[m.cat] || []).push(m);
@@ -469,6 +581,7 @@ if (fat.length) console.log('\nover 6 colours:', fat.map(m => `${m.cat}/${m.name
 else console.log('\nevery sprite uses 6 colours or fewer');
 
 fs.mkdirSync(OUT, { recursive: true });
+if (fontMetrics) fs.writeFileSync(path.join(OUT, 'font', 'metrics.json'), JSON.stringify(fontMetrics, null, 1) + '\n');
 fs.writeFileSync(MANIFEST, JSON.stringify({
   note: 'sprites = what the generator wrote, and may overwrite. yours = sprites you replaced; the generator leaves these alone forever. To hand one back, delete the file (or its line here) and re-run.',
   yours: nowYours,

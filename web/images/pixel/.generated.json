@@ -2,7 +2,8 @@
  "note": "sprites = what the generator wrote, and may overwrite. yours = sprites you replaced; the generator leaves these alone forever. To hand one back, delete the file (or its line here) and re-run.",
  "yours": {
   "buildings/tombstone.png": "2185260f2e214da2",
-  "projectiles/firework-rocket.png": "1976697c5600a726"
+  "projectiles/firework-rocket.png": "1976697c5600a726",
+  "ui/gear.png": "d0b315bf52285e37"
  },
  "sprites": {
   "troops/knight.png": "80543f2a1175e9c7",
@@ -138,7 +139,6 @@
   "ui/button-blue.png": "75fc74d02dd5630a",
   "ui/button-purple.png": "939ea6ba9b42c2e8",
   "ui/button-red.png": "a5f79b5e249e2e93",
-  "ui/gear.png": "566b469c9730242c",
   "ui/elixir-4.png": "43cded3d574dd4ba",
   "ui/evo-gem.png": "7ff28bf4e5e39b67",
   "map/tile-field.png": "aabeb2c44e0bc7f1",
@@ -148,6 +148,25 @@
   "map/tile-river.png": "387db53c1785ed8d",
   "map/tile-bridge.png": "77a6cf525e7f5040",
   "map/tile-menu.png": "fbf7ac37b700ade4",
-  "map/tile-deck.png": "07fe0161124f529a"
+  "map/tile-deck.png": "07fe0161124f529a",
+  "font/sheet.png": "04491b2bad85f345",
+  "elixir/drop.png": "68c5e67bea074d4f",
+  "elixir/drop-gold.png": "5ccff97775d1fd25",
+  "elixir/badge.png": "42c02204555f8e68",
+  "elixir/bar-cap-left.png": "685b8e43ed1009d8",
+  "elixir/bar-cap-right.png": "246f7324411bcd35",
+  "elixir/bar-mid.png": "07657ea99fe99a70",
+  "elixir/bar-fill-cap-left.png": "701cb263474dff3f",
+  "elixir/bar-fill-cap-right.png": "faed2beb29fe4a7f",
+  "elixir/bar-fill-mid.png": "b44cab893295354e",
+  "elixir/bar-tick.png": "42d0688bf4d6ff9f",
+  "cards/frame-1.png": "e2d0e3446d92b0c6",
+  "cards/frame-2.png": "742a4753c698ec9a",
+  "cards/frame-3.png": "4ee7cfcb7455e48b",
+  "cards/frame-4.png": "73595ad756304dad",
+  "cards/frame-evo.png": "baa9398f2bf5218a",
+  "cards/frame-locked.png": "32f166f799139458",
+  "cards/back.png": "eef62e35e9323063",
+  "cards/slot.png": "8f3df8ee0cebd91d"
  }
 }
