@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.6.1** — here's the whole road there.
+We're currently on **26.6.2** — here's the whole road there.
 
 ---
 
@@ -128,6 +128,12 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
   - **Bandit** (3 elixir, 906 hp, 194 damage, 1.0s, melee) — a ground target 3.5–6 tiles away triggers her **dash**: she
     closes the gap in 0.8s, **can't be hit on the way**, and lands a **389 double-damage** hit.
   Also fixed: the Valkyrie's and Executioner's sprites had been drawn at the default size — they now carry their real bulk.
+- **26.6.2** — Polish. **Turning sprites are crisp**: a sprite is now rotated at its own 16-pixel resolution and *then*
+  scaled up, so every turned pixel stays a whole block on the grid — rotating the already-enlarged image put each edge on
+  a sub-pixel diagonal and read as blur. Applies to tower tops, the Cannon, the axe, dynamite and the tumbling barrel.
+  The **Bandit leaves a trail** of fading afterimages while she dashes. The **king's shooter rises out of the middle** of
+  the roof (through the vent) instead of the front. The **Skeleton Barrel is only ever dropped on your own half** — no
+  pocket placement on the enemy side once a tower is down.
 
 ---
 

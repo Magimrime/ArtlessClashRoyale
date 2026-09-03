@@ -91,6 +91,29 @@ export class Pixel {
         });
     }
 
+    // A sprite turned by `angle`, rotated at its OWN resolution: the 16px art is
+    // spun with nearest-neighbour sampling into a small frame, and that frame is
+    // what gets scaled up. Rotating the already-upscaled image (the old way) put
+    // every edge at a sub-pixel diagonal and read as blur; this keeps each turned
+    // pixel a whole block on the grid. Cached per sprite and 16-step angle.
+    // The frame is 1.5x the sprite so a turned corner never clips.
+    rotated(src, key, angle) {
+        const step = Math.round(angle / (Math.PI / 8));           // 16 steps
+        const k = key + "|rot" + step;
+        let c = this._cache.get(k);
+        if (c) return c;
+        const w = src.width, h = src.height, D = Math.ceil(Math.max(w, h) * 1.5);
+        c = document.createElement("canvas");
+        c.width = D; c.height = D;
+        const g = c.getContext("2d");
+        g.imageSmoothingEnabled = false;
+        g.translate(D / 2, D / 2);
+        g.rotate(step * Math.PI / 8);
+        g.drawImage(src, -w / 2, -h / 2);
+        this._cache.set(k, c);
+        return c;
+    }
+
     // --- blitting -------------------------------------------------------------
     // Draw a sprite CENTRED on (x, y) at `size` pixels across, optionally rotated.
     // `wash` = [colour, alpha] lays a status tint over it. Returns false when the
@@ -102,9 +125,11 @@ export class Pixel {
         ctx.save();
         ctx.imageSmoothingEnabled = false;
         if (angle) {
-            ctx.translate(Math.round(x), Math.round(y));
-            ctx.rotate(angle);
-            ctx.drawImage(im, -s / 2, -s / 2, s, s);
+            // Turned at source resolution, then scaled by the same factor as an
+            // unturned sprite, so its pixels stay the same size as everyone else's.
+            const fr = this.rotated(im, name + (wash ? "|" + wash[0] + wash[1] : ""), angle);
+            const scale = s / im.width, fs = Math.round(fr.width * scale);
+            ctx.drawImage(fr, Math.round(x - fs / 2), Math.round(y - fs / 2), fs, fs);
         } else {
             ctx.drawImage(im, Math.round(x - s / 2), Math.round(y - s / 2), s, s);
         }

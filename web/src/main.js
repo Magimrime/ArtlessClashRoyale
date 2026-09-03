@@ -2236,6 +2236,22 @@ class Main {
             y -= 20 * Math.sin(prog * Math.PI);
         }
 
+        // A dash leaves a TRAIL: fading afterimages of her strung out behind her
+        // along the dash line, so the rush reads even at pixel scale.
+        if (e instanceof Troop && e.isDashing && e.sjT > 0 && !card) {
+            const dx = e.sjx1 - e.sjx0, dy = e.sjy1 - e.sjy0, len = Math.hypot(dx, dy) || 1;
+            const ux = dx / len, uy = dy / len;
+            const travelled = Math.hypot(e.x - e.sjx0, e.y - e.sjy0);
+            const a0 = ctx.globalAlpha;
+            for (let i = 1; i <= 4; i++) {
+                const back = i * 9;
+                if (back > travelled) break;
+                ctx.globalAlpha = a0 * (0.5 - i * 0.1);
+                this.px.draw(ctx, this.px.troop(e.c.n), x - ux * back, y - uy * back, 32);
+            }
+            ctx.globalAlpha = a0;
+        }
+
         // (Sparky / Zappies charge ring is drawn once in drawCharge — no duplicate
         // aura here.)
         let name = e.c ? e.c.n : "";
@@ -2307,12 +2323,12 @@ class Main {
                 } else if (!e.kg) {
                     this.px.draw(ctx, `towers/${kind}-${team}-turret`, x, y, S, tq); // princess cannon, aims
                 } else {
-                    // King: the spell vent, plus the aiming shooter that rises out of the
-                    // front on activation (its size is the "opening" animation).
+                    // King: the spell vent in the middle of the roof, and the aiming shooter
+                    // that rises out of it on activation (its size is the "opening" animation).
                     this.px.draw(ctx, `towers/king-${team}-vent`, x, y, S);
                     let p = !e.actv ? 0 : (e.activateAnim > 0 ? 1 - e.activateAnim / 45 : 1);
                     let sp = Math.max(0, (p - 0.2) / 0.8);
-                    if (sp > 0) this.px.draw(ctx, `towers/king-${team}-turret`, x, y + fs * r * 0.52, Math.round(S * 0.7 * sp), tq);
+                    if (sp > 0) this.px.draw(ctx, `towers/king-${team}-turret`, x, y, Math.round(S * 0.7 * sp), tq);
                 }
             } else {
                 // Until the art loads: a plain team-coloured block.

@@ -716,6 +716,11 @@ export default class GameEngine {
             }
         }
 
+        // The Skeleton Barrel is only ever dropped on your OWN half — it flies the
+        // rest of the way itself — so, unlike other troops, it gets no pocket
+        // placement on the enemy side when one of their towers is down.
+        if (c.n === "Skeleton Barrel") return tm === 0 ? y >= this.RIV_Y + 15 : y <= this.RIV_Y - 15;
+
         if (tm === 0) {
             // Buildings can't go in/near the river; troops can be placed right up
             // to the bridge bank (river tile is RIV_Y ± 15).
