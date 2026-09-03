@@ -47,13 +47,6 @@ export class Pixel {
         return s;
     }
 
-    // Rotation is quantised to 16 steps: a 16px sprite turned to an arbitrary
-    // angle shimmers every frame; 22.5-degree steps stay readable pixel art.
-    static snap(angle, steps = 16) {
-        const q = Math.PI * 2 / steps;
-        return Math.round(angle / q) * q;
-    }
-
     // --- recolouring (all cached; these run per frame) ------------------------
     _recolour(name, key, paint) {
         const k = name + "|" + key;
@@ -97,26 +90,25 @@ export class Pixel {
         });
     }
 
-    // A sprite turned by `angle`, rotated at its OWN resolution: the 16px art is
-    // spun with nearest-neighbour sampling into a small frame, and that frame is
-    // what gets scaled up. Rotating the already-upscaled image (the old way) put
-    // every edge at a sub-pixel diagonal and read as blur; this keeps each turned
-    // pixel a whole block on the grid. Cached per sprite and 16-step angle.
+    // A sprite turned by `angle` - ANY angle - rotated at its OWN resolution: the
+    // 16px art is spun with nearest-neighbour sampling into a small scratch
+    // frame, and that frame is what gets scaled up. Rotating the already-upscaled
+    // image put every edge on a sub-pixel diagonal and read as blur; this keeps
+    // each turned pixel a whole block. It is redrawn every call (a 24px draw is
+    // nothing), so turrets turn freely instead of stepping between fixed headings.
     // The frame is 1.5x the sprite so a turned corner never clips.
     rotated(src, key, angle) {
-        const step = Math.round(angle / (Math.PI / 8));           // 16 steps
-        const k = key + "|rot" + step;
-        let c = this._cache.get(k);
-        if (c) return c;
         const w = src.width, h = src.height, D = Math.ceil(Math.max(w, h) * 1.5);
-        c = document.createElement("canvas");
-        c.width = D; c.height = D;
+        const k = "scratch|" + D;
+        let c = this._cache.get(k);
+        if (!c) { c = document.createElement("canvas"); c.width = D; c.height = D; this._cache.set(k, c); }
         const g = c.getContext("2d");
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.clearRect(0, 0, D, D);
         g.imageSmoothingEnabled = false;
         g.translate(D / 2, D / 2);
-        g.rotate(step * Math.PI / 8);
+        g.rotate(angle);
         g.drawImage(src, -w / 2, -h / 2);
-        this._cache.set(k, c);
         return c;
     }
 

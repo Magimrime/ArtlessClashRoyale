@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.6.3** — here's the whole road there.
+We're currently on **26.6.4** — here's the whole road there.
 
 ---
 
@@ -141,6 +141,12 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
   they stay crisp), positions snap to that finer grid, and the final fit-to-window scale is smooth. Movement was
   never bound to a grid — the textures just were. Also: the **name over a troop is small again** (the font at 1×;
   same glyphs, same pixels, just not doubled).
+- **26.6.4** — **Turrets turn freely.** Tower tops, the Cannon, the axe, the dynamite and the tumbling barrel rotate to
+  any angle (still spun at their own 16-pixel resolution, so they stay crisp) instead of stepping between sixteen
+  headings. **Placement ghosts are the unit's own sprite** — see-through, white, red when the spot is invalid — laid
+  out exactly as the card deploys, instead of plain discs. **The Zap is animated again**: the hand-drawn bolt drops in
+  from the top, flickers and twitches like live current, forks into two side bolts on High graphics with a glow at the
+  strike point, then the impact flash and ring play as before.
 
 ---
 

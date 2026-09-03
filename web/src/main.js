@@ -1406,8 +1406,19 @@ class Main {
                         ctx.arc(gx, gy, range, 0, Math.PI * 2); ctx.stroke();
                         ctx.setLineDash([]); ctx.lineWidth = 1;
                     }
+                    // The ghost is the unit's OWN sprite, see-through and washed white (red
+                    // when the spot is invalid), laid out exactly as it will deploy.
+                    const spawnOf = { "Skeleton Army": "Skeletons", "Minion Horde": "Minions", "Three Musketeers": "Elite Musketeer" }[c.n];
+                    const ghostSprite = isBuilding
+                        ? "buildings/" + (c.n === "Tesla" ? "tesla-up" : BUILDING_SPRITE[c.n])
+                        : (c.n === "Balloon" ? "troops/balloon" : this.px.troop(spawnOf || c.n));
                     for (const gp of this.ghostLayout(c)) {
                         let px = gx + gp.dx, py = gy + gp.dy;
+                        ctx.globalAlpha = 0.75;
+                        if (this.px.draw(ctx, ghostSprite, px, py, 32, 0, [col, valid ? 0.35 : 0.55])) {
+                            ctx.globalAlpha = 1.0;
+                            continue;
+                        }
                         ctx.globalAlpha = 0.7;
                         ctx.fillStyle = col;
                         if (isBuilding) {
@@ -1526,7 +1537,7 @@ class Main {
                     // crescent-bladed head on one end, turning as it flies.
                     ctx.save();
                     ctx.translate(p.x, p.y);
-                    ctx.rotate(Pixel.snap(p.axeSpin || 0));
+                    ctx.rotate(p.axeSpin || 0);
                     if (this.px.draw(ctx, "projectiles/axe", 0, 0, 48)) { ctx.restore(); ctx.lineWidth = 1; return; }
                     // haft (runs left→right, head on the right)
                     ctx.fillStyle = "#7a5228";
@@ -1566,7 +1577,7 @@ class Main {
                     // the axe head itself, riding the leading edge
                     const bx = p.x + Math.cos(ang) * R * 0.92, by = p.y + Math.sin(ang) * R * 0.92;
                     ctx.globalAlpha = 0.95;
-                    if (!this.px.draw(ctx, "projectiles/axe", bx, by, 24, Pixel.snap(ang))) {
+                    if (!this.px.draw(ctx, "projectiles/axe", bx, by, 24, ang)) {
                         ctx.save();
                         ctx.translate(bx, by);
                         ctx.rotate(ang + Math.PI / 2);
@@ -2329,7 +2340,7 @@ class Main {
             while (da > Math.PI) da -= 2 * Math.PI;
             while (da < -Math.PI) da += 2 * Math.PI;
             e.dispAngle += da * 0.16;
-            const tq = Pixel.snap(e.dispAngle);   // 16-step rotation keeps the turret crisp
+            const tq = e.dispAngle;               // turns freely; rotated at source resolution
             const fs = isFriend ? -1 : 1;          // front = toward the enemy half
             if (this.px.draw(ctx, `towers/${kind}-${team}-base`, x, y, S)) {
                 // The turret and vent layers share the base's 16x16 frame, so they are
@@ -2385,7 +2396,7 @@ class Main {
             } else if (bn === "Cannon") {
                 // The sprite's barrel points up; the base is round, so the whole thing
                 // turns to aim without the rotation showing on the base.
-                drawn = this.px.draw(ctx, "buildings/cannon", x, y, S, Pixel.snap(e.dispAngle + Math.PI / 2), wash);
+                drawn = this.px.draw(ctx, "buildings/cannon", x, y, S, e.dispAngle + Math.PI / 2, wash);
             } else if (sprite) {
                 drawn = this.px.draw(ctx, "buildings/" + sprite, x, y, S, 0, wash);
                 if (drawn && bn === "Inferno Tower" && e.atk) {
@@ -3303,7 +3314,7 @@ class Main {
             ctx.beginPath(); ctx.ellipse(p.x, p.y + 3, 9 * sh, 2.6 * sh, 0, 0, Math.PI * 2); ctx.fill();
             ctx.save();
             ctx.translate(p.x, p.y - arc);
-            ctx.rotate(Pixel.snap(prog * 5 + 0.5));
+            ctx.rotate(prog * 5 + 0.5);
             if (this.px.draw(ctx, "projectiles/dynamite", 0, 0, 16)) { ctx.restore(); return; }
             ctx.fillStyle = "#cc2b2b"; ctx.fillRect(-2.5, -6, 5, 12);       // red stick
             ctx.strokeStyle = "#7a1414"; ctx.lineWidth = 1; ctx.strokeRect(-2.5, -6, 5, 12);
@@ -3442,7 +3453,7 @@ class Main {
         const arcSprite = { arrows: ["projectiles/arrows", 32], barrel: ["projectiles/goblin-barrel", 32],
                             snowball: ["projectiles/giant-snowball", 48], rocket: ["projectiles/rocket", 32] }[k] || ["projectiles/fireball", 32];
         // The goblin barrel tumbles end over end; everything else flies level.
-        const spin = k === "barrel" ? Pixel.snap(Date.now() / 60 * (p.tm === 0 ? -1 : 1)) : 0;
+        const spin = k === "barrel" ? Date.now() / 60 * (p.tm === 0 ? -1 : 1) : 0;
         if (!this.px.draw(ctx, arcSprite[0], 0, 0, arcSprite[1], spin)) {
             ctx.fillStyle = "#e8521a"; ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
         }
@@ -3617,11 +3628,41 @@ class Main {
         // an expanding electric ring with radial crackle.
         const col = p.flashCol || "#7fdcff";
         if (p.life > 5) {
-            // The strike IS the hand-drawn zap: the bolt lands with its burst on the
-            // target point. 9x is the 140px bolt height the vector version used.
+            // The strike IS the hand-drawn zap, ANIMATED: the bolt drops in from the
+            // top over the first frames, then flickers and twitches like live current
+            // until it lands; on High it forks into two thinner side bolts and glows
+            // at the strike point. 9x is the 140px bolt height the vector one used.
             const S = 144;
             const evo = !!(p.isEvoZap || p.evo || (p.flashCol && p.flashCol !== "#7fdcff" && p.flashCol !== "#cfeeff"));
-            if (!this.px.draw(ctx, evo ? "effects/zap-strike-evo" : "effects/zap-strike", p.x, p.y - S / 2 + 9, S)) {
+            const im = this.px.img[evo ? "effects/zap-strike-evo" : "effects/zap-strike"];
+            if (im) {
+                const t = (p.dropMax || 20) - p.life;                     // ticks since it began
+                const k = Math.min(1, (t + 1) / 3);                       // descends over 3 ticks
+                const phase = Math.floor(Date.now() / 55);
+                const jx = ((phase % 3) - 1) * 2;                         // twitch
+                const flick = (Math.floor(Date.now() / 45) % 4 === 0) ? 0.6 : 1;
+                const top = p.y - S + 9, left = p.x - S / 2;
+                ctx.save();
+                ctx.imageSmoothingEnabled = false;
+                const bolt = (ox, scale, alpha) => {
+                    const w = S * scale, h = S * k * scale;
+                    ctx.globalAlpha = alpha * flick;
+                    ctx.drawImage(im, 0, 0, im.width, im.height * k,
+                        this.px.q(left + ox + (S - w) / 2), this.px.q(top + (S - S * scale)), w, h);
+                };
+                if (this.gfxHigh && k >= 1) {
+                    bolt(-26 - jx, 0.6, 0.55);
+                    bolt(26 + jx, 0.6, 0.55);
+                }
+                bolt(jx, 1, 1);
+                if (this.gfxHigh && k >= 1) {
+                    ctx.globalAlpha = 0.5;
+                    ctx.fillStyle = evo ? "#f2d9ff" : "#eaffff";
+                    ctx.beginPath(); ctx.arc(p.x, p.y, 10 + Math.sin(Date.now() / 40) * 3, 0, Math.PI * 2); ctx.fill();
+                }
+                ctx.restore();
+                ctx.globalAlpha = 1;
+            } else {
                 ctx.strokeStyle = col; ctx.lineWidth = 4;
                 ctx.beginPath(); ctx.moveTo(p.x, p.y - 140); ctx.lineTo(p.x, p.y); ctx.stroke();
             }
