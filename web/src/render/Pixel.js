@@ -187,31 +187,34 @@ export class Pixel {
     }
 
     // --- text ---------------------------------------------------------------
-    // `size` is the intended cap height in pixels; glyphs are 7 rows tall above
-    // the baseline, so the scale is size/7 rounded to a whole number to stay crisp.
-    scaleFor(size) { return Math.max(1, Math.round(size / 7)); }
+    // ONE text size everywhere: every label, name, number and button is the font
+    // at 2x (a 14px cap). The only thing bigger is a display title — the game's
+    // name, the countdown, "You Win!" — which asks for 40px or more and gets 4x.
+    scaleFor(size) { return size >= 40 ? 4 : 2; }
     capHeight(size) { return this.scaleFor(size) * 7; }
     lineHeight(size) { return this.scaleFor(size) * (this.metrics ? this.metrics.art.h : 8); }
 
-    measure(str, size) {
+    // `tight` drops the letter spacing — for a word that would otherwise not fit
+    // its card, instead of shrinking the font.
+    measure(str, size, tight = false) {
         if (!this.metrics) return 0;
-        const s = this.scaleFor(size), m = this.metrics;
+        const s = this.scaleFor(size), m = this.metrics, gap = tight ? 0 : m.gap;
         let w = 0;
-        for (const ch of String(str)) w += ((m.width[ch] ?? m.width[" "]) + m.gap) * s;
-        return w - m.gap * s;              // no trailing gap
+        for (const ch of String(str)) w += ((m.width[ch] ?? m.width[" "]) + gap) * s;
+        return w - gap * s;                // no trailing gap
     }
 
     // align: "left" | "center" | "right". `y` is the BASELINE (like fillText), so
     // existing call sites can hand over their coordinates unchanged.
-    text(ctx, str, x, y, size, colour = "#ffffff", align = "left") {
+    text(ctx, str, x, y, size, colour = "#ffffff", align = "left", tight = false) {
         if (!this.ready || !this.metrics) return false;
         const sheet = this.tinted("font/sheet", colour);
         if (!sheet) return false;
-        const m = this.metrics, s = this.scaleFor(size);
+        const m = this.metrics, s = this.scaleFor(size), gap = tight ? 0 : m.gap;
         str = String(str);
         let cx = Math.round(x);
-        if (align === "center") cx -= Math.round(this.measure(str, size) / 2);
-        else if (align === "right") cx -= Math.round(this.measure(str, size));
+        if (align === "center") cx -= Math.round(this.measure(str, size, tight) / 2);
+        else if (align === "right") cx -= Math.round(this.measure(str, size, tight));
         const ty = Math.round(y) - 7 * s;   // baseline -> top of the 7-row cap box
         ctx.save();
         ctx.imageSmoothingEnabled = false;
@@ -223,7 +226,7 @@ export class Pixel {
                     (i % m.cols) * m.cell.w, Math.floor(i / m.cols) * m.cell.h, m.art.w, m.art.h,
                     cx, ty, m.art.w * s, m.art.h * s);
             }
-            cx += ((m.width[ch] ?? m.width[" "]) + m.gap) * s;
+            cx += ((m.width[ch] ?? m.width[" "]) + gap) * s;
         }
         ctx.restore();
         return true;

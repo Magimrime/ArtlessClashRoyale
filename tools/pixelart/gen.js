@@ -174,7 +174,7 @@ save(balloon('#e05555'), 'troops', 'balloon-red');
 }
 
 // ============================ TOWERS =========================================
-// Rounded block + a turret layer that can be rotated to aim.
+// A rounded block, and a separate TOP that turns on it.
 function towerBase(col, s) {
   const sp = new Sprite();
   const edge = shade(col, -0.30), band = shade(col, -0.12);
@@ -183,25 +183,43 @@ function towerBase(col, s) {
   sp.rrect(8-s+2, 8-s+2, s*2-4, s*2-4, Math.max(1, s*0.3), col);
   return sp;
 }
-function towerTurret(tr) {
+// The TOP of a tower is its own sprite, so it turns on a base that stays put:
+// a wide platform with the cannon running out to the frame edge (pointing
+// right, pivot dead-centre). `r` is the platform radius in the 16px frame.
+// The palette is shared with the base so the assembled tower stays at 6.
+function towerTop(col, r) {
   const sp = new Sprite();
-  sp.rect(8, 7, Math.round(tr*1.5), 2, '#2b2f36');   // barrel, pointing right
-  sp.disc(8, 8, tr, '#2b2f36');
-  sp.disc(8, 8, Math.max(1, tr-1), '#4a4e55');
-  sp.disc(8, 8, Math.max(0.8, tr*0.42), '#26282c');
+  sp.rect(8, 6, 8, 4, '#2b2f36');                      // barrel, out to the edge
+  sp.rect(13, 5, 3, 6, '#1c1e22');                     // muzzle
+  sp.disc(8, 8, r, shade(col, -0.30));                 // platform rim
+  sp.disc(8, 8, r - 1, shade(col, 0.15));              // platform, lit
+  sp.disc(8, 8, Math.max(1.2, r * 0.4), '#2b2f36');    // hatch
   return sp;
 }
-for (const [side, col] of [['blue','#4aa3ff'], ['red','#ff5a5a']]) {
-  for (const [kind, s, tr] of [['princess', 6, 2.6], ['king', 7, 3.2]]) {
-    const base = towerBase(col, s);
-    save(base, 'towers', `${kind}-${side}-base`);
-    save(towerTurret(tr), 'towers', `${kind}-${side}-turret`);
-    // the assembled tower, for when you just want one image
-    const full = towerBase(col, s);
-    const t = towerTurret(tr);
-    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { const c2 = t.at(x, y); if (c2) full.plot(x, y, '#' + c2.map(v=>v.toString(16).padStart(2,'0')).join('')); }
+// The king's spell vent: sits in the middle of the roof and never turns.
+function towerVent(col) {
+  const sp = new Sprite();
+  sp.disc(8, 8, 4, shade(col, -0.30));
+  sp.disc(8, 8, 3, '#2b2f36');
+  sp.disc(8, 8, 1.6, '#1c1e22');
+  return sp;
+}
+const paint = (dst, src) => {
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const c2 = src.at(x, y);
+    if (c2) dst.plot(x, y, '#' + c2.map(v => v.toString(16).padStart(2, '0')).join(''));
+  }
+};
+for (const [side, col] of [['blue', '#4aa3ff'], ['red', '#ff5a5a']]) {
+  // Princess: block s=6 under a big turning top. King: block s=7, the static
+  // vent in the middle, and a smaller shooter top that rises at the front.
+  for (const [kind, s, r] of [['princess', 6, 4.6], ['king', 7, 3.4]]) {
+    save(towerBase(col, s), 'towers', `${kind}-${side}-base`);
+    save(towerTop(col, r), 'towers', `${kind}-${side}-turret`);
+    if (kind === 'king') save(towerVent(col), 'towers', `${kind}-${side}-vent`);
+    const full = towerBase(col, s);                    // the assembled tower
+    paint(full, kind === 'king' ? towerVent(col) : towerTop(col, r));
     save(full, 'towers', `${kind}-${side}`);
-    if (kind === 'king') save(towerTurret(2.2), 'towers', `${kind}-${side}-vent`);
   }
 }
 

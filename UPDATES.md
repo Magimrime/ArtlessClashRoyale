@@ -104,13 +104,13 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
 - **26.6.0** — **Everything is pixel art.** Every unit on the field is a 16x16 sprite drawn at a whole-pixel
   scale (troops and buildings at 2x, princess towers at 5x, kings at 6x) so nothing ever smears; the canvas
   itself now upscales with hard edges. Troops keep their status tints (freeze, slow, clone, ghost, fake, the
-  Skeleton Army general) as a colour wash over the sprite with the art's shading intact. Towers are layered —
-  base, vent, turret — and the turret aims in 16 crisp steps. Buildings: the Cannon turns to aim, the Tesla
+  Skeleton Army general) as a colour wash over the sprite with the art's shading intact. The top of every tower is its own
+  sprite that turns on a fixed base, aiming in 16 crisp steps. Buildings: the Cannon turns to aim, the Tesla
   cross-fades between raised and covered, the Inferno Tower's core flares while it burns. Every projectile,
   explosion, ring and placed spell zone is a sprite; **placed spells wear their textures** (poison bubbles,
   graveyard headstones, the clone swirl, rage sparks, the ice flake). **The Zap is the hand-drawn zap art.**
-  All text is a **hand-drawn 5x8 bitmap font** — 95 glyphs, proportionally spaced — the title, buttons, HUD,
-  card names, unit names, the timer. The **elixir bar** is built from crisp pieces with a proper cost badge on
+  All text is a **hand-drawn 5x8 bitmap font** — 95 glyphs, proportionally spaced — at **one size everywhere**
+  (only display titles are bigger): buttons, HUD, card names, unit names, the timer. The **elixir bar** is built from crisp pieces with a proper cost badge on
   every card; **cards wear 9-slice frames** coloured by elixir cost (green, blue, purple, pink), purple for a
   charged evolution, grey when you can't afford them, with the unit drawn big and sharp on the face and the
   formation cards laid out as they deploy. The river and bridges are tiled. Hand-edited sprites in

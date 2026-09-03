@@ -238,7 +238,7 @@ class Main {
         // Portrait card rectangles with generous spacing; the "next" preview is a
         // smaller card in the 5th slot. Cards sit low enough that a SELECTED card
         // poking up a little never reaches the play area's bottom row (810).
-        let cardW = 110, cardH = 122, prevW = 72, prevH = 100;
+        let cardW = 104, cardH = 122, prevW = 92, prevH = 100;   // next-card slot wide enough for a name row
         let gap = (W - 4 * cardW - prevW) / 6; // ≈ 4px — cards sit tight together
         let cardPanelY = H - 126;
         for (let i = 0; i < 4; i++) {
@@ -1961,8 +1961,8 @@ class Main {
                             this.drawCardFace(r.x, paintY, r.w, r.h, mc, canAfford ? "#f2e7fa" : "#b9bdb7", false);
                             this.drawElixirCost(r.x + 13, paintY + 13, c.c);
                             ctx.fillStyle = "#8a6bbf";
-                            this.drawRoundRect(r.x + r.w / 2 - 25, paintY + r.h - 16, 50, 13, 6, true, false);
-                            this.drawCenteredString("MIRROR", r.x + r.w / 2, paintY + r.h - 6, "800 8px 'Baloo 2', 'Segoe UI', sans-serif", "#ffffff");
+                            this.drawRoundRect(r.x + r.w / 2 - 40, paintY + r.h - 21, 80, 16, 6, true, false);
+                            this.drawCenteredString("MIRROR", r.x + r.w / 2, paintY + r.h - 7, "800 8px 'Baloo 2', 'Segoe UI', sans-serif", "#ffffff");
                         } else {
                             this.drawCardFace(r.x, paintY, r.w, r.h, c, canAfford ? "#ffffff" : "#b9bdb7", evoReady);
                         }
@@ -1995,12 +1995,14 @@ class Main {
                         this.drawRoundRect(nr.x, nr.y, nr.w, nr.h, 5, true, false);
                     }
                     this.drawCenteredString("Next", nr.x + nr.w / 2, nr.y + 14, "600 9px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.85)");
-                    // Stack the name word-by-word in a small font so it fits the card.
+                    // Stack the name word by word, one row each, in the one text size.
                     let words = nextC.n.split(' ');
-                    let fy = nr.y + nr.h / 2 - (words.length - 1) * 4.5 + 6;
+                    let fy = nr.y + nr.h / 2 - (words.length - 1) * 8 + 10;
                     for (let wd of words) {
-                        this.drawCenteredString(wd, nr.x + nr.w / 2, fy, "700 8px 'Baloo 2', 'Segoe UI', sans-serif", "white");
-                        fy += 9;
+                        const tight = this.px.ready && this.px.measure(wd, 12) > nr.w - 6;
+                        if (!this.px.text(ctx, wd, nr.x + nr.w / 2, fy, 12, "#ffffff", "center", tight))
+                            this.drawCenteredString(wd, nr.x + nr.w / 2, fy, "700 8px 'Baloo 2', 'Segoe UI', sans-serif", "white");
+                        fy += 16;
                     }
                 }
 
@@ -2836,22 +2838,22 @@ class Main {
     }
 
     // The card NAME across the top of a card, wrapped onto two lines when it's long.
+    // The name sits on its own row under the badge, centred across the whole card,
+    // in the same size as every other piece of text. Two words wrap to two rows; a
+    // word that still would not fit is set without letter spacing, never smaller.
+    // Returns the number of rows so the face can start below them.
     drawCardName(name, cx, cy, w) {
-        // The cost badge owns the top-left corner, so the name is centred in the
-        // space to its right. A one-word name gets the 2x font when it fits there;
-        // anything longer wraps onto two lines at 1x, which is crisp and never
-        // runs into the badge.
-        const mx = cx + w / 2 + 9;
-        let words = name.split(' ');
-        if (words.length <= 1) {
-            const big = this.px.ready && this.px.measure(name, 12) <= w - 34;
-            this.drawCenteredString(name, mx, cy + 15, big ? "12px" : "9px", "#252525");
-        } else {
-            let mid = Math.ceil(words.length / 2);
-            let l1 = words.slice(0, mid).join(' '), l2 = words.slice(mid).join(' ');
-            this.drawCenteredString(l1, mx, cy + 12, "9px", "#252525");
-            this.drawCenteredString(l2, mx, cy + 23, "9px", "#252525");
+        const words = name.split(' ');
+        const mid = Math.ceil(words.length / 2);
+        const lines = words.length <= 1 ? [name] : [words.slice(0, mid).join(' '), words.slice(mid).join(' ')];
+        let y = cy + 40;
+        for (const line of lines) {
+            const tight = this.px.ready && this.px.measure(line, 12) > w - 8;
+            if (!this.px.text(ctx, line, cx + w / 2, y, 12, "#252525", "center", tight))
+                this.drawCenteredString(line, cx + w / 2, y, "700 11px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
+            y += 16;
         }
+        return lines.length;
     }
 
     // A spell card's actual cast EFFECT, contained in the box, so it reads like what you
@@ -3086,8 +3088,8 @@ class Main {
             ctx.fillStyle = bg;
             this.drawRoundRect(cx, cy, w, h, Math.min(10, w * 0.09), true, false);
         }
-        this.drawCardName(c.n, cx, cy, w);
-        let top = cy + 28, bot = cy + h - 9;
+        const nameRows = this.drawCardName(c.n, cx, cy, w);
+        let top = cy + 28 + nameRows * 16, bot = cy + h - 9;
         // Cards are STATIC: freeze Date.now() so the reused in-game renderers (zap flicker,
         // barrel tumble, log bands, …) draw a fixed frame instead of animating in the deck.
         const _now = Date.now;
