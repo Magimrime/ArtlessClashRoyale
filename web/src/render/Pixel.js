@@ -12,7 +12,13 @@ export class Pixel {
         this.ready = false;
         this._cache = new Map();  // recoloured copies, keyed by sprite|mode|colour
         this._slug = new Map();   // card name -> sprite name
+        this.unit = 1;            // position snap, in logical px: 1/R of the backing store
     }
+
+    // Snap a logical coordinate to the backing store's pixel grid, so a sprite
+    // lands on whole device pixels (no half-pixel edge) but can move in steps as
+    // fine as that grid allows.
+    q(v) { return Math.round(v / this.unit) * this.unit; }
 
     // Loads the manifest, then every sprite in it. Resolves even if some images
     // fail, so a missing file degrades to "no sprite" instead of a black screen.
@@ -129,9 +135,9 @@ export class Pixel {
             // unturned sprite, so its pixels stay the same size as everyone else's.
             const fr = this.rotated(im, name + (wash ? "|" + wash[0] + wash[1] : ""), angle);
             const scale = s / im.width, fs = Math.round(fr.width * scale);
-            ctx.drawImage(fr, Math.round(x - fs / 2), Math.round(y - fs / 2), fs, fs);
+            ctx.drawImage(fr, this.q(x - fs / 2), this.q(y - fs / 2), fs, fs);
         } else {
-            ctx.drawImage(im, Math.round(x - s / 2), Math.round(y - s / 2), s, s);
+            ctx.drawImage(im, this.q(x - s / 2), this.q(y - s / 2), s, s);
         }
         ctx.restore();
         return true;
@@ -143,7 +149,7 @@ export class Pixel {
         if (!im) return false;
         ctx.save();
         ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(im, Math.round(x), Math.round(y), Math.round(w ?? im.width), Math.round(h ?? im.height));
+        ctx.drawImage(im, this.q(x), this.q(y), Math.round(w ?? im.width), Math.round(h ?? im.height));
         ctx.restore();
         return true;
     }
@@ -156,7 +162,7 @@ export class Pixel {
         if (!im) return false;
         const sw = im.width, sh = im.height, c = Math.min(corner, Math.floor(sw / 2), Math.floor(sh / 2));
         const mw = sw - 2 * c, mh = sh - 2 * c;
-        x = Math.round(x); y = Math.round(y); w = Math.round(w); h = Math.round(h);
+        x = this.q(x); y = this.q(y); w = Math.round(w); h = Math.round(h);
         const tw = Math.max(0, w - 2 * c), th = Math.max(0, h - 2 * c);
         ctx.save();
         ctx.imageSmoothingEnabled = false;
@@ -213,9 +219,11 @@ export class Pixel {
 
     // --- text ---------------------------------------------------------------
     // ONE text size everywhere: every label, name, number and button is the font
-    // at 2x (a 14px cap). The only thing bigger is a display title — the game's
-    // name, the countdown, "You Win!" — which asks for 40px or more and gets 4x.
-    scaleFor(size) { return size >= 40 ? 4 : 2; }
+    // at 2x (a 14px cap). Two exceptions: a display title — the game's name, the
+    // countdown, "You Win!" — asks for 40px or more and gets 4x; and the small
+    // name over a troop asks for 7px and gets the font at 1x — the same glyphs,
+    // the same pixels, just not doubled.
+    scaleFor(size) { return size <= 7 ? 1 : size >= 40 ? 4 : 2; }
     capHeight(size) { return this.scaleFor(size) * 7; }
     lineHeight(size) { return this.scaleFor(size) * (this.metrics ? this.metrics.art.h : 8); }
 
@@ -237,10 +245,10 @@ export class Pixel {
         if (!sheet) return false;
         const m = this.metrics, s = this.scaleFor(size), gap = tight ? 0 : m.gap;
         str = String(str);
-        let cx = Math.round(x);
+        let cx = this.q(x);
         if (align === "center") cx -= Math.round(this.measure(str, size, tight) / 2);
         else if (align === "right") cx -= Math.round(this.measure(str, size, tight));
-        const ty = Math.round(y) - 7 * s;   // baseline -> top of the 7-row cap box
+        const ty = this.q(y) - 7 * s;       // baseline -> top of the 7-row cap box
         ctx.save();
         ctx.imageSmoothingEnabled = false;
         for (const ch of str) {

@@ -246,8 +246,16 @@ class Main {
         }
         this.nextCardRect = { x: gap + 4 * (cardW + gap), y: cardPanelY + (cardH - prevH) / 2, w: prevW, h: prevH };
 
-        canvas.width = W;
-        canvas.height = H;
+        // The backing store is BIGGER than the 540x960 logical scene (2-3x, picked in
+        // resize). Sprites are still drawn at whole multiples of their 16px art, so
+        // they stay crisp, but positions can land on the finer grid, and the final
+        // fit-to-window scale is a smooth bilinear one instead of a pixelated one -
+        // which used to drop or double a column at any non-integer window size and
+        // shimmer as things moved. Movement was never bound to a grid; the sprites
+        // just snapped to a coarse one.
+        this.R = 2;
+        canvas.width = W * this.R;
+        canvas.height = H * this.R;
 
         this.resize();
         window.addEventListener('resize', () => this.resize());
@@ -435,6 +443,11 @@ class Main {
         this.scale = Math.min(sw, sh);
         canvas.style.width = `${W * this.scale}px`;
         canvas.style.height = `${H * this.scale}px`;
+        // Backing resolution: enough device pixels that the final scale is a
+        // downscale or close to 1:1, capped at 3x so phones are not asked to fill
+        // a 4K canvas. Only rebuilt when it changes (resizing wipes the bitmap).
+        const want = Math.max(2, Math.min(3, Math.ceil((window.devicePixelRatio || 1) * this.scale)));
+        if (want !== this.R) { this.R = want; canvas.width = W * this.R; canvas.height = H * this.R; }
     }
 
     contains(rect, x, y) {
@@ -966,6 +979,10 @@ class Main {
     }
 
     render() {
+        // Everything below draws in the 540x960 logical space; the transform maps it
+        // onto the larger backing store. Sprites snap to backing pixels (1/R logical).
+        ctx.setTransform(this.R, 0, 0, this.R, 0, 0);
+        this.px.unit = 1 / this.R;
         this.arenaGrass();
 
         if (this.state === State.RESUME_PROMPT) {
@@ -2509,7 +2526,7 @@ class Main {
         // outline (see drawEntityBody) and the health-bar colour, not the name.
         if (name && name.length > 0 && !card) {
             let fontSize = Math.max(9, Math.min(13, 8 + radius * 0.4));
-            if (this.px.textShadow(ctx, name, x, e._barY - (e.shield > 0 ? 9 : 4), 9, "rgba(255,255,255,0.9)", "center")) return;
+            if (this.px.textShadow(ctx, name, x, e._barY - (e.shield > 0 ? 9 : 4), 7, "rgba(255,255,255,0.9)", "center")) return;
             ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
             ctx.font = `${fontSize}px 'Baloo 2', 'Segoe UI', sans-serif`;
             ctx.textAlign = "center";

@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.6.2** — here's the whole road there.
+We're currently on **26.6.3** — here's the whole road there.
 
 ---
 
@@ -134,6 +134,13 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
   The **Bandit leaves a trail** of fading afterimages while she dashes. The **king's shooter rises out of the middle** of
   the roof (through the vent) instead of the front. The **Skeleton Barrel is only ever dropped on your own half** — no
   pocket placement on the enemy side once a tower is down.
+- **26.6.3** — **Smooth movement back.** The scene was drawn into a fixed 540×960 canvas that the browser then
+  stretched to the window with hard-edged scaling — at any non-integer window size that drops or doubles a column,
+  and the dropped column shifts as a unit moves, which read as jitter; sprites also snapped to whole canvas pixels.
+  The game now renders into a **2–3× backing store** (sprites still at whole multiples of their 16-pixel art, so
+  they stay crisp), positions snap to that finer grid, and the final fit-to-window scale is smooth. Movement was
+  never bound to a grid — the textures just were. Also: the **name over a troop is small again** (the font at 1×;
+  same glyphs, same pixels, just not doubled).
 
 ---
 
