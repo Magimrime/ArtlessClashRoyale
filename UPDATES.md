@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.6.0** — here's the whole road there.
+We're currently on **26.6.1** — here's the whole road there.
 
 ---
 
@@ -119,6 +119,15 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
   that could never run were removed (the faux-3D toggle and its helpers, seven unused projectile factories, the
   old pre-spell goblin-barrel path, seven unused AI helpers, two placeholder engine methods, an orphaned
   multiplayer module and stylesheet, cards that don't exist, and a dozen fields that were written but never read).
+- **26.6.1** — **Three new cards**, all on real Level-11 stats:
+  - **Hunter** (4 elixir, 885 hp, 84 damage × 10 pellets, 2.2s, 4 tiles, hits air) — a **shotgun**: ten pellets fan out in a
+    cone and each one stops at the first thing it hits, so point-blank all ten land (840) and at range they scatter.
+  - **Electro Wizard** (4 elixir, 714 hp, 115 damage, 1.8s, 5 tiles, hits air) — lightning from **both hands**: his target
+    and the nearest other enemy each take a hit and a **0.5s stun**, and he **lands with a spawn zap** (192 damage, 0.5s stun,
+    3 tiles).
+  - **Bandit** (3 elixir, 906 hp, 194 damage, 1.0s, melee) — a ground target 3.5–6 tiles away triggers her **dash**: she
+    closes the gap in 0.8s, **can't be hit on the way**, and lands a **389 double-damage** hit.
+  Also fixed: the Valkyrie's and Executioner's sprites had been drawn at the default size — they now carry their real bulk.
 
 ---
 

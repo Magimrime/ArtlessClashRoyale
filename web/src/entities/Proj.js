@@ -110,6 +110,13 @@ export default class Proj {
     asDelivery() { this.isDelivery = true; this.life = 95; this.deliveryMax = 95; return this; }
     asPoison() { this.poison = true; this.life = 480; return this; }       // ~8s, real Poison
     asGraveyard() { this.graveyard = true; this.life = 570; return this; }  // ~9.5s, real Graveyard
+    // Hunter: one shotgun pellet. Flies on `ang` like a spark, but a pellet stops at
+    // the first thing it hits instead of penetrating.
+    asPellet(ang, range) {
+        this.spark = true; this.pellet = true; this.sparkAng = ang; this.sparkHit = [];
+        this.life = Math.ceil(range / this.spd);
+        return this;
+    }
     asStun(duration = 30) { this.shouldStun = true; this.stunDuration = duration; return this; }
     asCurse() { this.isCurse = true; return this; }
     asRolling() { this.isRolling = true; this.life = 60; return this; }
@@ -243,7 +250,7 @@ export default class Proj {
             if (--this.chainStep <= 0 && this.chainHit.length < this.chainMax && this.chainCurrent && this.chainCurrent.hp > 0) {
                 this.chainStep = 4; // jump to the next target every 4 ticks
                 let c = this.chainCurrent;
-                if (!this.chainHit.includes(c)) { c.hp -= this.chainDmg; c.st = Math.max(c.st, 16); this.chainHit.push(c); } // slightly longer stun
+                if (!this.chainHit.includes(c)) { c.hp -= this.chainDmg; c.st = Math.max(c.st, this.chainStun || 16); this.chainHit.push(c); } // slightly longer stun
                 let next = null, nMin = 85; // shorter chain reach
                 // Only hunt a next link if the cap allows another hit — otherwise the
                 // VISUAL would hop to a unit the chain never actually damages. Ghosts
@@ -306,6 +313,7 @@ export default class Proj {
                 if (Math.hypot(this.x - e.x, this.y - (e.y - (e.fly ? 22 : 0))) < 6 + g.getHitboxRadius(e)) {
                     e.hp -= this.dmg;
                     this.sparkHit.push(e);
+                    if (this.pellet) { this.life = 0; return; }   // a pellet is spent on its first hit
                 }
             }
             return;

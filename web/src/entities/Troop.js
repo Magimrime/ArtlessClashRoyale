@@ -25,6 +25,7 @@ export default class Troop extends Entity {
         else if (c.n === "Skeleton Barrel") mass = 12;
         else if (c.n === "Valkyrie") mass = 14;   // stocky spinner
         else if (c.n === "Executioner") mass = 13;
+        else if (c.n === "Hunter") mass = 12;        // broad-shouldered
         else if (c.n.includes("Dragon") || c.n === "Lava Hound") mass = 16;
         else if (["Giant", "Golem", "Elixir Golem", "Royal Giant", "Electro Giant"].includes(c.n) || c.t === 3) mass = 20;
         else if (c.n === "Elixir Golemite") mass = 10;
@@ -41,6 +42,9 @@ export default class Troop extends Entity {
         // Deploy time: ~1s after placement a troop can't move or attack, like real
         // Clash Royale. (Death-spawns / clones clear this so they act instantly.)
         this.deployTime = 55;
+        this.dashCd = 0;          // Bandit: ticks until she may dash again
+        this.isDashing = false;
+        this.sjT = 0;             // hop/dash timer (set by spirits and the Bandit)
         this.jt = null;
         this.jd = 0;
         this.jp = false;
@@ -184,13 +188,19 @@ export default class Troop extends Entity {
             return;
         }
 
-        // Spirit hop: once started, arc onto the target and explode on landing.
+        if (this.dashCd > 0) this.dashCd--;
+
+        // Spirit hop (or a Bandit dash): once started, travel onto the target, then
+        // explode — or, for the Bandit, land the double-damage hit.
         if (this.sjT > 0) {
             this.sjT--;
             let prog = 1 - this.sjT / this.sjMax;
             this.x = this.sjx0 + (this.sjx1 - this.sjx0) * prog;
             this.y = this.sjy0 + (this.sjy1 - this.sjy0) * prog;
-            if (this.sjT <= 0) this.explodeSpirit(g, this.sjTarget && this.sjTarget.hp > 0 ? this.sjTarget : this.currentTarget);
+            if (this.sjT <= 0) {
+                if (this.isDashing) this.landDash(g);
+                else this.explodeSpirit(g, this.sjTarget && this.sjTarget.hp > 0 ? this.sjTarget : this.currentTarget);
+            }
             return;
         }
 
@@ -492,6 +502,26 @@ export default class Troop extends Entity {
             this.lastTarget = this.lk;
         }
 
+        // BANDIT: a ground target 3.5-6 tiles away triggers her dash — she covers the
+        // gap in 0.8s along the spirit-hop path (which already makes her untargetable
+        // and immune while airborne) and lands a double-damage hit (landDash). Checked
+        // here, while she is still walking in, like the Mega Knight's jump below.
+        if (this.c.n === "Bandit" && this.lk && this.lk.hp > 0 && !this.lk.fly && !this.lk.isGhosted &&
+            this.dashCd <= 0 && !(this.sjT > 0) && this.deployTime <= 0) {
+            let d = this.dist(this.lk);
+            if (d >= 105 && d <= 180) {
+                const reach = g.getHitboxRadius(this) + g.getHitboxRadius(this.lk) + 4;
+                const k = Math.max(0, d - reach) / d;
+                this.atk = true;
+                this.isDashing = true;
+                this.sjT = 48; this.sjMax = 48;
+                this.sjx0 = this.x; this.sjy0 = this.y;
+                this.sjx1 = this.x + (this.lk.x - this.x) * k; this.sjy1 = this.y + (this.lk.y - this.y) * k;
+                this.sjTarget = this.lk;
+                return;
+            }
+        }
+
         if (!this.jp && this.preJump === 0 && this.c.n === "Mega Knight" && this.lk && this.lk.hp > 0) {
             let d = this.dist(this.lk);
             // Jumps from 20% further out, with a crouched wind-up (~0.75s) first.
@@ -615,6 +645,34 @@ export default class Troop extends Entity {
                 // Bayonet: a ground target inside 1.6 tiles (48px) takes a 314-damage
                 // melee jab instead of a shot (Season-77 Three Musketeers rework).
                 this.lk.hp -= 314;
+            } else if (this.c.n === "Hunter") {
+                // SHOTGUN: ten pellets in a wide cone. Each pellet is its own shot that
+                // stops at the first thing it hits, so point-blank all ten land (840)
+                // and at range the spread scatters them over whatever is standing there.
+                const ang = Math.atan2(this.lk.y - (this.lk.fly ? 22 : 0) - srcY, this.lk.x - this.x);
+                for (let i = 0; i < 10; i++) {
+                    const spread = ((i - 4.5) / 4.5) * 0.42 + (g.random() - 0.5) * 0.08; // ~±24°, a little jitter
+                    g.projs.push(new Proj(this.x, srcY, this.lk.x, this.lk.y, null, 9, false, 3, this.c.d, this.tm, false)
+                        .asPellet(ang + spread, 195));                                   // 6.5 tiles of travel
+                }
+                this.applyKnockback(Math.atan2(this.y - this.lk.y, this.x - this.lk.x), 6); // the recoil
+            } else if (this.c.n === "Electro Wizard") {
+                // Lightning from BOTH hands: the target and the nearest other enemy in
+                // range each take a hit and a 0.5s stun, as two visible bolts.
+                const targets = [this.lk];
+                let best = null, bd = this.c.rn + 40;
+                for (const e of g.ents) {
+                    if (e === this.lk || e.tm === this.tm || e.hp <= 0 || e.isGhosted || e.teslaHidden || e.sjT > 0) continue;
+                    if (e.fly && !this.air) continue;
+                    const d = this.dist(e);
+                    if (d < bd) { bd = d; best = e; }
+                }
+                if (best) targets.push(best);
+                for (const tgt of targets) {
+                    const bolt = new Proj(this.x, srcY, tgt.x, tgt.y, null, 0, false, 4, this.c.d, this.tm, false).asElectroChain(tgt, this.c.d);
+                    bolt.chainMax = 1; bolt.chainStun = 30; bolt.life = 12;
+                    g.projs.push(bolt);
+                }
             } else if (this.c.n === "Firecracker") {
                 // A BIG firework rocket — it pops on its target and splits into five
                 // smaller sparks that fly on through, PENETRATING every troop in their
@@ -963,6 +1021,22 @@ export default class Troop extends Entity {
 
     // Spirit / Wall Breaker: die and deal the card's splash effect at this spot.
     // Called on contact and again on death (the flag prevents a double burst).
+    // The end of a Bandit dash: the target she charged (if it is still there and
+    // in reach) takes the 389 dash hit — real L11, double her normal swing — and
+    // her next normal swing waits a full hit speed. A short cooldown keeps her from
+    // chaining dashes back to back.
+    landDash(g) {
+        this.isDashing = false;
+        this.dashCd = 60;
+        this.cd = this.c.rt;
+        const t = this.sjTarget;
+        this.sjTarget = null;
+        if (t && t.hp > 0 && !t.isGhosted && this.dist(t) <= g.getHitboxRadius(this) + g.getHitboxRadius(t) + 12) {
+            t.hp -= 389;
+            g.projs.push(new Proj(t.x, t.y, t.x, t.y, null, 0, false, 30, 0, this.tm, false).asShockwave());
+        }
+    }
+
     explodeSpirit(g, t) {
         if (this.exploded) return;
         this.exploded = true;

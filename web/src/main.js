@@ -1571,6 +1571,13 @@ class Main {
                     }
                     return;
                 }
+                if (p.pellet) {
+                    // A Hunter pellet: a plain small slug.
+                    if (!this.px.draw(ctx, "projectiles/bullet", p.x, p.y, 16)) {
+                        ctx.fillStyle = "#e8d9a8"; ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI * 2); ctx.fill();
+                    }
+                    return;
+                }
                 if (p.spark) {
                     // A burst spark: a bright bullet with a long streaking trail.
                     ctx.strokeStyle = "rgba(255,190,224,0.75)"; ctx.lineWidth = 3.5; ctx.lineCap = "round";
@@ -2224,7 +2231,7 @@ class Main {
 
         // Spirit hop onto the enemy — arc up (the ground shadow stays put, showing
         // it's airborne) then explode on landing.
-        if (e instanceof Troop && e.sjT > 0) {
+        if (e instanceof Troop && e.sjT > 0 && !e.isDashing) {
             let prog = 1 - e.sjT / (e.sjMax || 1);
             y -= 20 * Math.sin(prog * Math.PI);
         }
@@ -2521,6 +2528,7 @@ class Main {
             "Inferno Tower": "#b5563a", "Elixir Collector": "#c46fb0", "Crate": "#9c7b4a",
             "Tesla": "#57b8d8", "Bomb Tower": "#8a8f99", "Tombstone": "#9aa0a8", "Firecracker": "#e87ea1",
             "Valkyrie": "#d16f3a", "Executioner": "#3f8a72", "Giant Snowball": "#cfeeff",
+            "Hunter": "#b8702e", "Electro Wizard": "#4f7cff", "Bandit": "#2f7f7a",
             "Golemite": "#8a8a8a", "Lava Pup": "#ff8a4c", "Elixir Golemite": "#d56ab5",
             "Elixir Blob": "#d56ab5", "Cursed Hog": "#8e4fb0", "Golem": "#8a8a8a"
         };
@@ -2733,6 +2741,7 @@ class Main {
         else if (n === "Skeleton Barrel") m = 12;
         else if (n === "Valkyrie") m = 14;
         else if (n === "Executioner") m = 13;
+        else if (n === "Hunter") m = 12;
         else if (n.includes("Dragon") || n === "Lava Hound") m = 16;
         else if (["Giant", "Golem", "Elixir Golem", "Royal Giant", "Electro Giant"].includes(n)) m = 20;
         return m * 0.88;

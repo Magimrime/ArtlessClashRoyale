@@ -165,7 +165,20 @@ export default class GameEngine {
             new Card("Executioner", 5, 1289, 267, 0.55, 117, 0, 100, 144, 150, false, true),
             // Giant Snowball — real L11: 2 elixir, 159 damage in a 2.5-tile radius; slows
             // (35% for 2.5s) and knocks back. Its arc + radius were already wired up.
-            new Card("Giant Snowball", 2, 0, 159, 0, 0, 2, 0, 0, 0, false, true)
+            new Card("Giant Snowball", 2, 0, 159, 0, 0, 2, 0, 0, 0, false, true),
+            // Hunter — real L11: 4 elixir, 885 hp, 84 damage x10 pellets (840 point-blank),
+            // 2.2s hit speed (rt=132), Medium, 4-tile range (120px - hitbox), air + ground.
+            // The pellets fan out in a cone and each stops at the first thing it hits, so
+            // he shreds up close and only clips at range — the whole point of the card.
+            new Card("Hunter", 4, 885, 84, 0.5, 104, 0, 100, 132, 150, false, true),
+            // Electro Wizard — real L11: 4 elixir, 714 hp, 115 damage to TWO targets per
+            // attack, each hit stuns 0.5s, 1.8s hit speed (rt=108), Fast, 5-tile range,
+            // air + ground. Lands with a spawn zap: 192 damage + 0.5s stun in 3 tiles.
+            new Card("Electro Wizard", 4, 714, 115, 0.75, 132, 0, 100, 108, 150, false, true),
+            // Bandit — real L11: 3 elixir, 906 hp, 194 damage, 1.0s hit speed (rt=60),
+            // Fast, short melee, ground only. DASH: a ground target 3.5-6 tiles away is
+            // charged in 0.8s for 389 (double) damage, and she cannot be hit on the way.
+            new Card("Bandit", 3, 906, 194, 0.75, 12, 0, 100, 60, 150, false, false)
         ];
 
         // Role tags drive the enemy AI's counter logic. (Stats above are already
@@ -222,7 +235,8 @@ export default class GameEngine {
         // High single-target DPS: melts tanks and win conditions.
         if (has(["Mini PEKKA", "P.E.K.K.A", "Musketeer", "Inferno Dragon",
             "Sparky", "Prince", "Elite Barbarians", "Mega Minion", "Wizard",
-            "Three Musketeers", "Elite Musketeer", "Lumberjack"]))
+            "Three Musketeers", "Elite Musketeer", "Lumberjack",
+            "Hunter", "Electro Wizard", "Bandit"]))
             tags.push("DamageDealer");
 
         // Direct-damage / effect spells the AI can throw at a threat.
@@ -1187,6 +1201,13 @@ export default class GameEngine {
                 if (split) t.laneAssign = dx < -0.5 ? 0 : (dx > 0.5 ? 1 : i % 2);
                 this.ents.push(t);
             });
+        } else if (c.n === "Electro Wizard") {
+            this.ents.push(new Troop(tm, x, y, c));
+            // Spawn zap (real L11): 192 damage and a 0.5s stun to everything within
+            // 3 tiles, delivered as a real zap strike so it reads like the spell.
+            const z = new Proj(x, y, x, y, null, 0, true, 90, 192, tm, false);
+            z.asStun(30); z.tightArea = true; z.asSpellDrop("zap", "#7fdcff", 12);
+            this.projs.push(z);
         } else if (c.n === "Mega Knight") {
             this.ents.push(new Troop(tm, x, y, c));
             for (let e of this.ents)

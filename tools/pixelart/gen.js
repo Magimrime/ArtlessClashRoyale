@@ -106,12 +106,14 @@ const C = {
   'royal-recruits':'#b9a06a', 'dark-prince':'#4a3f5a', 'ice-golem':'#a9dcef',
   lumberjack:'#5a7a3a', hopper:'#6db84a', firecracker:'#e87ea1',
   valkyrie:'#d16f3a', executioner:'#3f8a72', golemite:'#8a8a8a',
+  hunter:'#b8702e', 'electro-wizard':'#4f7cff', bandit:'#2f7f7a',
   'lava-pup':'#ff8a4c', 'elixir-golemite':'#d56ab5', 'elixir-blob':'#d56ab5',
   'cursed-hog':'#8e4fb0', 'three-musketeers':'#ec7fb4', guard:'#e6e3d3',
   'graveyard-skeleton':'#e6e3d3',
 };
 // The game's mass per card (Troop.js) — this is the unit's real radius.
 const M = {}; for (const k of Object.keys(C)) M[k] = 10;
+M.valkyrie = 14; M.executioner = 13; M.hunter = 12;   // Troop.js masses these three never had here
 for (const k of ['skeletons','bats','skeleton-army','graveyard-skeleton','guard']) M[k] = 6;
 for (const k of ['fire-spirit','ice-spirit','electro-spirit','heal-spirit']) M[k] = 10;
 for (const k of ['goblins','spear-goblins','archers','wall-breakers']) M[k] = 8;
