@@ -601,12 +601,12 @@ const ELX = '#d426c8', ELX_BG = '#2a1430';
 }
 // A single arrow, point DOWN, for the Arrows volley: shaft, steel head, fletching.
 proj('arrow', sp => {
-  sp.vline(8, 2, 11, '#6b4423');                                  // shaft
-  sp.plot(7, 2, '#e8e8e8'); sp.plot(9, 2, '#e8e8e8');             // fletching
-  sp.plot(7, 3, '#e8e8e8'); sp.plot(9, 3, '#e8e8e8');
-  sp.plot(6, 4, '#e8e8e8'); sp.plot(10, 4, '#e8e8e8');
-  sp.plot(8, 12, '#cfd8de'); sp.hline(7, 9, 13, '#cfd8de');       // head
-  sp.plot(8, 14, '#9aa6ae');                                      // point
+  sp.vline(8, 1, 11, '#7a4a1f');                                  // shaft
+  sp.plot(8, 5, '#9a6330'); sp.plot(8, 9, '#9a6330');             // a little grain
+  for (const [x, y] of [[7,1],[9,1],[7,2],[9,2],[6,3],[10,3],[6,4],[10,4]]) sp.plot(x, y, '#d84b3b'); // red feathers
+  sp.plot(7, 3, '#f4e3c2'); sp.plot(9, 3, '#f4e3c2');             // a pale stripe on each feather
+  sp.plot(8, 11, '#e6ecf0'); sp.hline(7, 9, 12, '#b9c4cb');       // steel head
+  sp.plot(8, 13, '#8f9aa2'); sp.plot(8, 14, '#5f6970');           // point
 });
 // The enemy's barbarian barrel — the vector version was team-coloured.
 proj('barbarian-barrel-enemy', sp => { sp.rrect(1,3,14,10,4,'#3c1410'); sp.rrect(2,4,12,8,3,'#8b3a2e');

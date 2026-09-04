@@ -120,7 +120,7 @@ export default class Proj {
     asStun(duration = 30) { this.shouldStun = true; this.stunDuration = duration; return this; }
     asCurse() { this.isCurse = true; return this; }
     asRolling() { this.isRolling = true; this.life = 60; return this; }
-    asArrows() { this.isArrows = true; this.life = 28; return this; } // 3 quick staggered waves
+    asArrows() { this.isArrows = true; this.life = 60; return this; } // 3 waves, then the arrows sit in the ground
     // Placed spell that falls from the sky as a symbol, then resolves on impact.
     asSpellDrop(kind, col, life = 30) { this.isSpellDrop = true; this.dropKind = kind; this.flashCol = col; this.life = life; this.dropMax = life; return this; }
     asIceNova() { this.isIceNova = true; this.life = 5; return this; }
@@ -457,11 +457,12 @@ export default class Proj {
             return;
         }
 
-        // Arrows: 3 discrete waves, each dealing damage on impact (life 22/12/2,
-        // matching the wave windows in drawArrowsVolley). One wave kills a skeleton.
+        // Arrows: 3 discrete waves, each dealing damage as it lands (life 52/42/32 -
+        // the waves leave at 0/10/20 ticks and fly for 8, matching drawArrowsVolley).
+        // One wave kills a skeleton. The rest of the life is the arrows sitting there.
         if (this.isArrows) {
             this.life--;
-            if (this.life === 22 || this.life === 12 || this.life === 2) {
+            if (this.life === 52 || this.life === 42 || this.life === 32) {
                 for (let e of g.ents) {
                     if (e.tm !== this.tm && Math.hypot(this.x - e.x, this.y - e.y) < this.rad + e.rad) {
                         e.hp -= this.hitDmg(e);

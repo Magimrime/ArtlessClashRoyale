@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.6.5** — here's the whole road there.
+We're currently on **26.6.6** — here's the whole road there.
 
 ---
 
@@ -151,6 +151,10 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
   centre — nothing is redrawn or resampled per angle — which the high-resolution backing store keeps clean.
   **Arrows look like arrows again**: three waves of seven individual pixel arrows, each leaning a little, falling
   onto its spot and fading as it lands with a puff of dust — instead of one blown-up fan per wave.
+- **26.6.6** — **Arrows, properly.** Each wave now flies in from the caster's side of the field on one shared slant,
+  ten arrows to a wave, and the arrows **stay stuck in the ground** for the rest of the second before they all fade
+  out together, instead of vanishing the moment they land. Far less dust — a faint puff for a few frames — and a
+  redrawn arrow (red feathers, dark shaft, steel head) that reads as an arrow instead of a stick with white ends.
 
 ---
 
