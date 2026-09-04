@@ -3559,14 +3559,15 @@ class Main {
         const ux = enemy ? -Math.sin(th) : Math.sin(th), uy = enemy ? Math.cos(th) : -Math.cos(th);
         const angle = enemy ? th : Math.PI + th;
         const fade = p.life < 8 ? p.life / 8 : 1;                // all gone together at the end
-        const hash = k => { const v = Math.sin(k * 12.9898) * 43758.5453; return v - Math.floor(v); };
+        const fr = v => v - Math.floor(v);                       // golden-ratio scatter: even, never a spiral
         for (let w = 0; w < STARTS.length; w++) {
             for (let i = 0; i < perWave; i++) {
                 const t = elapsed - STARTS[w] - (i % 3);         // this arrow's own clock (staggered a little)
                 if (t < 0) continue;
                 const f = Math.min(1, t / FLIGHT);               // 0 in the air .. 1 landed
-                const ang = hash(i + w * 31) * Math.PI * 2;      // scattered, the same every frame
-                const rr = Math.sqrt(hash(i + w * 31 + 500)) * p.rad * 0.9;
+                const k = i + w * 31;                            // this arrow's spot, the same every frame
+                const ang = fr(k * 0.618034) * Math.PI * 2;
+                const rr = Math.sqrt(fr(k * 0.754877 + 0.5)) * p.rad * 0.9;
                 const lx = p.x + Math.cos(ang) * rr, ly = p.y + Math.sin(ang) * rr;
                 const back = (1 - f) * 70;                       // still this far back along the flight
                 ctx.globalAlpha = fade;
