@@ -50,6 +50,24 @@ try {
 } catch { /* first run */ }
 const nowGen = {}, nowYours = {};
 
+// The record is written at the end - and ALSO if the run dies part-way, so the
+// files already on disk are never left unrecorded. Sprites a crashed run never
+// reached keep their previous record.
+let manifestWritten = false;
+function writeManifest() {
+  if (manifestWritten) return;
+  manifestWritten = true;
+  const yours = {}, sprites = {};
+  for (const [rel, h] of Object.entries(prev.yours)) if (!(rel in nowGen) && !(rel in nowYours)) yours[rel] = h;
+  for (const [rel, h] of Object.entries(prev.sprites)) if (!(rel in nowGen) && !(rel in nowYours)) sprites[rel] = h;
+  Object.assign(yours, nowYours); Object.assign(sprites, nowGen);
+  fs.writeFileSync(MANIFEST, JSON.stringify({
+    note: 'sprites = what the generator wrote, and may overwrite. yours = sprites you replaced; the generator leaves these alone forever. To hand one back, delete the file (or its line here) and re-run.',
+    yours, sprites,
+  }, null, 1) + '\n');
+}
+process.on('exit', writeManifest);
+
 const save = (sp, cat, name) => {
   const rel = `${cat}/${name}.png`, file = out(cat, name);
   const fresh = sp.bytes(), freshHash = sha(fresh);
@@ -61,6 +79,11 @@ const save = (sp, cat, name) => {
 
   const diskHash = sha(fs.readFileSync(file));
   const mine = () => { nowYours[rel] = diskHash; kept.push(rel); return sp; };
+
+  // Byte-for-byte what the generator would draw right now: its own work, whatever
+  // the record says. (A run that crashed part-way once left its files on disk
+  // with no record of them, and the next run filed sixty of them as yours.)
+  if (diskHash === freshHash) { nowGen[rel] = freshHash; return sp; }
 
   if (prev.yours[rel] === diskHash) return mine();          // already yours, still untouched
   // Is this the generator's own output? With nothing on record, compare against
@@ -168,16 +191,22 @@ function balloon(col) {
 saveBob(balloon('#4f8fe0'), 'troops', 'balloon');
 saveBob(balloon('#e05555'), 'troops', 'balloon-red');
 
-// Skeleton Barrel — a barrel, not a disc: staves, two hoops, a skull.
+// Skeleton Barrel — a bunch of dark balloons carrying a barrel slung sideways
+// beneath them: three balloons on strings, then the barrel with its hoops, a
+// lit stave and the skull on its side. (Bobs like the other fliers.)
 {
   const sp = new Sprite();
-  sp.rrect(3, 1, 10, 14, 3, '#5c3a18');
-  sp.rrect(4, 2, 8, 12, 2, '#a5713a');
-  sp.hline(3, 12, 4, '#6b4423'); sp.hline(3, 12, 11, '#6b4423');   // iron hoops
-  sp.vline(6, 3, 10, '#c08a52');                                    // lit stave
-  sp.rect(6, 6, 4, 4, '#efe8d8');                                   // skull
-  sp.plot(6, 7, '#3a2a1a'); sp.plot(9, 7, '#3a2a1a');
-  save(sp, 'troops', 'skeleton-barrel');
+  sp.disc(4, 4, 2, '#4a4f58'); sp.disc(12, 4, 2, '#4a4f58');          // side balloons
+  sp.disc(8, 3, 2.7, '#2f3339');                                      // the big one
+  sp.plot(7, 2, '#6a707a'); sp.plot(3, 3, '#6a707a'); sp.plot(11, 3, '#6a707a');   // highlights
+  for (const [x, y] of [[4,6],[5,7],[6,8],[8,6],[8,7],[8,8],[12,6],[11,7],[10,8]]) sp.plot(x, y, '#1c1e22');   // strings
+  sp.rrect(1, 9, 14, 6, 2, '#5c3a18');                                // the barrel, on its side
+  sp.rrect(2, 10, 12, 4, 1, '#a5713a');
+  sp.vline(4, 9, 14, '#6b4423'); sp.vline(11, 9, 14, '#6b4423');      // iron hoops
+  sp.hline(5, 10, 10, '#c08a52');                                     // lit stave
+  sp.rect(6, 11, 4, 2, '#efe8d8');                                    // skull
+  sp.plot(6, 12, '#3a2a1a'); sp.plot(9, 12, '#3a2a1a');
+  saveBob(sp, 'troops', 'skeleton-barrel');
 }
 
 // ============================ TOWERS =========================================
@@ -761,11 +790,7 @@ fs.mkdirSync(OUT, { recursive: true });
   fs.writeFileSync(path.join(OUT, 'sprites.json'), JSON.stringify(byFolder, null, 1) + '\n');
 }
 if (fontMetrics) fs.writeFileSync(path.join(OUT, 'font', 'metrics.json'), JSON.stringify(fontMetrics, null, 1) + '\n');
-fs.writeFileSync(MANIFEST, JSON.stringify({
-  note: 'sprites = what the generator wrote, and may overwrite. yours = sprites you replaced; the generator leaves these alone forever. To hand one back, delete the file (or its line here) and re-run.',
-  yours: nowYours,
-  sprites: nowGen,
-}, null, 1) + '\n');
+writeManifest();
 
 if (FORCE) console.log('\n--force: everything overwritten, INCLUDING sprites of yours');
 else if (kept.length) {

@@ -1,6 +1,13 @@
 {
  "note": "sprites = what the generator wrote, and may overwrite. yours = sprites you replaced; the generator leaves these alone forever. To hand one back, delete the file (or its line here) and re-run.",
  "yours": {
+  "buildings/tombstone.png": "2185260f2e214da2",
+  "spells/rage.png": "5a43d0777b32ba9b",
+  "effects/graveyard.png": "3ca916b929c08168",
+  "projectiles/firework-rocket.png": "1976697c5600a726",
+  "ui/gear.png": "d0b315bf52285e37"
+ },
+ "sprites": {
   "troops/knight.png": "f8253abccde04b2a",
   "troops/archers.png": "8e6ac7ee7ff7e69b",
   "troops/giant.png": "fa1fc7df2caebd49",
@@ -62,14 +69,7 @@
   "troops/graveyard-skeleton.png": "4537e38256115357",
   "troops/balloon.png": "a63cfe903c0857d8",
   "troops/balloon-red.png": "904de85a4659072e",
-  "troops/skeleton-barrel.png": "2106414fc50dd73d",
-  "buildings/tombstone.png": "2185260f2e214da2",
-  "spells/rage.png": "5a43d0777b32ba9b",
-  "effects/graveyard.png": "3ca916b929c08168",
-  "projectiles/firework-rocket.png": "1976697c5600a726",
-  "ui/gear.png": "d0b315bf52285e37"
- },
- "sprites": {
+  "troops/skeleton-barrel.png": "a8f923fca432436c",
   "towers/princess-blue-base.png": "a96f1997986c9e63",
   "towers/princess-blue-turret.png": "4acdf322f87b399b",
   "towers/princess-blue.png": "902cf29a9f865e93",

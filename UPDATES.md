@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.7.1** — here's the whole road there.
+We're currently on **26.7.2** — here's the whole road there.
 
 ---
 
@@ -187,6 +187,11 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
   that gap; the funnel now only adds the points still ahead of it.
 - **26.7.1** — Cards hold still: a troop on a deck card (and the placement ghost) shows its standing frame instead of
   bobbing — the walk bob is for the field.
+- **26.7.2** — **The Skeleton Barrel redrawn**: three dark balloons on strings carrying the barrel slung sideways
+  beneath them (hoops, a lit stave, the skull on its side), bobbing like the other fliers. Also a fix to the sprite
+  guard: a run that crashed part-way had left its files unrecorded, and the next run filed sixty generator sprites
+  as yours; a file that is byte-for-byte what the generator would draw is now always its own, and the record is
+  written even when a run dies.
 
 ---
 
