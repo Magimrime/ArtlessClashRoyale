@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.7.3** — here's the whole road there.
+We're currently on **26.7.4** — here's the whole road there.
 
 ---
 
@@ -197,6 +197,8 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
   lighter upper band and darker lower band inside anything still flat. **The graveyard is clean**: a plain ring with
   small pale motes rising off its edge instead of headstones. **Poison's particles are fine specks** drifting up
   through the gas instead of big bubbles.
+- **26.7.4** — **More poison**: twice the specks, and the ones near the middle keep climbing past the top edge of
+  the gas before they wrap, so the cloud visibly breathes out over its rim.
 
 ---
 

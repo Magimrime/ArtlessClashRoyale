@@ -372,10 +372,15 @@ function zone(name, col, opts = {}, i = 0) {
   const r = opts.r || 7;
   sp.disc(8, 8, r, edge);
   sp.disc(8, 8, r - 1, col);
-  if (opts.texture === 'bubbles') {           // poison: fine specks drifting up through the gas
-    for (let p = 0; p < 8; p++) {
-      const x = 3 + ((p * 5) % 11), y = rise(3 + ((p * 7) % 10), i, 1, 2, 13);
-      if (Math.hypot(x + 0.5 - 8, y + 0.5 - 8) < r - 1.2) sp.plot(x, y, p % 2 ? lite : shade(col, 0.42));
+  if (opts.texture === 'bubbles') {           // poison: a crowd of fine specks drifting up through the gas -
+    // and on over the rim: the disc is drawn a size smaller (r 6) so there is
+    // room above it, and a speck keeps climbing past the top edge before it wraps.
+    for (let p = 0; p < 16; p++) {
+      const x = 2 + ((p * 5) % 13), y = rise((p * 7) % 15, i, 1, 0, 14);
+      const inside = Math.hypot(x + 0.5 - 8, y + 0.5 - 8) < r - 0.4;
+      const over = y < 8 - r + 2 && Math.abs(x + 0.5 - 8) < r - 1.5;          // risen past the top edge
+      if (inside) sp.plot(x, y, p % 2 ? lite : shade(col, 0.42));
+      else if (over) sp.plot(x, y, '#c9f0a4');
     }
   } else if (opts.texture === 'sparks') {     // rage: flecks whirling round the core
     for (let a = 0; a < 6; a++) { const ang = a * Math.PI / 3 + i * 0.4; sp.plot(8 + Math.cos(ang) * 4.5, 8 + Math.sin(ang) * 4.5, lite); }
@@ -408,7 +413,7 @@ function zone(name, col, opts = {}, i = 0) {
   return sp;
 }
 const zoneAnim = (name, col, opts, nf) => save(Sprite.sheet(Array.from({ length: nf }, (_, i) => zone(name, col, opts, i))), 'spells', name);
-zoneAnim('poison', '#4f8a34', { texture:'bubbles' }, 4);
+zoneAnim('poison', '#4f8a34', { texture:'bubbles', r: 6 }, 4);
 zoneAnim('rage', '#d94f9c', { texture:'sparks' }, 4);
 zoneAnim('clone', '#3fd3e0', { texture:'swirl' }, 4);
 zoneAnim('mirror', '#b07fd8', { texture:'swirl' }, 4);
@@ -523,12 +528,13 @@ effAnim('phantom-burst', 4, (sp, i) => {
   sp.ring(8,8,ro,ro-1.4,'#7fa8bf'); sp.ring(8,8,ro-0.5,ro-1.4,'#c8e4f2');
   if (i < 2) sp.disc(8,8,1.6,'#ffffff'); else sp.ring(8,8,ro-2.6,ro-3.4,'#c8e4f2');
 });
-// Poison: fine specks drift up through the cloud (loops).
+// Poison: a crowd of fine specks drifts up through the cloud and on past its top (loops).
 effAnim('poison-cloud', 4, (sp, i) => {
-  sp.disc(8,8,7,'#2f5c22'); sp.disc(8,8,6,'#4f8a34');
-  for (let p = 0; p < 8; p++) {
-    const x = 3 + ((p * 5) % 11), y = rise(3 + ((p * 7) % 10), i, 1, 2, 13);
-    if (Math.hypot(x + 0.5 - 8, y + 0.5 - 8) < 5) sp.plot(x, y, p % 2 ? '#7ab84a' : '#a9e07a');
+  sp.disc(8,8,6,'#2f5c22'); sp.disc(8,8,5,'#4f8a34');
+  for (let p = 0; p < 16; p++) {
+    const x = 2 + ((p * 5) % 13), y = rise((p * 7) % 15, i, 1, 0, 14);
+    if (Math.hypot(x + 0.5 - 8, y + 0.5 - 8) < 5.6) sp.plot(x, y, p % 2 ? '#7ab84a' : '#a9e07a');
+    else if (y < 4 && Math.abs(x + 0.5 - 8) < 4.5) sp.plot(x, y, '#c9f0a4');
   }
 });
 // Rage: the core throbs (loops).

@@ -1691,7 +1691,9 @@ class Main {
                     // over its last second.
                     const zone = p.poison ? "spells/poison" : p.graveyard ? "spells/graveyard" : p.isClone ? "spells/clone" : p.isFrost ? "spells/freeze" : "effects/ice-nova";
                     ctx.globalAlpha = p.isFrost ? 0.7 * Math.min(1, p.life / 60) : 0.7;
-                    if (!this.px.draw(ctx, zone, p.x, p.y, p.rad * 2, 0, null, p.isIceNova ? Math.floor((1 - p.life / 5) * 3.99) : undefined)) {
+                    // Poison's art keeps a margin above its disc for the specks that rise
+                    // over the rim, so it is drawn a little larger to fill the same radius.
+                    if (!this.px.draw(ctx, zone, p.x, p.y, p.rad * (p.poison ? 2.3 : 2), 0, null, p.isIceNova ? Math.floor((1 - p.life / 5) * 3.99) : undefined)) {
                         ctx.fillStyle = p.poison ? "rgba(0,128,0,0.6)" : p.graveyard ? "rgba(0,0,139,0.6)" : p.isClone ? "rgba(0,255,255,0.6)" : "rgba(135,206,250,0.9)";
                         ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.fill();
                     }
