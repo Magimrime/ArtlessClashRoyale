@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.6.9** — here's the whole road there.
+We're currently on **26.7.0** — here's the whole road there.
 
 ---
 
@@ -171,6 +171,20 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
   of ice** over its icy tint, which melts off as the freeze ends. **Arrows rain down**: each arrow now drops out of
   the sky onto its spot, point first, with a small shadow sharpening beneath it, instead of flying in from the
   side. **The Arrows card** shows a bundle of three arrows rather than the volley itself.
+- **26.7.0** — **Animation.** A sprite can now be a sheet: frames stacked downward, one 16×16 cell each, and the
+  game plays them (frame count = height ÷ width, ten frames a second, or driven by an effect's life). **Effects
+  animate**: explosions swell and smoke out, dust puffs billow, shockwaves and ice novas race outward, the electric
+  ring's sparks run round its rim, the phantom burst spreads, the bolt crackles between two frames, the bomb's
+  fuse sputters, the evo gem glitters, the elixir drop glints, the ice block twinkles, the fireball's flames
+  flicker. **Zones live**: poison bubbles rise, rage flecks whirl, the clone and mirror swirl turn, the heal cross
+  pulses, the freeze flake twinkles, a wisp climbs out of the graveyard, vines sway — on the field and on the card.
+  **Troops bob as they walk** (and hover while they fly), each on its own beat, and stand still when they stop.
+  Any sprite you replace with a taller sheet animates the same way. **Shots animate too**: bullets and cannonballs
+  spin, the rocket's exhaust flickers, the snowball rolls, logs and barrels roll, the dynamite fuse and firework
+  spark sputter. **Vines show on what they catch** — troops, buildings and towers alike wear two swaying strands
+  until the root lets go. **Big troops no longer stall at the bridge**: the path refresh kept sending a troop that
+  was already on the bridge back to its "line up" point, so a slow Giant, Golem or P.E.K.K.A walked up and down
+  that gap; the funnel now only adds the points still ahead of it.
 
 ---
 

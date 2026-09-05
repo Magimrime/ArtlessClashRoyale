@@ -13,7 +13,12 @@ export class Pixel {
         this._cache = new Map();  // recoloured copies, keyed by sprite|mode|colour
         this._slug = new Map();   // card name -> sprite name
         this.unit = 1;            // position snap, in logical px: 1/R of the backing store
+        this.clock = Date.now();  // the animation clock; the renderer sets it once per frame
     }
+
+    // How many frames a sprite has: its sheet is frames stacked downward, one
+    // square cell each, so the count is simply height / width (1 for still art).
+    frames(name) { const im = this.img[name]; return (im && im.height > im.width && im.height % im.width === 0) ? im.height / im.width : 1; }
 
     // Snap a logical coordinate to the backing store's pixel grid, so a sprite
     // lands on whole device pixels (no half-pixel edge) but can move in steps as
@@ -94,9 +99,19 @@ export class Pixel {
     // Draw a sprite CENTRED on (x, y) at `size` pixels across, optionally rotated.
     // `wash` = [colour, alpha] lays a status tint over it. Returns false when the
     // sprite is missing so callers can fall back to their old vector drawing.
-    draw(ctx, name, x, y, size, angle = 0, wash = null) {
-        const im = wash ? this.washed(name, wash[0], wash[1]) : this.img[name];
-        if (!im) return false;
+    // `frame` picks a cell of an animated sheet; leave it out and the sprite plays
+    // its frames on the shared clock (ten a second). Still art ignores it.
+    draw(ctx, name, x, y, size, angle = 0, wash = null, frame = undefined) {
+        const base = this.img[name];
+        if (!base) return false;
+        const im = wash ? this.washed(name, wash[0], wash[1]) : base;
+        // A sheet is taller than it is wide by a whole number of square cells; any
+        // other shape is one still picture drawn whole.
+        const cell = base.width, sheet = base.height > cell && base.height % cell === 0;
+        const nf = sheet ? base.height / cell : 1, sh = sheet ? cell : base.height;
+        let f = 0;
+        if (nf > 1) { f = frame === undefined ? Math.floor(this.clock / 100) : Math.floor(frame); f = ((f % nf) + nf) % nf; }
+        const sy = f * cell;
         const s = Math.max(1, Math.round(size));
         ctx.save();
         ctx.imageSmoothingEnabled = false;
@@ -106,9 +121,9 @@ export class Pixel {
             // edges land on fine device pixels, so it stays clean.
             ctx.translate(this.q(x), this.q(y));
             ctx.rotate(angle);
-            ctx.drawImage(im, -s / 2, -s / 2, s, s);
+            ctx.drawImage(im, 0, sy, cell, sh, -s / 2, -s / 2, s, s);
         } else {
-            ctx.drawImage(im, this.q(x - s / 2), this.q(y - s / 2), s, s);
+            ctx.drawImage(im, 0, sy, cell, sh, this.q(x - s / 2), this.q(y - s / 2), s, s);
         }
         ctx.restore();
         return true;

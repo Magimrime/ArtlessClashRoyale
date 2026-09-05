@@ -166,6 +166,26 @@ class Sprite {
     const { w, h, data } = decodePNG(file);
     const sp = new Sprite(w, h); sp.data.set(data); return sp;
   }
+  // A copy moved by (dx, dy); pixels pushed off the edge are dropped.
+  shifted(dx, dy) {
+    const sp = new Sprite(this.w, this.h);
+    for (let y = 0; y < this.h; y++) for (let x = 0; x < this.w; x++) {
+      const i = (y*this.w + x)*4;
+      if (!this.data[i+3]) continue;
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= this.w || ny >= this.h) continue;
+      sp.data.set(this.data.subarray(i, i+4), (ny*this.w + nx)*4);
+    }
+    return sp;
+  }
+  // An ANIMATION SHEET: the frames stacked downward, one 16x16 cell each. The
+  // game reads the frame count from the image (height / width) and plays them.
+  static sheet(frames) {
+    const w = frames[0].w, h = frames[0].h;
+    const sp = new Sprite(w, h * frames.length);
+    frames.forEach((f, i) => sp.data.set(f.data, i * w * h * 4));
+    return sp;
+  }
   // The encoded PNG, without touching the disk — lets the caller compare against
   // what is already there before deciding whether it may overwrite.
   bytes() { return encodePNG(this.w, this.h, this.data); }

@@ -849,7 +849,16 @@ export default class Troop extends Entity {
                                     let bx = bxs[0], bd = Math.abs(crossX - bxs[0]);
                                     for (const b of bxs) { const d2 = Math.abs(crossX - b); if (d2 < bd) { bd = d2; bx = b; } }
                                     const s2 = (py < RY) ? 1 : -1; // which side we start on
-                                    this.path.splice(wi, 0, { x: bx, y: RY - s2 * 26 }, { x: bx, y: RY + s2 * 26 });
+                                    // Only the funnel points still AHEAD of the troop. The path is
+                                    // refreshed every few ticks, and re-inserting the "line up"
+                                    // point behind a troop already on the bridge sent it back to
+                                    // it every time - a slow, big troop (Giant, Golem, P.E.K.K.A)
+                                    // walked up and down that gap and never got across.
+                                    const entry = { x: bx, y: RY - s2 * 26 }, exit = { x: bx, y: RY + s2 * 26 };
+                                    const ahead = [];
+                                    if (s2 * (entry.y - py) > 0) ahead.push(entry);
+                                    if (s2 * (exit.y - py) > 0) ahead.push(exit);
+                                    this.path.splice(wi, 0, ...ahead);
                                     break;
                                 }
                                 px = q.x; py = q.y;

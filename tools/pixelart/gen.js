@@ -127,6 +127,11 @@ M['elixir-blob'] = 6; M['lava-pup'] = 6; M['golemite'] = 10; M['elixir-golemite'
 // Real radius -> pixel radius. Linear, so relative size still reads: the
 // smallest unit is a 2.5px dot, the biggest fills the cell.
 const pxR = m => 3.2 + (Math.min(m, 20) - 6) / 14 * 4.0;   // 6 -> 3.2 (still round), 20 -> 7.2
+// A troop's sheet: the still frame and the same unit lifted one pixel - played
+// while it walks (or hovers), so it bobs along instead of sliding.
+const saveBob = (sp, cat, name) => save(Sprite.sheet([sp, sp.shifted(0, -1)]), cat, name);
+// A rising loop: the value `y0` climbs by `step` per frame and wraps within [lo, hi].
+const rise = (y0, i, step, lo, hi) => lo + ((((y0 - lo) - i * step) % (hi - lo + 1)) + (hi - lo + 1)) % (hi - lo + 1);
 
 // The disc every troop is: base fill, a darker rim, and (when there's room) a
 // two-pixel highlight. Three or four colours, never more.
@@ -145,7 +150,7 @@ function troopDisc(sp, r, col, cx = 8, cy = 8) {
 }
 
 for (const [name, col] of Object.entries(C)) {
-  save(troopDisc(new Sprite(), pxR(M[name]), col), 'troops', name);
+  saveBob(troopDisc(new Sprite(), pxR(M[name]), col), 'troops', name);
 }
 
 // Balloon — envelope + basket. ONE shape function; the teams differ only in colour.
@@ -160,8 +165,8 @@ function balloon(col) {
   sp.plot(5, 4, lite); sp.plot(6, 4, lite); sp.plot(5, 5, lite);
   return sp;
 }
-save(balloon('#4f8fe0'), 'troops', 'balloon');
-save(balloon('#e05555'), 'troops', 'balloon-red');
+saveBob(balloon('#4f8fe0'), 'troops', 'balloon');
+saveBob(balloon('#e05555'), 'troops', 'balloon-red');
 
 // Skeleton Barrel — a barrel, not a disc: staves, two hoops, a skull.
 {
@@ -298,43 +303,52 @@ function block(sp, col, s = 7, r = 3) {
 // ============================ SPELLS =========================================
 // The placed-spell footprint: a perfect circle with a TEXTURE on it, so each
 // zone has a surface of its own rather than a flat fill.
-function zone(name, col, opts = {}) {
+// One frame `i` of a zone's texture: the bubbles rise, the flecks whirl, the
+// swirl turns, the cross pulses, the flake twinkles, a wisp climbs, the vines
+// sway. Frame 0 is the still picture.
+function zone(name, col, opts = {}, i = 0) {
   const sp = new Sprite();
   const edge = shade(col, -0.26), lite = shade(col, 0.20), dark = shade(col, -0.14);
   const r = opts.r || 7;
   sp.disc(8, 8, r, edge);
   sp.disc(8, 8, r - 1, col);
-  if (opts.texture === 'bubbles') {           // poison: clustered bubbles
-    for (const [x,y,rr] of [[6,6,1.6],[10,9,1.3],[7,11,1.1],[11,5,1.0]]) { sp.disc(x, y, rr, lite); }
-  } else if (opts.texture === 'sparks') {     // rage: bright flecks
-    sp.speckle(lite, 7, 0.22);
+  if (opts.texture === 'bubbles') {           // poison: bubbles rising
+    for (const [x,y0,rr] of [[6,6,1.6],[10,9,1.3],[8,12,1.1],[11,5,1.0]]) sp.disc(x, rise(y0, i, 2, 3, 12), rr, lite);
+  } else if (opts.texture === 'sparks') {     // rage: flecks whirling round the core
+    for (let a = 0; a < 6; a++) { const ang = a * Math.PI / 3 + i * 0.4; sp.plot(8 + Math.cos(ang) * 4.5, 8 + Math.sin(ang) * 4.5, lite); }
     sp.disc(8, 8, 2, lite);
-  } else if (opts.texture === 'swirl') {      // clone / mirror: a soft inner ring
+  } else if (opts.texture === 'swirl') {      // clone / mirror: a highlight running the ring
     sp.ring(8, 8, r - 2, r - 3.2, lite);
     sp.disc(8, 8, 1.8, lite);
-  } else if (opts.texture === 'cross') {      // heal: a plus
-    sp.rect(7, 4, 2, 8, lite); sp.rect(4, 7, 8, 2, lite);
-  } else if (opts.texture === 'flake') {      // freeze: a six-point flake
+    const ang = i * Math.PI / 2; sp.plot(8 + Math.cos(ang) * (r - 2.6), 8 + Math.sin(ang) * (r - 2.6), '#ffffff');
+  } else if (opts.texture === 'cross') {      // heal: a plus that pulses
+    const g = (i % 2) ? 1 : 0;
+    sp.rect(7, 4 - g, 2, 8 + 2 * g, lite); sp.rect(4 - g, 7, 8 + 2 * g, 2, lite);
+  } else if (opts.texture === 'flake') {      // freeze: a six-point flake, twinkling
     sp.rect(7, 3, 2, 10, lite); sp.rect(3, 7, 10, 2, lite);
     sp.plot(5,5,lite); sp.plot(10,10,lite); sp.plot(10,5,lite); sp.plot(5,10,lite);
-  } else if (opts.texture === 'grave') {      // graveyard: little headstones
+    sp.plot([5, 10, 10, 5][i % 4], [5, 5, 10, 10][i % 4], '#ffffff');
+  } else if (opts.texture === 'grave') {      // graveyard: headstones and a rising wisp
     sp.rect(5, 6, 2, 4, lite); sp.rect(9, 7, 2, 4, lite); sp.plot(8, 5, lite);
-  } else if (opts.texture === 'vine') {       // vines: twisting strands
-    for (const [x,y] of [[5,5],[6,7],[7,9],[8,11],[10,6],[11,8],[9,4]]) sp.plot(x, y, lite);
-    for (const [x,y] of [[6,6],[7,8],[8,10],[10,7]]) sp.plot(x, y, dark);
+    sp.plot(7, rise(11, i, 2, 3, 11), '#ffffff');
+  } else if (opts.texture === 'vine') {       // vines: strands swaying
+    const s = (i % 2) ? 1 : 0;
+    for (const [x,y] of [[5,5],[6,7],[7,9],[8,11],[10,6],[11,8],[9,4]]) sp.plot(x + (y % 2 ? s : -s), y, lite);
+    for (const [x,y] of [[6,6],[7,8],[8,10],[10,7]]) sp.plot(x + (y % 2 ? s : -s), y, dark);
   } else if (opts.texture === 'stone') {      // royale delivery: crate slats
     sp.hline(4, 11, 6, dark); sp.hline(4, 11, 9, dark); sp.vline(8, 4, 11, dark);
   }
   return sp;
 }
-save(zone('poison', '#4f8a34', { texture:'bubbles' }), 'spells', 'poison');
-save(zone('rage', '#d94f9c', { texture:'sparks' }), 'spells', 'rage');
-save(zone('clone', '#3fd3e0', { texture:'swirl' }), 'spells', 'clone');
-save(zone('mirror', '#b07fd8', { texture:'swirl' }), 'spells', 'mirror');
-save(zone('heal', '#4fb063', { texture:'cross' }), 'spells', 'heal');
-save(zone('freeze', '#8fd0ee', { texture:'flake' }), 'spells', 'freeze');
-save(zone('graveyard', '#7a5a8a', { texture:'grave' }), 'spells', 'graveyard');
-save(zone('vines', '#5fae4f', { texture:'vine' }), 'spells', 'vines');
+const zoneAnim = (name, col, opts, nf) => save(Sprite.sheet(Array.from({ length: nf }, (_, i) => zone(name, col, opts, i))), 'spells', name);
+zoneAnim('poison', '#4f8a34', { texture:'bubbles' }, 4);
+zoneAnim('rage', '#d94f9c', { texture:'sparks' }, 4);
+zoneAnim('clone', '#3fd3e0', { texture:'swirl' }, 4);
+zoneAnim('mirror', '#b07fd8', { texture:'swirl' }, 4);
+zoneAnim('heal', '#4fb063', { texture:'cross' }, 2);
+zoneAnim('freeze', '#8fd0ee', { texture:'flake' }, 4);
+zoneAnim('graveyard', '#7a5a8a', { texture:'grave' }, 4);
+zoneAnim('vines', '#5fae4f', { texture:'vine' }, 2);
 save(zone('royale-delivery', '#c0a06a', { texture:'stone' }), 'spells', 'royale-delivery');
 
 { // Fireball — concentric hot core
@@ -391,64 +405,150 @@ adopt('zap.png', 'spells', 'zap');   // hand-drawn, not generated
 // ============================ EFFECTS ========================================
 // Perfect rings and discs for everything the game flashes on impact.
 const eff = (name, fn) => { const sp = new Sprite(); fn(sp); save(sp, 'effects', name); };
-eff('explosion-burst', sp => { sp.disc(8,8,7,'#8f2a06'); sp.disc(8,8,5.6,'#ff4500'); sp.disc(8,8,3.4,'#ffb03a'); sp.disc(8,8,1.6,'#ffe680'); });
-eff('explosion-gray',  sp => { sp.disc(8,8,7,'#4a4d52'); sp.disc(8,8,5.6,'#767a82'); sp.disc(8,8,3.4,'#a8adb5'); sp.disc(8,8,1.6,'#d5d9de'); });
-eff('shockwave',       sp => { sp.ring(8,8,7,5.6,'#5b6c7e'); sp.ring(8,8,6.4,5.6,'#ffffff'); sp.ring(8,8,3.6,2.6,'#8fa3b6'); });
+// Animated: `n` frames stacked downward into one sheet; fn(sp, i, n) draws frame i.
+const frames = (nf, fn) => Array.from({ length: nf }, (_, i) => { const sp = new Sprite(); fn(sp, i, nf); return sp; });
+const effAnim = (name, nf, fn) => save(Sprite.sheet(frames(nf, fn)), 'effects', name);
+const projAnim = (name, nf, fn) => save(Sprite.sheet(frames(nf, fn)), 'projectiles', name);
+// A blast: swells from a hot core, throws flecks, then smokes out (4 frames, played by life).
+effAnim('explosion-burst', 4, (sp, i) => {
+  const k = [0.55, 0.85, 1, 0.92][i];
+  sp.disc(8,8,7*k,'#8f2a06'); sp.disc(8,8,5.6*k,'#ff4500');
+  if (i < 3) { sp.disc(8,8,3.4*k,'#ffb03a'); sp.disc(8,8,1.6*k,'#ffe680'); } else { sp.disc(8,8,3.2,'#6a3a26'); }
+  if (i >= 1) for (let a = 0; a < 6; a++) { const ang = a * Math.PI / 3 + i * 0.5, rr = 6.2 + i * 0.5; sp.plot(8 + Math.cos(ang) * rr, 8 + Math.sin(ang) * rr, '#ffb03a'); }
+});
+// A puff of dust: billows out and thins to a ring.
+effAnim('explosion-gray', 4, (sp, i) => {
+  const k = [0.6, 0.85, 1, 1][i];
+  if (i < 3) { sp.disc(8,8,7*k,'#4a4d52'); sp.disc(8,8,5.6*k,'#767a82'); sp.disc(8,8,3.4*k,'#a8adb5'); sp.disc(8,8,1.6*k,'#d5d9de'); }
+  else { sp.ring(8,8,7.4,5.4,'#767a82'); sp.ring(8,8,6.4,5.4,'#a8adb5'); }
+});
+// A shockwave ring racing outward and thinning.
+effAnim('shockwave', 4, (sp, i) => {
+  const ro = [3.6, 5.2, 6.6, 7.6][i], th = [1.8, 1.6, 1.3, 1.1][i];
+  sp.ring(8,8,ro,ro-th,'#5b6c7e'); sp.ring(8,8,ro-0.5,ro-th,'#ffffff');
+  if (i === 0) sp.disc(8,8,1.6,'#8fa3b6');
+});
 // A block of ice drawn OVER a frozen unit (see drawEntityBody): pale walls, a
 // bright glint at the top-left, a couple of cracks.
-eff('frozen',          sp => { sp.rrect(2, 1, 12, 14, 3, '#8ec6ea'); sp.rrect(3, 2, 10, 12, 2, '#cdeeff');
-                               sp.vline(4, 3, 6, '#ffffff'); sp.plot(5, 3, '#ffffff'); sp.plot(6, 3, '#ffffff');
-                               sp.plot(9, 7, '#a8d8f0'); sp.plot(10, 8, '#a8d8f0'); sp.plot(10, 9, '#a8d8f0'); sp.plot(6, 11, '#a8d8f0'); sp.plot(7, 12, '#a8d8f0'); });
-eff('ice-nova',        sp => { sp.disc(8,8,7,'#4a86a8'); sp.disc(8,8,5.8,'#87cefa'); sp.disc(8,8,3,'#c8ecff');
-                               sp.vline(8,2,13,'#ffffff'); sp.hline(2,13,8,'#ffffff'); });
-eff('electric-ring',   sp => { sp.ring(8,8,7,5.4,'#6b2b9c'); sp.ring(8,8,6.4,5.4,'#d98cff');
-                               for (const [x,y] of [[8,0],[8,15],[0,8],[15,8]]) sp.plot(x,y,'#f7e6ff'); });
-eff('phantom-burst',   sp => { sp.ring(8,8,7,5.6,'#7fa8bf'); sp.ring(8,8,4,3,'#c8e4f2'); sp.disc(8,8,1.6,'#ffffff'); });
-eff('poison-cloud',    sp => { sp.disc(8,8,7,'#2f5c22'); sp.disc(8,8,6,'#4f8a34');
-                               for (const [x,y,r] of [[6,6,1.8],[10,9,1.5],[7,11,1.2]]) sp.disc(x,y,r,'#7ab84a'); });
-eff('rage-zone',       sp => { sp.disc(8,8,7,'#8a2f6b'); sp.disc(8,8,6,'#d94f9c'); sp.disc(8,8,3,'#ff8ec6'); sp.disc(8,8,1.2,'#ffc4e2'); });
-eff('heal-zone',       sp => { sp.ring(8,8,7,5.6,'#4fb063'); sp.rect(7,4,2,8,'#d8f7e0'); sp.rect(4,7,8,2,'#d8f7e0'); });
-eff('graveyard',       sp => { sp.disc(8,8,7,'#2b1140'); sp.disc(8,8,6,'#5a2a80');
-                               sp.rect(6,6,2,5,'#cfc7d8'); sp.rect(9,7,2,4,'#cfc7d8'); });
-eff('clone-zone',      sp => { sp.disc(8,8,7,'#1e6d78'); sp.disc(8,8,6,'#3fd3e0'); sp.ring(8,8,4,3,'#9df2fa'); sp.disc(8,8,1.4,'#ffffff'); });
-eff('chain-lightning', sp => { for (const [x,y] of [[1,10],[2,9],[3,8],[4,7],[5,8],[6,9],[7,8],[8,7],[9,6],[10,7],[11,8],[12,7],[13,6],[14,5]]) sp.plot(x,y,'#4f9bff');
-                               for (const [x,y] of [[3,8],[6,9],[9,6],[12,7]]) sp.plot(x,y,'#eaffff'); });
+// The ice block twinkles: its glint moves.
+effAnim('frozen', 3, (sp, i) => {
+  sp.rrect(2, 1, 12, 14, 3, '#8ec6ea'); sp.rrect(3, 2, 10, 12, 2, '#cdeeff');
+  sp.vline(4, 3, 6, '#ffffff'); sp.plot(5, 3, '#ffffff'); sp.plot(6, 3, '#ffffff');
+  sp.plot(9, 7, '#a8d8f0'); sp.plot(10, 8, '#a8d8f0'); sp.plot(10, 9, '#a8d8f0'); sp.plot(6, 11, '#a8d8f0'); sp.plot(7, 12, '#a8d8f0');
+  sp.plot([11, 4, 8][i], [4, 12, 9][i], '#ffffff');
+});
+// The ice nova bursts outward (played by life).
+effAnim('ice-nova', 4, (sp, i) => {
+  const k = [0.45, 0.75, 1, 1][i];
+  sp.disc(8,8,7*k,'#4a86a8'); sp.disc(8,8,5.8*k,'#87cefa'); sp.disc(8,8,3*k,'#c8ecff');
+  if (i >= 2) { sp.vline(8,2,13,'#ffffff'); sp.hline(2,13,8,'#ffffff'); }
+  if (i === 3) { sp.plot(4,4,'#ffffff'); sp.plot(11,4,'#ffffff'); sp.plot(4,11,'#ffffff'); sp.plot(11,11,'#ffffff'); }
+});
+// The electric ring: its sparks run round the rim and the current jitters inside.
+effAnim('electric-ring', 4, (sp, i) => {
+  sp.ring(8,8,7,5.4,'#6b2b9c'); sp.ring(8,8,6.4,5.4,'#d98cff');
+  for (let a = 0; a < 4; a++) { const ang = a * Math.PI / 2 + i * Math.PI / 8; sp.plot(8 + Math.cos(ang) * 7.4, 8 + Math.sin(ang) * 7.4, '#f7e6ff'); }
+  for (let a = 0; a < 3; a++) { const ang = a * 2.1 + i * 0.9; sp.plot(8 + Math.cos(ang) * 3, 8 + Math.sin(ang) * 3, '#f7e6ff'); }
+});
+// The phantom burst: a spectral ring spreading (played by life).
+effAnim('phantom-burst', 4, (sp, i) => {
+  const ro = [3.5, 5, 6.3, 7.2][i];
+  sp.ring(8,8,ro,ro-1.4,'#7fa8bf'); sp.ring(8,8,ro-0.5,ro-1.4,'#c8e4f2');
+  if (i < 2) sp.disc(8,8,1.6,'#ffffff'); else sp.ring(8,8,ro-2.6,ro-3.4,'#c8e4f2');
+});
+// Poison: the bubbles rise through the cloud (loops).
+effAnim('poison-cloud', 4, (sp, i) => {
+  sp.disc(8,8,7,'#2f5c22'); sp.disc(8,8,6,'#4f8a34');
+  for (const [x,y0,r] of [[6,6,1.8],[10,9,1.5],[8,12,1.2]]) sp.disc(x, rise(y0, i, 2, 3, 12), r, '#7ab84a');
+});
+// Rage: the core throbs (loops).
+effAnim('rage-zone', 4, (sp, i) => {
+  sp.disc(8,8,7,'#8a2f6b'); sp.disc(8,8,6,'#d94f9c'); sp.disc(8,8,3 + [0, 0.8, 1.4, 0.8][i],'#ff8ec6'); sp.disc(8,8,1.2 + [0, 0.4, 0.8, 0.4][i],'#ffc4e2');
+});
+// Heal: sparkles drift up past the cross (loops).
+effAnim('heal-zone', 4, (sp, i) => {
+  sp.ring(8,8,7,5.6,'#4fb063'); sp.rect(7,4,2,8,'#d8f7e0'); sp.rect(4,7,8,2,'#d8f7e0');
+  sp.plot(4, rise(12, i, 2, 4, 11), '#ffffff'); sp.plot(12, rise(9, i, 2, 4, 11), '#ffffff');
+});
+// The graveyard: a wisp rises from the headstones (loops).
+effAnim('graveyard', 4, (sp, i) => {
+  sp.disc(8,8,7,'#2b1140'); sp.disc(8,8,6,'#5a2a80');
+  sp.rect(6,6,2,5,'#cfc7d8'); sp.rect(9,7,2,4,'#cfc7d8');
+  const y = rise(11, i, 2, 3, 11); sp.plot(8, y, '#e9e4f2'); sp.plot(8, y + 1, '#b9aecb');
+});
+// Clone: a highlight chases round the inner ring (loops).
+effAnim('clone-zone', 4, (sp, i) => {
+  sp.disc(8,8,7,'#1e6d78'); sp.disc(8,8,6,'#3fd3e0'); sp.ring(8,8,4,3,'#9df2fa'); sp.disc(8,8,1.4,'#ffffff');
+  const ang = i * Math.PI / 2; sp.plot(8 + Math.cos(ang) * 3.5, 8 + Math.sin(ang) * 3.5, '#ffffff');
+});
+// The bolt: two frames of zigzag, the second mirrored, so the current crackles.
+effAnim('chain-lightning', 2, (sp, i) => {
+  for (const [x,y] of [[1,10],[2,9],[3,8],[4,7],[5,8],[6,9],[7,8],[8,7],[9,6],[10,7],[11,8],[12,7],[13,6],[14,5]]) sp.plot(x, i ? 15 - y : y, '#4f9bff');
+  for (const [x,y] of [[3,8],[6,9],[9,6],[12,7]]) sp.plot(x, i ? 15 - y : y, '#eaffff');
+});
 eff('spin-sweep',      sp => { sp.ring(8,8,7,5.6,'#ffe3b8'); for (let x=8;x<16;x++) sp.clearPx(x, 8);
                                sp.rect(11,4,3,2,'#cfd8de'); sp.rect(12,6,1,2,'#8a6033'); });
-eff('death-bomb',      sp => { sp.disc(8,9,5.6,'#101216'); sp.disc(8,9,4.4,'#2b2f36'); sp.disc(6,7,1.2,'#4a4e55');
-                               sp.plot(12,3,'#6b5a2e'); sp.disc(13,2,1.4,'#ffb63c'); });
-eff('evo-gem',         sp => { for (let y=0;y<16;y++) for (let x=0;x<16;x++) { const d=Math.abs(x-7.5)+Math.abs(y-7.5);
-                               if (d<=7) sp.plot(x,y,'#4a1273'); if (d<=5.5) sp.plot(x,y,'#c45cff'); if (d<=2.5) sp.plot(x,y,'#f0c4ff'); } });
-eff('elixir-drop',     sp => { for (let y=0;y<16;y++) for (let x=0;x<16;x++) { const d=Math.abs(x-7.5)+Math.abs(y-7.5);
-                               if (d<=6) sp.plot(x,y,'#4a1152'); if (d<=4.5) sp.plot(x,y,'#e05fe8'); if (d<=2) sp.plot(x,y,'#f7b8fb'); } });
+// The bomb's fuse sputters (loops).
+effAnim('death-bomb', 2, (sp, i) => {
+  sp.disc(8,9,5.6,'#101216'); sp.disc(8,9,4.4,'#2b2f36'); sp.disc(6,7,1.2,'#4a4e55');
+  sp.plot(12,3,'#6b5a2e'); sp.disc(13,2,i ? 2 : 1.4, i ? '#ffd24d' : '#ffb63c');
+});
+// The evolution gem glitters (loops).
+effAnim('evo-gem', 3, (sp, i) => {
+  for (let y=0;y<16;y++) for (let x=0;x<16;x++) { const d=Math.abs(x-7.5)+Math.abs(y-7.5);
+    if (d<=7) sp.plot(x,y,'#4a1273'); if (d<=5.5) sp.plot(x,y,'#c45cff'); if (d<=2.5) sp.plot(x,y,'#f0c4ff'); }
+  sp.plot([5, 10, 7][i], [6, 5, 10][i], '#ffffff');
+});
+// The elixir drop: a highlight slides down it (loops).
+effAnim('elixir-drop', 3, (sp, i) => {
+  for (let y=0;y<16;y++) for (let x=0;x<16;x++) { const d=Math.abs(x-7.5)+Math.abs(y-7.5);
+    if (d<=6) sp.plot(x,y,'#4a1152'); if (d<=4.5) sp.plot(x,y,'#e05fe8'); if (d<=2) sp.plot(x,y,'#f7b8fb'); }
+  sp.plot(6, 4 + i * 2, '#ffffff'); sp.plot(5, 5 + i * 2, '#ffe6ff');
+});
+// Vines wrapped round whatever the Vines spell caught - drawn OVER the unit or
+// tower at its size (see drawVines). Two strands with leaves, swaying.
+effAnim('vined', 2, (sp, i) => {
+  const g1 = '#3f8a34', g2 = '#6cc25a', s = i ? 1 : 0;
+  for (let y = 0; y < 16; y++) { sp.plot(2 + Math.round(3.5 + 3.5 * Math.sin(y * 0.55 + s)), y, g1); sp.plot(7 + Math.round(3.5 + 3.5 * Math.sin(y * 0.55 + 2.2 + s)), y, g1); }
+  for (const [x, y] of [[3, 3], [11, 6], [5, 9], [12, 12], [8, 14]]) { sp.plot(x + s, y, g2); sp.plot(x + 1 + s, y - 1, g2); }
+});
 // The zap strikes are hand-drawn art, adopted whole.
 adopt('zap.png',     'effects', 'zap-strike');
 adopt('evo_zap.png', 'effects', 'zap-strike-evo');
 
 // ========================== PROJECTILES ======================================
 const proj = (name, fn) => { const sp = new Sprite(); fn(sp); save(sp, 'projectiles', name); };
-proj('bullet',       sp => { sp.disc(8,8,3.4,'#20242a'); sp.disc(8,8,2.4,'#5b636e'); sp.plot(7,7,'#9aa3ae'); });
-proj('cannonball',   sp => { sp.disc(8,8,5.4,'#0e1013'); sp.disc(8,8,4.4,'#2b3038'); sp.disc(6,6,1.4,'#4e5560'); });
-proj('fireball',     sp => { sp.disc(8,8,6,'#7a2205'); sp.disc(8,8,4.8,'#e8521a'); sp.disc(8,8,3,'#ff8c2b'); sp.disc(8,8,1.4,'#ffd24d'); });
-proj('rocket',       sp => { sp.disc(8,8,6,'#3a2716'); sp.disc(8,8,5,'#6e4a2b'); sp.disc(8,7,2.6,'#f2eede');
-                             sp.plot(7,7,'#241509'); sp.plot(9,7,'#241509'); sp.rect(7,10,3,2,'#f2eede'); });
-proj('giant-snowball', sp => { sp.disc(8,8,7,'#6f9bbd'); sp.disc(8,8,6,'#e9f6ff'); sp.disc(10,10,2,'#cfe4f5'); sp.disc(5,5,2,'#ffffff'); });
+// Shots spin as they fly: the glint runs round each one.
+projAnim('bullet', 2, (sp, i) => { sp.disc(8,8,3.4,'#20242a'); sp.disc(8,8,2.4,'#5b636e'); sp.plot(i ? 9 : 7, i ? 9 : 7, '#9aa3ae'); });
+projAnim('cannonball', 3, (sp, i) => { sp.disc(8,8,5.4,'#0e1013'); sp.disc(8,8,4.4,'#2b3038'); sp.disc([6, 9.5, 10][i], [6, 5.5, 9][i], 1.4, '#4e5560'); });
+projAnim('fireball', 3, (sp, i) => {
+  sp.disc(8,8,6,'#7a2205'); sp.disc(8,8,4.8,'#e8521a'); sp.disc(8,8,3,'#ff8c2b'); sp.disc(8,8,1.4,'#ffd24d');
+  for (let a = 0; a < 5; a++) { const ang = a * 1.257 + i * 0.7; sp.plot(8 + Math.cos(ang) * 6.6, 8 + Math.sin(ang) * 6.6, '#ff8c2b'); }
+});
+// The rocket's exhaust flickers; the snowball rolls.
+projAnim('rocket', 2, (sp, i) => { sp.disc(8,8,6,'#3a2716'); sp.disc(8,8,5,'#6e4a2b'); sp.disc(8,7,2.6,'#f2eede');
+                                   sp.plot(7,7,'#241509'); sp.plot(9,7,'#241509'); sp.rect(7,10,3,2,'#f2eede');
+                                   sp.plot(7, 14, i ? '#ffd24d' : '#ff8c2b'); sp.plot(8, 15, i ? '#ff8c2b' : '#ffd24d'); sp.plot(9, 14, i ? '#ffd24d' : '#ff8c2b'); });
+projAnim('giant-snowball', 3, (sp, i) => { sp.disc(8,8,7,'#6f9bbd'); sp.disc(8,8,6,'#e9f6ff');
+                                           const a = i * 2.1; sp.disc(8 + Math.cos(a) * 3, 8 + Math.sin(a) * 3, 2, '#cfe4f5'); sp.disc(8 - Math.cos(a) * 3.5, 8 - Math.sin(a) * 3.5, 2, '#ffffff'); });
 proj('firework-rocket', sp => { sp.disc(9,7,4,'#8f2f5c'); sp.disc(9,7,3,'#ff6fae'); sp.disc(9,7,1.4,'#ffffff');
                                 for (const [x,y] of [[4,12],[5,11],[6,10]]) sp.plot(x,y,'#c4457f'); });
-proj('firework-spark', sp => { sp.disc(10,6,2.6,'#ffd9ec'); sp.disc(10,6,1.2,'#ffffff');
-                               for (const [x,y] of [[4,12],[5,11],[6,10],[7,9]]) sp.plot(x,y,'#ffbee0'); });
-proj('dynamite',     sp => { sp.rrect(5,3,6,11,2,'#6b1010'); sp.rrect(6,4,4,9,1,'#cc2b2b'); sp.rect(6,4,4,2,'#f0e3b0');
-                             sp.plot(11,2,'#6b5a2e'); sp.disc(12,1,1.3,'#ffcf3c'); });
+// The spark twinkles; the dynamite's fuse sputters.
+projAnim('firework-spark', 3, (sp, i) => { sp.disc(10,6,[2.6, 2, 2.4][i],'#ffd9ec'); sp.disc(10,6,[1.2, 1.6, 0.8][i],'#ffffff');
+                                           for (const [x,y] of [[4,12],[5,11],[6,10],[7,9]].slice(i % 2)) sp.plot(x,y,'#ffbee0'); });
+projAnim('dynamite', 2, (sp, i) => { sp.rrect(5,3,6,11,2,'#6b1010'); sp.rrect(6,4,4,9,1,'#cc2b2b'); sp.rect(6,4,4,2,'#f0e3b0');
+                                     sp.plot(11,2,'#6b5a2e'); sp.disc(12,1,i ? 1.8 : 1.3, i ? '#ffe680' : '#ffcf3c'); });
 proj('axe',          sp => { sp.rect(2,7,9,2,'#7a5228'); sp.rect(2,7,3,2,'#3c280f');
                              sp.rrect(10,4,5,8,2,'#cfd8de'); sp.rect(9,6,2,4,'#98a3ac'); });
-proj('the-log',      sp => { sp.rrect(0,5,16,6,3,'#3c220c'); sp.rrect(1,6,14,4,2,'#8b4513');
-                             for (const x of [3,7,11]) sp.vline(x,6,9,'#6b4423'); sp.hline(2,13,6,'#b07a3c'); });
-proj('the-log-enemy',sp => { sp.rrect(0,5,16,6,3,'#2e0606'); sp.rrect(1,6,14,4,2,'#8b0000');
-                             for (const x of [3,7,11]) sp.vline(x,6,9,'#6b1212'); sp.hline(2,13,6,'#b03434'); });
-proj('barbarian-barrel', sp => { sp.rrect(1,3,14,10,4,'#3c220c'); sp.rrect(2,4,12,8,3,'#9c6b3a');
-                                 sp.vline(5,4,11,'#6b4423'); sp.vline(10,4,11,'#6b4423'); sp.hline(3,12,5,'#c08a52'); });
-proj('goblin-barrel', sp => { sp.rrect(3,2,10,12,3,'#5c3a18'); sp.rrect(4,3,8,10,2,'#8a5a2c');
-                              sp.hline(3,12,6,'#5c3a18'); sp.hline(3,12,10,'#5c3a18'); sp.vline(6,4,9,'#a8703f'); });
+// Logs and barrels roll: their bands walk across as they turn.
+projAnim('the-log', 3, (sp, i) => { sp.rrect(0,5,16,6,3,'#3c220c'); sp.rrect(1,6,14,4,2,'#8b4513');
+                                    for (const x of [3,7,11]) sp.vline(x + i,6,9,'#6b4423'); sp.hline(2,13,6,'#b07a3c'); });
+projAnim('the-log-enemy', 3, (sp, i) => { sp.rrect(0,5,16,6,3,'#2e0606'); sp.rrect(1,6,14,4,2,'#8b0000');
+                                          for (const x of [3,7,11]) sp.vline(x + i,6,9,'#6b1212'); sp.hline(2,13,6,'#b03434'); });
+projAnim('barbarian-barrel', 3, (sp, i) => { sp.rrect(1,3,14,10,4,'#3c220c'); sp.rrect(2,4,12,8,3,'#9c6b3a');
+                                             sp.vline(4 + i,4,11,'#6b4423'); sp.vline(9 + i,4,11,'#6b4423'); sp.hline(3,12,5,'#c08a52'); });
+projAnim('goblin-barrel', 3, (sp, i) => { sp.rrect(3,2,10,12,3,'#5c3a18'); sp.rrect(4,3,8,10,2,'#8a5a2c');
+                                          sp.hline(3,12,5 + i,'#5c3a18'); sp.hline(3,12,9 + i,'#5c3a18'); sp.vline(6,4,9,'#a8703f'); });
 proj('arrows',       sp => { for (const x of [3,8,13]) { sp.vline(x,2,11,'#6b4423');
                              sp.plot(x-1,12,'#e2e2e2'); sp.plot(x,12,'#e2e2e2'); sp.plot(x+1,12,'#e2e2e2'); sp.plot(x,13,'#e2e2e2'); } });
 

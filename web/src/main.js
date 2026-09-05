@@ -983,6 +983,7 @@ class Main {
         // onto the larger backing store. Sprites snap to backing pixels (1/R logical).
         ctx.setTransform(this.R, 0, 0, this.R, 0, 0);
         this.px.unit = 1 / this.R;
+        this.px.clock = Date.now();            // one animation clock for every sprite this frame
         this.arenaGrass();
 
         if (this.state === State.RESUME_PROMPT) {
@@ -1626,7 +1627,7 @@ class Main {
                     const lifeK = Math.max(0, Math.min(1, (p.life || 1) / 6)); // 1 → 0 as it fades
                     const burstWash = (!p.isGray && p.flashCol && p.flashCol !== "#ff4500") ? [p.flashCol, 0.6] : null;
                     ctx.globalAlpha = 0.85 * (0.4 + 0.6 * lifeK);
-                    const burst = this.px.draw(ctx, p.isGray ? "effects/explosion-gray" : "effects/explosion-burst", p.x, p.y, Math.round(size / 4) * 4, 0, burstWash);
+                    const burst = this.px.draw(ctx, p.isGray ? "effects/explosion-gray" : "effects/explosion-burst", p.x, p.y, Math.round(size / 4) * 4, 0, burstWash, Math.floor((1 - lifeK) * 3.99));
                     ctx.globalAlpha = 1;
                     if (burst) {
                         // drawn
@@ -1690,7 +1691,7 @@ class Main {
                     // over its last second.
                     const zone = p.poison ? "spells/poison" : p.graveyard ? "spells/graveyard" : p.isClone ? "spells/clone" : p.isFrost ? "spells/freeze" : "effects/ice-nova";
                     ctx.globalAlpha = p.isFrost ? 0.7 * Math.min(1, p.life / 60) : 0.7;
-                    if (!this.px.draw(ctx, zone, p.x, p.y, p.rad * 2)) {
+                    if (!this.px.draw(ctx, zone, p.x, p.y, p.rad * 2, 0, null, p.isIceNova ? Math.floor((1 - p.life / 5) * 3.99) : undefined)) {
                         ctx.fillStyle = p.poison ? "rgba(0,128,0,0.6)" : p.graveyard ? "rgba(0,0,139,0.6)" : p.isClone ? "rgba(0,255,255,0.6)" : "rgba(135,206,250,0.9)";
                         ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.fill();
                     }
@@ -1718,9 +1719,9 @@ class Main {
 
                 if (p.chainTargets) {
                     // The bolt in PIXELS: the chain-lightning sprite tiled along the line
-                    // from each body to the next, every tile flipped on alternate frames
-                    // so the zigzag crackles, and the electric ring flickering on each
-                    // zapped body. (The Electro Wizard, the Electro Spirit, the Tesla.)
+                    // from each body to the next, each tile on its own frame of the
+                    // two-frame sheet so the zigzag crackles, and the electric ring
+                    // flickering on each zapped body. (Electro Wizard, Electro Spirit, Tesla.)
                     const tick = Math.floor(Date.now() / 55);
                     for (let i = 0; i < p.chainTargets.length - 1; i++) {
                         let a = p.chainTargets[i], b = p.chainTargets[i + 1];
@@ -1732,8 +1733,8 @@ class Main {
                         let dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
                         const ang = Math.atan2(dy, dx), tiles = Math.max(1, Math.round(len / 26));
                         for (let s = 0; s < tiles; s++) {
-                            const f = (s + 0.5) / tiles, flip = ((s + tick + i) % 2) ? Math.PI : 0;
-                            if (!this.px.draw(ctx, "effects/chain-lightning", ax + dx * f, ay + dy * f, 32, ang + flip)) {
+                            const f = (s + 0.5) / tiles;
+                            if (!this.px.draw(ctx, "effects/chain-lightning", ax + dx * f, ay + dy * f, 32, ang, null, tick + s + i)) {
                                 ctx.strokeStyle = "#4f9bff"; ctx.lineWidth = 3;
                                 ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
                                 break;
@@ -2355,6 +2356,7 @@ class Main {
                 // Until the art loads: a plain team-coloured block.
                 this.drawRoundRect(x - r, y - r, r * 2, r * 2, 8, true, false); ctx.stroke();
             }
+            if (e.rt > 0) this.drawVines(x, y, S, e.rt);          // caught by Vines
             ctx.lineWidth = 1;
         } else if (e instanceof Building) {
             let s = radius;
@@ -2406,19 +2408,21 @@ class Main {
             // Drawn larger than its hitbox, with its visual centre ABOVE e.y — the curse
             // ring, the deploy clock and the health bar all use this same offset.
             let R = radius * 1.3, ey = y - R * 0.35;
-            if (!this.px.draw(ctx, isFriend ? "troops/balloon" : "troops/balloon-red", x, ey, 48, 0, wash)) {
+            if (!this.px.draw(ctx, isFriend ? "troops/balloon" : "troops/balloon-red", x, ey, 48, 0, wash, this.bobFrame(e, card))) {
                 ctx.fillStyle = isFriend ? "#4f8fe0" : "#e05555";
                 ctx.beginPath(); ctx.arc(x, ey, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
             }
             if (e.fr > 0) this.drawIceBlock(x, ey, 48, e.fr);
+            if (e.rt > 0) this.drawVines(x, ey, 48, e.rt);
             ctx.beginPath(); // keep the generic stroke below happy (no-op path)
         } else {
             // Every other troop: its own sprite at 2x. The art already carries each
             // unit's relative size, so every troop shares one pixel scale.
-            if (!this.px.draw(ctx, this.px.troop(e.c ? e.c.n : name), x, y, 32, 0, wash)) {
+            if (!this.px.draw(ctx, this.px.troop(e.c ? e.c.n : name), x, y, 32, 0, wash, this.bobFrame(e, card))) {
                 ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
             }
             if (e instanceof Troop && e.fr > 0) this.drawIceBlock(x, y, 32, e.fr);
+            if (e.rt > 0) this.drawVines(x, y, 32, e.rt);
         }
         ctx.globalAlpha = 1;
         ctx.lineWidth = 1;
@@ -3287,6 +3291,26 @@ class Main {
             p.poison || p.graveyard || p.brownArea || p.isClone || p.isVines || p.isFrost || p.chainTargets || p.shockBeams || p.isShockwave || p.isPhantom || p.isElectricRing || p.isIceCrystal || p.isDynamite || p.isRage || p.isBomb);
     }
 
+    // Which frame of a troop's walk-bob sheet to show: it bobs while it moves (or
+    // flies), stands still otherwise, and never bobs on a card. Each unit has its
+    // own phase so a crowd doesn't bounce in step.
+    bobFrame(e, card) {
+        if (card || !(e instanceof Troop)) return 0;
+        const moving = e.fly || e.sjT > 0 || Math.hypot(e.vx || 0, e.vy || 0) > 0.02;
+        if (!moving) return 0;
+        if (e._bob === undefined) e._bob = Math.floor(Math.random() * 1000);
+        return Math.floor((this.px.clock + e._bob) / 150);
+    }
+
+    // Whatever the Vines caught - a troop, a building, a TOWER - wears the vines:
+    // two swaying strands drawn over it at its own size, falling away at the end.
+    drawVines(x, y, size, rt) {
+        const a = ctx.globalAlpha;
+        ctx.globalAlpha = a * 0.9 * Math.min(1, rt / 15);
+        this.px.draw(ctx, "effects/vined", x, y, size);
+        ctx.globalAlpha = a;
+    }
+
     // A frozen unit is encased in a block of ice, over its icy wash; the block
     // melts away over the last two thirds of a second of the freeze.
     drawIceBlock(x, y, size, fr) {
@@ -3361,7 +3385,7 @@ class Main {
             let flick = (Math.floor(Date.now() / 45) % 4 === 0) ? 0.55 : 1;
             ctx.save();
             ctx.globalAlpha = 0.85 * fade * flick;
-            if (!this.px.draw(ctx, "effects/electric-ring", p.x, p.y, Math.round(r / 2) * 4, 0, col !== "#d98cff" ? [col, 0.6] : null)) {
+            if (!this.px.draw(ctx, "effects/electric-ring", p.x, p.y, Math.round(r / 2) * 4, 0, col !== "#d98cff" ? [col, 0.6] : null, Math.floor(prog * 3.99))) {
                 ctx.strokeStyle = col; ctx.lineWidth = 2.5 * fade + 1;
                 ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
             }
@@ -3401,7 +3425,7 @@ class Main {
             let fade = 1 - prog;
             ctx.save();
             ctx.globalAlpha = 0.8 * fade;
-            if (!this.px.draw(ctx, "effects/phantom-burst", p.x, p.y, Math.round(r / 2) * 4)) {
+            if (!this.px.draw(ctx, "effects/phantom-burst", p.x, p.y, Math.round(r / 2) * 4, 0, null, Math.floor(prog * 3.99))) {
                 ctx.strokeStyle = "#9ff5b6"; ctx.lineWidth = 3.5 * fade + 1;
                 ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
             }
@@ -3417,7 +3441,7 @@ class Main {
             let fade = 1 - prog;
             ctx.save();
             ctx.globalAlpha = 0.85 * fade;
-            if (!this.px.draw(ctx, "effects/shockwave", p.x, p.y, Math.round(r / 2) * 4)) {
+            if (!this.px.draw(ctx, "effects/shockwave", p.x, p.y, Math.round(r / 2) * 4, 0, null, Math.floor(prog * 3.99))) {
                 ctx.strokeStyle = "#b9a98e"; ctx.lineWidth = 7 * fade + 2;
                 ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
             }
@@ -3685,10 +3709,14 @@ class Main {
                 const top = p.y - S + 9, left = p.x - S / 2;
                 ctx.save();
                 ctx.imageSmoothingEnabled = false;
+                // If the art is a sheet (frames stacked downward, one square cell each)
+                // the strike plays through its frames as it crackles.
+                const cell = im.width, nf = Math.max(1, Math.round(im.height / cell));
+                const fy = (Math.floor(Date.now() / 60) % nf) * cell;
                 const bolt = (ox, scale, alpha) => {
                     const w = S * scale, h = S * k * scale;
                     ctx.globalAlpha = alpha * flick;
-                    ctx.drawImage(im, 0, 0, im.width, im.height * k,
+                    ctx.drawImage(im, 0, fy, cell, cell * k,
                         this.px.q(left + ox + (S - w) / 2), this.px.q(top + (S - S * scale)), w, h);
                 };
                 if (this.gfxHigh && k >= 1) {
