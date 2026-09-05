@@ -1209,9 +1209,11 @@ export default class GameEngine {
         } else if (c.n === "Electro Wizard") {
             this.ents.push(new Troop(tm, x, y, c));
             // Spawn zap (real L11): 192 damage and a 0.5s stun to everything within
-            // 3 tiles, delivered as a real zap strike so it reads like the spell.
+            // 3 tiles, delivered as a real zap strike - the same length as the Zap
+            // spell (20 ticks) so the bolt plays its whole drop-in / flicker / fork
+            // animation instead of flashing for a few frames.
             const z = new Proj(x, y, x, y, null, 0, true, 90, 192, tm, false);
-            z.asStun(30); z.tightArea = true; z.asSpellDrop("zap", "#7fdcff", 12);
+            z.asStun(30); z.tightArea = true; z.asSpellDrop("zap", "#7fdcff", 20);
             this.projs.push(z);
         } else if (c.n === "Mega Knight") {
             this.ents.push(new Troop(tm, x, y, c));

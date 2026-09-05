@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.6.6** — here's the whole road there.
+We're currently on **26.6.7** — here's the whole road there.
 
 ---
 
@@ -155,6 +155,9 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
   ten arrows to a wave, and the arrows **stay stuck in the ground** for the rest of the second before they all fade
   out together, instead of vanishing the moment they land. Far less dust — a faint puff for a few frames — and a
   redrawn arrow (red feathers, dark shaft, steel head) that reads as an arrow instead of a stick with white ends.
+- **26.6.7** — **The Electro Wizard's spawn zap is animated.** It already used the hand-drawn zap, but only for a
+  few frames — a flash. It now runs the same length as the Zap spell, so the bolt drops in, flickers and twitches,
+  forks on High graphics, and then pops its impact ring like the real thing.
 
 ---
 
