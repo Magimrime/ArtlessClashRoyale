@@ -2391,9 +2391,11 @@ class Main {
                 if (cover > 0.02) { ctx.globalAlpha = a0 * cover; drawn = this.px.draw(ctx, "buildings/tesla-covered", x, y, S) || drawn; }
                 ctx.globalAlpha = a0;
             } else if (bn === "Cannon") {
-                // The sprite's barrel points up; the base is round, so the whole thing
-                // turns to aim without the rotation showing on the base.
-                drawn = this.px.draw(ctx, "buildings/cannon", x, y, S, e.dispAngle + Math.PI / 2, wash);
+                // Two layers: the four-legged mount stays put, and the big turret on it
+                // turns to aim (its barrel points up in the art).
+                drawn = this.px.draw(ctx, "buildings/cannon-mount", x, y, S, 0, wash);
+                drawn = this.px.draw(ctx, "buildings/cannon-turret", x, y, S, e.dispAngle + Math.PI / 2, wash) || drawn;
+                if (!drawn) drawn = this.px.draw(ctx, "buildings/cannon", x, y, S, e.dispAngle + Math.PI / 2, wash);
             } else if (sprite) {
                 drawn = this.px.draw(ctx, "buildings/" + sprite, x, y, S, 0, wash);
                 if (drawn && bn === "Inferno Tower" && e.atk) {

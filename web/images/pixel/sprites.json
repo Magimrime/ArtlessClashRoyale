@@ -82,6 +82,8 @@
  "buildings": [
   "bomb-tower",
   "cannon",
+  "cannon-mount",
+  "cannon-turret",
   "crate",
   "elixir-collector",
   "inferno-tower",

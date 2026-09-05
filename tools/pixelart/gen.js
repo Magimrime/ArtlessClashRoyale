@@ -303,14 +303,29 @@ function block(sp, col, s = 7, r = 3) {
   sp.rrect(8-s+2, 8-s+2, s*2-4, s*2-4, r-1, col);
   return sp;
 }
-{ // Cannon — round wooden base with a barrel out the top
-  const sp = new Sprite();
-  sp.disc(8, 9, 6.6, '#4a2a10'); sp.disc(8, 9, 5.6, '#8a5c33');
-  sp.hline(3, 12, 7, '#6b4423'); sp.hline(3, 12, 11, '#6b4423');
-  sp.rect(7, 1, 2, 6, '#26282c');            // barrel
-  sp.rect(6, 1, 4, 2, '#4a4e55');            // muzzle
-  sp.disc(8, 9, 2.4, '#4a4e55'); sp.disc(8, 9, 1.2, '#26282c');
-  save(sp, 'buildings', 'cannon');
+{ // Cannon — two layers: a MOUNT that stays put (an iron hub on four splayed
+  // legs with feet at the corners) and a big TURRET that turns on it (a round
+  // iron body with a thick barrel out the top). The field draws the mount, then
+  // the turret rotated to aim; the card shows the two assembled.
+  const mount = new Sprite();
+  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    for (let k = 2; k <= 6; k++) { mount.plot(8 + sx * k, 8 + sy * k, '#3a3e45'); mount.plot(8 + sx * k - (sx > 0 ? 0 : 1) + (sx > 0 ? 1 : 0), 8 + sy * k, '#3a3e45'); }
+    mount.rect(8 + sx * 6 - 1 + (sx > 0 ? 1 : -1), 8 + sy * 6 - 1 + (sy > 0 ? 1 : -1), 2, 2, '#26282c');   // foot
+  }
+  mount.disc(8, 8, 4.2, '#26282c'); mount.disc(8, 8, 3.2, '#4a4e55'); mount.disc(8, 8, 1.4, '#6b7079');
+
+  const turret = new Sprite();
+  turret.rect(6, 0, 4, 9, '#26282c');                         // barrel, up
+  turret.vline(7, 1, 8, '#4a4e55');                           // its lit edge
+  turret.rect(5, 0, 6, 2, '#4a4e55'); turret.hline(6, 9, 0, '#6b7079');   // muzzle band
+  turret.disc(8, 10, 5.4, '#26282c'); turret.disc(8, 10, 4.4, '#4a4e55');  // body
+  turret.disc(7, 9, 1.8, '#6b7079'); turret.disc(8, 10, 1.2, '#26282c');   // hub
+  // Assemble the card's picture from the raw layers BEFORE saving (saving adds
+  // each layer's own bevel colours), so the composite stays within eight.
+  const full = new Sprite(); paint(full, mount); paint(full, turret);
+  save(mount, 'buildings', 'cannon-mount');
+  save(turret, 'buildings', 'cannon-turret');
+  save(full, 'buildings', 'cannon');
 }
 { // Tesla — rounded drum, coil post, glowing orb
   const sp = new Sprite(); block(sp, '#2d6d80', 6, 3);

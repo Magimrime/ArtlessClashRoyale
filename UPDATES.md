@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.7.4** — here's the whole road there.
+We're currently on **26.7.5** — here's the whole road there.
 
 ---
 
@@ -199,6 +199,8 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
   through the gas instead of big bubbles.
 - **26.7.4** — **More poison**: twice the specks, and the ones near the middle keep climbing past the top edge of
   the gas before they wrap, so the cloud visibly breathes out over its rim.
+- **26.7.5** — **The Cannon in two parts**: a four-legged iron mount that stays put, and a big turret with a thick
+  barrel that turns on it to aim. The card shows the two assembled.
 
 ---
 
