@@ -68,38 +68,7 @@ function writeManifest() {
 }
 process.on('exit', writeManifest);
 
-// Every generated texture carries at least four colours and never more than
-// eight: a bevel of light along its top-left edge and shadow along its
-// bottom-right, each shade derived from the pixel's own colour, and - for
-// anything still flat after that - a lighter upper band and a darker lower one
-// inside each 16px cell. One-pixel lines keep their colour. Hand-drawn art and
-// anything tiled or recoloured later (font, UI frames, the elixir bar, map
-// tiles, card frames) never goes through this.
-const RICH = new Set(['troops', 'buildings', 'towers', 'projectiles', 'effects', 'spells']);
-const rgbKey = c => require('./lib').hex(c).slice(0, 3).join(',');
-function enrich(sp) {
-  const w = sp.w, h = sp.h, src = new Uint8Array(sp.data);
-  const on = (x, y) => x >= 0 && y >= 0 && x < w && y < h && src[(y*w + x)*4 + 3] > 0;
-  const colAt = (x, y) => { const i = (y*w + x)*4; return '#' + [src[i], src[i+1], src[i+2]].map(v => v.toString(16).padStart(2, '0')).join(''); };
-  const pal = sp.palette();
-  const put = (x, y, c) => { const k = rgbKey(c); if (!pal.has(k) && pal.size >= 8) return; pal.add(k); sp.plot(x, y, c); };
-  if (pal.size < 8) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    if (!on(x, y)) continue;
-    const tl = !on(x - 1, y) || !on(x, y - 1), br = !on(x + 1, y) || !on(x, y + 1);
-    if (tl && !br) put(x, y, shade(colAt(x, y), 0.24));
-    else if (br && !tl) put(x, y, shade(colAt(x, y), -0.24));
-  }
-  if (pal.size < 4) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    if (!on(x, y) || !on(x - 1, y) || !on(x, y - 1) || !on(x + 1, y) || !on(x, y + 1)) continue;
-    const fy = (y % 16) / 16;
-    if (fy < 0.3) put(x, y, shade(colAt(x, y), 0.12));
-    else if (fy > 0.7) put(x, y, shade(colAt(x, y), -0.12));
-  }
-  return sp;
-}
-
-const save = (sp, cat, name, opts = {}) => {
-  if (RICH.has(cat) && !opts.raw) enrich(sp);
+const save = (sp, cat, name) => {
   const rel = `${cat}/${name}.png`, file = out(cat, name);
   const fresh = sp.bytes(), freshHash = sha(fresh);
   made.push({ cat, name, colours: sp.palette().size });
@@ -134,9 +103,9 @@ const HAND = path.join(__dirname, '..', '..', 'web', 'images');
 const orphaned = [];
 const adopt = (file, cat, name) => {
   const src = path.join(HAND, file), dest = out(cat, name);
-  if (fs.existsSync(src)) return save(Sprite.load(src), cat, name, { raw: true });   // hand-drawn: as-is
+  if (fs.existsSync(src)) return save(Sprite.load(src), cat, name);
   // Source gone — keep the copy already in the set rather than redrawing it.
-  if (fs.existsSync(dest)) { orphaned.push(`${cat}/${name}.png (source ${file} is missing)`); return save(Sprite.load(dest), cat, name, { raw: true }); }
+  if (fs.existsSync(dest)) { orphaned.push(`${cat}/${name}.png (source ${file} is missing)`); return save(Sprite.load(dest), cat, name); }
   orphaned.push(`${cat}/${name}.png (SKIPPED — no ${file} and nothing in the set)`);
   return null;
 };
@@ -330,8 +299,6 @@ function block(sp, col, s = 7, r = 3) {
   turret.rect(6, 1, 4, 2, '#4a4e55'); turret.hline(6, 9, 1, '#6b7079');   // muzzle band
   turret.disc(8, 9, 3.6, '#26282c'); turret.disc(8, 9, 2.6, '#4a4e55');    // body
   turret.plot(7, 8, '#6b7079'); turret.disc(8, 9, 1, '#26282c');           // hub
-  // Assemble the card's picture from the raw layers BEFORE saving (saving adds
-  // each layer's own bevel colours), so the composite stays within eight.
   const full = new Sprite(); paint(full, mount); paint(full, turret);
   save(mount, 'buildings', 'cannon-mount');
   save(turret, 'buildings', 'cannon-turret');
@@ -587,10 +554,8 @@ effAnim('clone-zone', 4, (sp, i) => {
 });
 // The bolt: two frames of zigzag, the second mirrored, so the current crackles.
 effAnim('chain-lightning', 2, (sp, i) => {
-  const Y = y => i ? 15 - y : y, D = i ? -1 : 1;
-  for (const [x,y] of [[1,10],[2,9],[3,8],[4,7],[5,8],[6,9],[7,8],[8,7],[9,6],[10,7],[11,8],[12,7],[13,6],[14,5]]) { sp.plot(x, Y(y) + D, '#2f5fc4'); sp.plot(x, Y(y), '#4f9bff'); }
-  for (const [x,y] of [[3,8],[6,9],[9,6],[12,7]]) sp.plot(x, Y(y), '#eaffff');
-  for (const [x,y] of [[4,7],[8,7],[13,6]]) sp.plot(x, Y(y), '#ffffff');
+  for (const [x,y] of [[1,10],[2,9],[3,8],[4,7],[5,8],[6,9],[7,8],[8,7],[9,6],[10,7],[11,8],[12,7],[13,6],[14,5]]) sp.plot(x, i ? 15 - y : y, '#4f9bff');
+  for (const [x,y] of [[3,8],[6,9],[9,6],[12,7]]) sp.plot(x, i ? 15 - y : y, '#eaffff');
 });
 eff('spin-sweep',      sp => { sp.ring(8,8,7,5.6,'#ffe3b8'); for (let x=8;x<16;x++) sp.clearPx(x, 8);
                                sp.rect(11,4,3,2,'#cfd8de'); sp.rect(12,6,1,2,'#8a6033'); });
