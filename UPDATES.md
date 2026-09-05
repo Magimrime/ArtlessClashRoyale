@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.7.8** — here's the whole road there.
+We're currently on **26.7.9** — here's the whole road there.
 
 ---
 
@@ -211,6 +211,8 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
 - **26.7.8** — **Simple colours again.** The automatic bevel-and-bands colour pass from 26.7.3 is gone: small
   textures were over-coloured by it. Every sprite is back to its own hand-picked palette, and the bolt is the thin
   two-colour zigzag once more.
+- **26.7.9** — Cannon: the turret's body sits on the exact centre it turns about, the four legs are identical
+  (one leg mirrored about the middle) and plain unshaded wood, and the whole cannon is drawn at 3× on the field.
 
 ---
 

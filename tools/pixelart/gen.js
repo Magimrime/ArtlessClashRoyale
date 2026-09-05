@@ -280,25 +280,29 @@ function block(sp, col, s = 7, r = 3) {
   // with a dark foot on each, and a round wooden hub with an iron pin.
   // The RACK: a big round wooden platform in the middle - wider than the turret
   // that sits on it - on four very thick beams out to the corners, a foot each.
+  // Four identical legs: one leg is drawn in the (+,+) quadrant and mirrored
+  // about the frame's centre (pixel x mirrors to 15 - x), so every leg has the
+  // same length and shape. Plain wood, no shading.
   const mount = new Sprite();
   const wood = '#8a5c33', woodD = '#5c3a18', grain = '#6b4423';
-  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-    for (let t = 3; t <= 6; t++) mount.rect(8 + sx * t - (sx < 0 ? 2 : 0), 8 + sy * t - (sy < 0 ? 2 : 0), 3, 3, wood);   // a 3px beam
-    mount.rect(8 + sx * 6 + (sx > 0 ? 0 : -2), 8 + sy * 6 + (sy > 0 ? 1 : -2), 3, 2, woodD);                       // foot
-  }
-  mount.disc(8, 8, 6.2, woodD); mount.disc(8, 8, 5.2, wood);                                                       // the platform
-  mount.ring(8, 8, 3.6, 2.8, grain);                                                                              // a ring of planks
-  mount.plot(5, 5, '#b07a3c'); mount.plot(6, 4, '#b07a3c');                                                         // lit edge
+  const leg = [];
+  for (let t = 4; t <= 7; t++) leg.push([t, t], [t + 1, t], [t, t + 1]);           // a 3px-wide diagonal band
+  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]])
+    for (const [px, py] of leg) mount.plot(sx > 0 ? 8 + px : 7 - px, sy > 0 ? 8 + py : 7 - py, wood);
+  mount.disc(8, 8, 6.4, woodD); mount.disc(8, 8, 5.4, wood);                                                       // the platform
+  mount.ring(8, 8, 3.8, 3, grain);                                                                                // a ring of planks
   mount.disc(8, 8, 1.4, '#26282c');                                                                                 // iron pin
 
   // The TURRET: smaller than the platform it turns on - a squat iron body and a
   // barrel out the top.
+  // The body sits on the frame's centre (8, 8) - the point it turns about - so
+  // it stays on the middle of the platform at every angle.
   const turret = new Sprite();
-  turret.rect(7, 1, 2, 8, '#26282c');                         // barrel, up
-  turret.vline(7, 2, 7, '#4a4e55');                           // its lit edge
-  turret.rect(6, 1, 4, 2, '#4a4e55'); turret.hline(6, 9, 1, '#6b7079');   // muzzle band
-  turret.disc(8, 9, 3.6, '#26282c'); turret.disc(8, 9, 2.6, '#4a4e55');    // body
-  turret.plot(7, 8, '#6b7079'); turret.disc(8, 9, 1, '#26282c');           // hub
+  turret.rect(7, 0, 2, 8, '#26282c');                         // barrel, up
+  turret.vline(7, 1, 6, '#4a4e55');                           // its lit edge
+  turret.rect(6, 0, 4, 2, '#4a4e55'); turret.hline(6, 9, 0, '#6b7079');   // muzzle band
+  turret.disc(8, 8, 3.6, '#26282c'); turret.disc(8, 8, 2.6, '#4a4e55');    // body, centred
+  turret.plot(7, 7, '#6b7079'); turret.disc(8, 8, 1, '#26282c');           // hub
   const full = new Sprite(); paint(full, mount); paint(full, turret);
   save(mount, 'buildings', 'cannon-mount');
   save(turret, 'buildings', 'cannon-turret');

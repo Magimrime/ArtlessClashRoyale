@@ -2391,11 +2391,13 @@ class Main {
                 if (cover > 0.02) { ctx.globalAlpha = a0 * cover; drawn = this.px.draw(ctx, "buildings/tesla-covered", x, y, S) || drawn; }
                 ctx.globalAlpha = a0;
             } else if (bn === "Cannon") {
-                // Two layers: the four-legged mount stays put, and the big turret on it
-                // turns to aim (its barrel points up in the art).
-                drawn = this.px.draw(ctx, "buildings/cannon-mount", x, y, S, 0, wash);
-                drawn = this.px.draw(ctx, "buildings/cannon-turret", x, y, S, e.dispAngle + Math.PI / 2, wash) || drawn;
-                if (!drawn) drawn = this.px.draw(ctx, "buildings/cannon", x, y, S, e.dispAngle + Math.PI / 2, wash);
+                // Two layers at 3x (bigger than the other buildings): the four-legged
+                // rack stays put, and the turret on it turns to aim (its barrel points
+                // up in the art, and its body sits on the centre it turns about).
+                const CS = 48;
+                drawn = this.px.draw(ctx, "buildings/cannon-mount", x, y, CS, 0, wash);
+                drawn = this.px.draw(ctx, "buildings/cannon-turret", x, y, CS, e.dispAngle + Math.PI / 2, wash) || drawn;
+                if (!drawn) drawn = this.px.draw(ctx, "buildings/cannon", x, y, CS, e.dispAngle + Math.PI / 2, wash);
             } else if (sprite) {
                 drawn = this.px.draw(ctx, "buildings/" + sprite, x, y, S, 0, wash);
                 if (drawn && bn === "Inferno Tower" && e.atk) {
