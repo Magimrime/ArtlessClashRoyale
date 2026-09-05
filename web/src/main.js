@@ -1684,11 +1684,12 @@ class Main {
                     ctx.fillStyle = "rgba(0, 255, 0, 0.6)";
                 } else if (p.brownArea) {
                     ctx.fillStyle = p.impactCol || "#8b4513"; // solid impact colour
-                } else if (p.poison || p.graveyard || p.isClone || p.isIceNova) {
+                } else if (p.poison || p.graveyard || p.isClone || p.isIceNova || p.isFrost) {
                     // A placed zone wears its textured footprint: bubbles, headstones,
-                    // the clone swirl, the ice flake.
-                    const zone = p.poison ? "spells/poison" : p.graveyard ? "spells/graveyard" : p.isClone ? "spells/clone" : "effects/ice-nova";
-                    ctx.globalAlpha = 0.7;
+                    // the clone swirl, the ice flake. The Freeze's frost thaws away
+                    // over its last second.
+                    const zone = p.poison ? "spells/poison" : p.graveyard ? "spells/graveyard" : p.isClone ? "spells/clone" : p.isFrost ? "spells/freeze" : "effects/ice-nova";
+                    ctx.globalAlpha = p.isFrost ? 0.7 * Math.min(1, p.life / 60) : 0.7;
                     if (!this.px.draw(ctx, zone, p.x, p.y, p.rad * 2)) {
                         ctx.fillStyle = p.poison ? "rgba(0,128,0,0.6)" : p.graveyard ? "rgba(0,0,139,0.6)" : p.isClone ? "rgba(0,255,255,0.6)" : "rgba(135,206,250,0.9)";
                         ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.fill();
@@ -1705,7 +1706,7 @@ class Main {
                 // chainTargets / shockBeams draw their OWN lines below, and the heal effect
                 // draws its own green ring in drawProj — none of them should ALSO drop the
                 // default circle here (that was the stray "ghost dot").
-                if (!p.fireArea && !p.poison && !p.graveyard && !p.isClone && !p.isIceNova && !p.chainTargets && !p.shockBeams && !p.isHeal) {
+                if (!p.fireArea && !p.poison && !p.graveyard && !p.isClone && !p.isIceNova && !p.isFrost && !p.chainTargets && !p.shockBeams && !p.isHeal) {
                     let size = p.rad * 2;
                     if (!p.spl && !p.brownArea && !p.isRolling && !p.isLightBlue) size = 8;
                     // Plain shots are the bullet sprite; one with a colour of its own washes it.
@@ -2409,6 +2410,7 @@ class Main {
                 ctx.fillStyle = isFriend ? "#4f8fe0" : "#e05555";
                 ctx.beginPath(); ctx.arc(x, ey, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
             }
+            if (e.fr > 0) this.drawIceBlock(x, ey, 48, e.fr);
             ctx.beginPath(); // keep the generic stroke below happy (no-op path)
         } else {
             // Every other troop: its own sprite at 2x. The art already carries each
@@ -2416,6 +2418,7 @@ class Main {
             if (!this.px.draw(ctx, this.px.troop(e.c ? e.c.n : name), x, y, 32, 0, wash)) {
                 ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
             }
+            if (e instanceof Troop && e.fr > 0) this.drawIceBlock(x, y, 32, e.fr);
         }
         ctx.globalAlpha = 1;
         ctx.lineWidth = 1;
@@ -2914,7 +2917,7 @@ class Main {
 
         // Zone spells show their placed footprint — the same textured sprite the field uses.
         const face = { "Freeze": "freeze", "Vines": "vines", "Poison": "poison", "Graveyard": "graveyard", "Clone": "clone",
-                       "Rage": "rage", "Heal": "heal", "Mirror": "mirror", "Royale Delivery": "royale-delivery" }[n];
+                       "Rage": "rage", "Heal": "heal", "Mirror": "mirror", "Royale Delivery": "royale-delivery", "Arrows": "arrows" }[n];
         if (face && this.px.draw(ctx, "spells/" + face, ccx, ccy, Math.round(R / 4) * 8)) { gem(); return; }
 
         // Thrown ARC spells — show the projectile IN THE AIR with its shadow below, using
@@ -2933,11 +2936,6 @@ class Main {
                 ctx.beginPath(); ctx.arc(ccx, ccy, size * 0.32, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
             }
             return; // the evo sprite already shows the evo look — no crystal overlay
-        }
-        if (n === "Arrows") {
-            // the real arrows volley, all three waves landed and stuck in the ground.
-            this.drawArrowsVolley({ x: ccx, y: ccy + 6, rad: Math.min(w, h) * 0.44, life: 30 });
-            gem(); return;
         }
         if (n === "The Log" || n === "Barbarian Barrel") {
             // The ORIGINAL rolling-log texture, drawn by the real renderer (drawProj/isLog):
@@ -3286,7 +3284,16 @@ class Main {
     // the area spells) — these render above ground troops but below the towers.
     isSpellProj(p) {
         return !!(p.isSpellArc || p.isArrows || p.isSpellDrop || p.isLog || p.isDelivery ||
-            p.poison || p.graveyard || p.brownArea || p.isClone || p.isVines || p.chainTargets || p.shockBeams || p.isShockwave || p.isPhantom || p.isElectricRing || p.isIceCrystal || p.isDynamite || p.isRage || p.isBomb);
+            p.poison || p.graveyard || p.brownArea || p.isClone || p.isVines || p.isFrost || p.chainTargets || p.shockBeams || p.isShockwave || p.isPhantom || p.isElectricRing || p.isIceCrystal || p.isDynamite || p.isRage || p.isBomb);
+    }
+
+    // A frozen unit is encased in a block of ice, over its icy wash; the block
+    // melts away over the last two thirds of a second of the freeze.
+    drawIceBlock(x, y, size, fr) {
+        const a = ctx.globalAlpha;
+        ctx.globalAlpha = a * 0.6 * Math.min(1, fr / 40);
+        this.px.draw(ctx, "effects/frozen", x, y, size);
+        ctx.globalAlpha = a;
     }
 
     // The spell projectiles that are physically in the air until they land.
@@ -3564,19 +3571,14 @@ class Main {
     }
 
     drawArrowsVolley(p) {
-        // Three waves of arrows. Each wave flies in from the caster's side of the
-        // field on one shared slant, lands across the circle over a few ticks and
-        // then STAYS stuck in the ground; when the spell ends they all fade out
-        // together. A faint puff of dust for a moment where each one lands.
+        // Three waves of arrows RAINING DOWN: each arrow drops out of the sky onto
+        // its spot in the circle, point first with a small shadow under it on the
+        // way down, lands over a few ticks and then STAYS stuck in the ground; when
+        // the spell ends they all fade out together. A faint puff of dust for a
+        // moment where each one lands.
         const maxLife = 60, elapsed = maxLife - p.life;
         const FLIGHT = 8, STARTS = [0, 10, 20];
-        const perWave = Math.max(4, Math.round(p.rad / 9));      // 10 on the field, fewer on a card
-        const th = 0.3;                                          // the slant, from vertical
-        const enemy = p.tm === 1;
-        // The sprite points down. Ours come up the field from our tower and land
-        // pointing away from it; theirs come down. `ux,uy` is the flight direction.
-        const ux = enemy ? -Math.sin(th) : Math.sin(th), uy = enemy ? Math.cos(th) : -Math.cos(th);
-        const angle = enemy ? th : Math.PI + th;
+        const perWave = Math.max(4, Math.round(p.rad / 9));      // ten to a wave
         const fade = p.life < 8 ? p.life / 8 : 1;                // all gone together at the end
         const fr = v => v - Math.floor(v);                       // golden-ratio scatter: even, never a spiral
         for (let w = 0; w < STARTS.length; w++) {
@@ -3588,16 +3590,21 @@ class Main {
                 const ang = fr(k * 0.618034) * Math.PI * 2;
                 const rr = Math.sqrt(fr(k * 0.754877 + 0.5)) * p.rad * 0.9;
                 const lx = p.x + Math.cos(ang) * rr, ly = p.y + Math.sin(ang) * rr;
-                const back = (1 - f) * 70;                       // still this far back along the flight
+                const up = (1 - f) * 90;                         // still this high above its spot
                 ctx.globalAlpha = fade;
-                if (f >= 1 && t < FLIGHT + 3) {
+                if (f < 1) {
+                    // its shadow on the ground, sharpening as it comes down
+                    ctx.globalAlpha = 0.28 * f * fade; ctx.fillStyle = "#000";
+                    ctx.beginPath(); ctx.ellipse(lx, ly + 3, 6 - 2 * f, 3 - f, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.globalAlpha = fade;
+                } else if (t < FLIGHT + 3) {
                     ctx.globalAlpha = 0.25 * fade;
                     this.px.draw(ctx, "effects/explosion-gray", lx, ly + 4, 16);
                     ctx.globalAlpha = fade;
                 }
-                if (!this.px.draw(ctx, "projectiles/arrow", lx - ux * back, ly - uy * back, 32, angle + Math.sin(i * 3.7 + w) * 0.08)) {
+                if (!this.px.draw(ctx, "projectiles/arrow", lx, ly - up, 32, Math.sin(i * 3.7 + w) * 0.12)) {
                     ctx.strokeStyle = "#7a4a1f"; ctx.lineWidth = 2;
-                    ctx.beginPath(); ctx.moveTo(lx - ux * back, ly - uy * back - 8); ctx.lineTo(lx - ux * back, ly - uy * back + 8); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(lx, ly - up - 8); ctx.lineTo(lx, ly - up + 8); ctx.stroke();
                 }
             }
         }

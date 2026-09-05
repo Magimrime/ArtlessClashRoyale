@@ -1170,7 +1170,14 @@ export default class GameEngine {
                     if (c.isEvo) p.isEvoZap = true;
                 }
                 else if (c.n === "Vines") { p.isRoot = true; p.isVines = true; p.life = 12; } // root + ground fliers, no visual
-                else if (c.n === "Freeze") { p.isFreeze = true; p.flashCol = "#bfe8ff"; p.life = 12; } // instant, no snowflake
+                else if (c.n === "Freeze") {
+                    p.isFreeze = true; p.flashCol = "#bfe8ff"; p.life = 12;   // instant
+                    // Its picture: the ice flash, then the frosted ground that stays for
+                    // the 4s freeze and thaws away. Troops inside are drawn frozen -
+                    // encased in ice - by drawEntityBody.
+                    this.projs.push(new Proj(x, y, x, y, null, 0, false, rad, 0, tm, false).asIceNova());
+                    this.projs.push(new Proj(x, y, x, y, null, 0, false, rad, 0, tm, false).asFrost());
+                }
                 else { p.life = 26; } // any other placed spell still gets a short wind-up
                 this.projs.push(p);
             }

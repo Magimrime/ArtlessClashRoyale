@@ -357,12 +357,14 @@ save(zone('royale-delivery', '#c0a06a', { texture:'stone' }), 'spells', 'royale-
   save(sp, 'spells', 'giant-snowball');
 }
 adopt('zap.png', 'spells', 'zap');   // hand-drawn, not generated
-{ // Arrows — a fan of three
+{ // Arrows — the card's own picture: a bundle of three, point down, drawn like
+  // the single arrow the volley fires (red feathers, dark shaft, steel head).
   const sp = new Sprite();
   for (const x of [3, 8, 13]) {
-    sp.vline(x, 2, 11, '#6b4423');
-    sp.plot(x-1, 12, '#e2e2e2'); sp.plot(x, 12, '#e2e2e2'); sp.plot(x+1, 12, '#e2e2e2'); sp.plot(x, 13, '#e2e2e2');
-    sp.plot(x-1, 3, '#caa15a'); sp.plot(x+1, 3, '#caa15a');
+    sp.vline(x, 1, 11, '#7a4a1f');
+    for (const [dx, y] of [[-1,1],[1,1],[-1,2],[1,2]]) sp.plot(x + dx, y, '#d84b3b');
+    sp.plot(x - 1, 3, '#f4e3c2'); sp.plot(x + 1, 3, '#f4e3c2');
+    sp.plot(x, 11, '#e6ecf0'); sp.hline(x - 1, x + 1, 12, '#b9c4cb'); sp.plot(x, 13, '#8f9aa2'); sp.plot(x, 14, '#5f6970');
   }
   save(sp, 'spells', 'arrows');
 }
@@ -392,6 +394,11 @@ const eff = (name, fn) => { const sp = new Sprite(); fn(sp); save(sp, 'effects',
 eff('explosion-burst', sp => { sp.disc(8,8,7,'#8f2a06'); sp.disc(8,8,5.6,'#ff4500'); sp.disc(8,8,3.4,'#ffb03a'); sp.disc(8,8,1.6,'#ffe680'); });
 eff('explosion-gray',  sp => { sp.disc(8,8,7,'#4a4d52'); sp.disc(8,8,5.6,'#767a82'); sp.disc(8,8,3.4,'#a8adb5'); sp.disc(8,8,1.6,'#d5d9de'); });
 eff('shockwave',       sp => { sp.ring(8,8,7,5.6,'#5b6c7e'); sp.ring(8,8,6.4,5.6,'#ffffff'); sp.ring(8,8,3.6,2.6,'#8fa3b6'); });
+// A block of ice drawn OVER a frozen unit (see drawEntityBody): pale walls, a
+// bright glint at the top-left, a couple of cracks.
+eff('frozen',          sp => { sp.rrect(2, 1, 12, 14, 3, '#8ec6ea'); sp.rrect(3, 2, 10, 12, 2, '#cdeeff');
+                               sp.vline(4, 3, 6, '#ffffff'); sp.plot(5, 3, '#ffffff'); sp.plot(6, 3, '#ffffff');
+                               sp.plot(9, 7, '#a8d8f0'); sp.plot(10, 8, '#a8d8f0'); sp.plot(10, 9, '#a8d8f0'); sp.plot(6, 11, '#a8d8f0'); sp.plot(7, 12, '#a8d8f0'); });
 eff('ice-nova',        sp => { sp.disc(8,8,7,'#4a86a8'); sp.disc(8,8,5.8,'#87cefa'); sp.disc(8,8,3,'#c8ecff');
                                sp.vline(8,2,13,'#ffffff'); sp.hline(2,13,8,'#ffffff'); });
 eff('electric-ring',   sp => { sp.ring(8,8,7,5.4,'#6b2b9c'); sp.ring(8,8,6.4,5.4,'#d98cff');

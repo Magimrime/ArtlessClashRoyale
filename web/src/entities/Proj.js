@@ -124,6 +124,7 @@ export default class Proj {
     // Placed spell that falls from the sky as a symbol, then resolves on impact.
     asSpellDrop(kind, col, life = 30) { this.isSpellDrop = true; this.dropKind = kind; this.flashCol = col; this.life = life; this.dropMax = life; return this; }
     asIceNova() { this.isIceNova = true; this.life = 5; return this; }
+    asFrost() { this.isFrost = true; this.life = 240; return this; }     // the frosted ground a Freeze leaves, for its 4s
     // Rage: a bottle hops up (~0.45s wind-up) then splashes into a buff zone that
     // lasts `dur` ticks. d carries the small activation splash damage.
     asRage(rad, dur = 300) {
@@ -319,7 +320,7 @@ export default class Proj {
             return;
         }
 
-        if (this.isSpin || this.chainTargets || this.isIceNova || this.shockBeams || this.isShockwave || this.isPhantom || this.isElectricRing) {
+        if (this.isSpin || this.chainTargets || this.isIceNova || this.isFrost || this.shockBeams || this.isShockwave || this.isPhantom || this.isElectricRing) {
             this.life--; // brief visual-only flashes count down and vanish
             return;
         }

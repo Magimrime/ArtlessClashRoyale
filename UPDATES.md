@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.6.8** — here's the whole road there.
+We're currently on **26.6.9** — here's the whole road there.
 
 ---
 
@@ -166,6 +166,11 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
   flipped every other frame so it crackles, with a flickering electric ring on whatever it zaps (the Electro Spirit
   and Tesla too). **Tower tops are sized to their shot**: a slimmer, shorter cannon on a smaller platform, and the
   king's shooter at a whole 4× instead of an in-between size.
+- **26.6.9** — **Freeze has a picture.** Placing it flashes the ice nova, leaves the frosted flake ground for the
+  four seconds it lasts (thawing away over the last one), and every unit it catches is **drawn encased in a block
+  of ice** over its icy tint, which melts off as the freeze ends. **Arrows rain down**: each arrow now drops out of
+  the sky onto its spot, point first, with a small shadow sharpening beneath it, instead of flying in from the
+  side. **The Arrows card** shows a bundle of three arrows rather than the volley itself.
 
 ---
 
