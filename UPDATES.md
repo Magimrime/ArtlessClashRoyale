@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.7.6** — here's the whole road there.
+We're currently on **26.7.7** — here's the whole road there.
 
 ---
 
@@ -206,6 +206,8 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
   still shows its burst — the fire flash, the ice nova, an electric ring, a heal ring — with no damage or effect
   on anyone. **More death effects**: the Lava Hound bursts into lava, the Elixir Golem family splashes elixir,
   every other troop goes down in a puff of dust, and every building comes down in rubble.
+- **26.7.7** — Cannon proportions: the rack is a big round wooden platform, wider than the turret, on four very thick
+  beams; the turret is a squat iron body that sits inside the platform's circle.
 
 ---
 
