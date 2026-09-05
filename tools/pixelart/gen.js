@@ -68,7 +68,38 @@ function writeManifest() {
 }
 process.on('exit', writeManifest);
 
-const save = (sp, cat, name) => {
+// Every generated texture carries at least four colours and never more than
+// eight: a bevel of light along its top-left edge and shadow along its
+// bottom-right, each shade derived from the pixel's own colour, and - for
+// anything still flat after that - a lighter upper band and a darker lower one
+// inside each 16px cell. One-pixel lines keep their colour. Hand-drawn art and
+// anything tiled or recoloured later (font, UI frames, the elixir bar, map
+// tiles, card frames) never goes through this.
+const RICH = new Set(['troops', 'buildings', 'towers', 'projectiles', 'effects', 'spells']);
+const rgbKey = c => require('./lib').hex(c).slice(0, 3).join(',');
+function enrich(sp) {
+  const w = sp.w, h = sp.h, src = new Uint8Array(sp.data);
+  const on = (x, y) => x >= 0 && y >= 0 && x < w && y < h && src[(y*w + x)*4 + 3] > 0;
+  const colAt = (x, y) => { const i = (y*w + x)*4; return '#' + [src[i], src[i+1], src[i+2]].map(v => v.toString(16).padStart(2, '0')).join(''); };
+  const pal = sp.palette();
+  const put = (x, y, c) => { const k = rgbKey(c); if (!pal.has(k) && pal.size >= 8) return; pal.add(k); sp.plot(x, y, c); };
+  if (pal.size < 8) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!on(x, y)) continue;
+    const tl = !on(x - 1, y) || !on(x, y - 1), br = !on(x + 1, y) || !on(x, y + 1);
+    if (tl && !br) put(x, y, shade(colAt(x, y), 0.24));
+    else if (br && !tl) put(x, y, shade(colAt(x, y), -0.24));
+  }
+  if (pal.size < 4) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!on(x, y) || !on(x - 1, y) || !on(x, y - 1) || !on(x + 1, y) || !on(x, y + 1)) continue;
+    const fy = (y % 16) / 16;
+    if (fy < 0.3) put(x, y, shade(colAt(x, y), 0.12));
+    else if (fy > 0.7) put(x, y, shade(colAt(x, y), -0.12));
+  }
+  return sp;
+}
+
+const save = (sp, cat, name, opts = {}) => {
+  if (RICH.has(cat) && !opts.raw) enrich(sp);
   const rel = `${cat}/${name}.png`, file = out(cat, name);
   const fresh = sp.bytes(), freshHash = sha(fresh);
   made.push({ cat, name, colours: sp.palette().size });
@@ -103,9 +134,9 @@ const HAND = path.join(__dirname, '..', '..', 'web', 'images');
 const orphaned = [];
 const adopt = (file, cat, name) => {
   const src = path.join(HAND, file), dest = out(cat, name);
-  if (fs.existsSync(src)) return save(Sprite.load(src), cat, name);
+  if (fs.existsSync(src)) return save(Sprite.load(src), cat, name, { raw: true });   // hand-drawn: as-is
   // Source gone — keep the copy already in the set rather than redrawing it.
-  if (fs.existsSync(dest)) { orphaned.push(`${cat}/${name}.png (source ${file} is missing)`); return save(Sprite.load(dest), cat, name); }
+  if (fs.existsSync(dest)) { orphaned.push(`${cat}/${name}.png (source ${file} is missing)`); return save(Sprite.load(dest), cat, name, { raw: true }); }
   orphaned.push(`${cat}/${name}.png (SKIPPED — no ${file} and nothing in the set)`);
   return null;
 };
@@ -198,14 +229,14 @@ saveBob(balloon('#e05555'), 'troops', 'balloon-red');
   const sp = new Sprite();
   sp.disc(4, 4, 2, '#4a4f58'); sp.disc(12, 4, 2, '#4a4f58');          // side balloons
   sp.disc(8, 3, 2.7, '#2f3339');                                      // the big one
-  sp.plot(7, 2, '#6a707a'); sp.plot(3, 3, '#6a707a'); sp.plot(11, 3, '#6a707a');   // highlights
+  sp.plot(7, 2, '#efe8d8'); sp.plot(3, 3, '#efe8d8'); sp.plot(11, 3, '#efe8d8');   // glints
   for (const [x, y] of [[4,6],[5,7],[6,8],[8,6],[8,7],[8,8],[12,6],[11,7],[10,8]]) sp.plot(x, y, '#1c1e22');   // strings
   sp.rrect(1, 9, 14, 6, 2, '#5c3a18');                                // the barrel, on its side
   sp.rrect(2, 10, 12, 4, 1, '#a5713a');
   sp.vline(4, 9, 14, '#6b4423'); sp.vline(11, 9, 14, '#6b4423');      // iron hoops
   sp.hline(5, 10, 10, '#c08a52');                                     // lit stave
   sp.rect(6, 11, 4, 2, '#efe8d8');                                    // skull
-  sp.plot(6, 12, '#3a2a1a'); sp.plot(9, 12, '#3a2a1a');
+  sp.plot(6, 12, '#1c1e22'); sp.plot(9, 12, '#1c1e22');
   saveBob(sp, 'troops', 'skeleton-barrel');
 }
 
@@ -341,8 +372,11 @@ function zone(name, col, opts = {}, i = 0) {
   const r = opts.r || 7;
   sp.disc(8, 8, r, edge);
   sp.disc(8, 8, r - 1, col);
-  if (opts.texture === 'bubbles') {           // poison: bubbles rising
-    for (const [x,y0,rr] of [[6,6,1.6],[10,9,1.3],[8,12,1.1],[11,5,1.0]]) sp.disc(x, rise(y0, i, 2, 3, 12), rr, lite);
+  if (opts.texture === 'bubbles') {           // poison: fine specks drifting up through the gas
+    for (let p = 0; p < 8; p++) {
+      const x = 3 + ((p * 5) % 11), y = rise(3 + ((p * 7) % 10), i, 1, 2, 13);
+      if (Math.hypot(x + 0.5 - 8, y + 0.5 - 8) < r - 1.2) sp.plot(x, y, p % 2 ? lite : shade(col, 0.42));
+    }
   } else if (opts.texture === 'sparks') {     // rage: flecks whirling round the core
     for (let a = 0; a < 6; a++) { const ang = a * Math.PI / 3 + i * 0.4; sp.plot(8 + Math.cos(ang) * 4.5, 8 + Math.sin(ang) * 4.5, lite); }
     sp.disc(8, 8, 2, lite);
@@ -357,9 +391,13 @@ function zone(name, col, opts = {}, i = 0) {
     sp.rect(7, 3, 2, 10, lite); sp.rect(3, 7, 10, 2, lite);
     sp.plot(5,5,lite); sp.plot(10,10,lite); sp.plot(10,5,lite); sp.plot(5,10,lite);
     sp.plot([5, 10, 10, 5][i % 4], [5, 5, 10, 10][i % 4], '#ffffff');
-  } else if (opts.texture === 'grave') {      // graveyard: headstones and a rising wisp
-    sp.rect(5, 6, 2, 4, lite); sp.rect(9, 7, 2, 4, lite); sp.plot(8, 5, lite);
-    sp.plot(7, rise(11, i, 2, 3, 11), '#ffffff');
+  } else if (opts.texture === 'grave') {      // graveyard: a clean ring, small motes rising off its edge
+    sp.ring(8, 8, r - 1, r - 2, dark);
+    for (let p = 0; p < 6; p++) {
+      const a = 0.4 + p * 1.05, k = (i + p) % 4;          // each mote at its own stage of the climb
+      const x = Math.round(8 + Math.cos(a) * (r - 1.5)), y = Math.round(8 + Math.sin(a) * (r - 1.5)) - k;
+      if (y >= 0) sp.plot(x, y, k < 2 ? '#efe9f7' : '#bfb3d1');
+    }
   } else if (opts.texture === 'vine') {       // vines: strands swaying
     const s = (i % 2) ? 1 : 0;
     for (const [x,y] of [[5,5],[6,7],[7,9],[8,11],[10,6],[11,8],[9,4]]) sp.plot(x + (y % 2 ? s : -s), y, lite);
@@ -485,10 +523,13 @@ effAnim('phantom-burst', 4, (sp, i) => {
   sp.ring(8,8,ro,ro-1.4,'#7fa8bf'); sp.ring(8,8,ro-0.5,ro-1.4,'#c8e4f2');
   if (i < 2) sp.disc(8,8,1.6,'#ffffff'); else sp.ring(8,8,ro-2.6,ro-3.4,'#c8e4f2');
 });
-// Poison: the bubbles rise through the cloud (loops).
+// Poison: fine specks drift up through the cloud (loops).
 effAnim('poison-cloud', 4, (sp, i) => {
   sp.disc(8,8,7,'#2f5c22'); sp.disc(8,8,6,'#4f8a34');
-  for (const [x,y0,r] of [[6,6,1.8],[10,9,1.5],[8,12,1.2]]) sp.disc(x, rise(y0, i, 2, 3, 12), r, '#7ab84a');
+  for (let p = 0; p < 8; p++) {
+    const x = 3 + ((p * 5) % 11), y = rise(3 + ((p * 7) % 10), i, 1, 2, 13);
+    if (Math.hypot(x + 0.5 - 8, y + 0.5 - 8) < 5) sp.plot(x, y, p % 2 ? '#7ab84a' : '#a9e07a');
+  }
 });
 // Rage: the core throbs (loops).
 effAnim('rage-zone', 4, (sp, i) => {
@@ -499,11 +540,14 @@ effAnim('heal-zone', 4, (sp, i) => {
   sp.ring(8,8,7,5.6,'#4fb063'); sp.rect(7,4,2,8,'#d8f7e0'); sp.rect(4,7,8,2,'#d8f7e0');
   sp.plot(4, rise(12, i, 2, 4, 11), '#ffffff'); sp.plot(12, rise(9, i, 2, 4, 11), '#ffffff');
 });
-// The graveyard: a wisp rises from the headstones (loops).
+// The graveyard: clean, with small motes rising off its edge (loops).
 effAnim('graveyard', 4, (sp, i) => {
-  sp.disc(8,8,7,'#2b1140'); sp.disc(8,8,6,'#5a2a80');
-  sp.rect(6,6,2,5,'#cfc7d8'); sp.rect(9,7,2,4,'#cfc7d8');
-  const y = rise(11, i, 2, 3, 11); sp.plot(8, y, '#e9e4f2'); sp.plot(8, y + 1, '#b9aecb');
+  sp.disc(8,8,7,'#2b1140'); sp.disc(8,8,6,'#5a2a80'); sp.ring(8,8,6,5,'#472066');
+  for (let p = 0; p < 6; p++) {
+    const a = 0.4 + p * 1.05, k = (i + p) % 4;
+    const x = Math.round(8 + Math.cos(a) * 5.5), y = Math.round(8 + Math.sin(a) * 5.5) - k;
+    if (y >= 0) sp.plot(x, y, k < 2 ? '#efe9f7' : '#bfb3d1');
+  }
 });
 // Clone: a highlight chases round the inner ring (loops).
 effAnim('clone-zone', 4, (sp, i) => {
@@ -512,8 +556,10 @@ effAnim('clone-zone', 4, (sp, i) => {
 });
 // The bolt: two frames of zigzag, the second mirrored, so the current crackles.
 effAnim('chain-lightning', 2, (sp, i) => {
-  for (const [x,y] of [[1,10],[2,9],[3,8],[4,7],[5,8],[6,9],[7,8],[8,7],[9,6],[10,7],[11,8],[12,7],[13,6],[14,5]]) sp.plot(x, i ? 15 - y : y, '#4f9bff');
-  for (const [x,y] of [[3,8],[6,9],[9,6],[12,7]]) sp.plot(x, i ? 15 - y : y, '#eaffff');
+  const Y = y => i ? 15 - y : y, D = i ? -1 : 1;
+  for (const [x,y] of [[1,10],[2,9],[3,8],[4,7],[5,8],[6,9],[7,8],[8,7],[9,6],[10,7],[11,8],[12,7],[13,6],[14,5]]) { sp.plot(x, Y(y) + D, '#2f5fc4'); sp.plot(x, Y(y), '#4f9bff'); }
+  for (const [x,y] of [[3,8],[6,9],[9,6],[12,7]]) sp.plot(x, Y(y), '#eaffff');
+  for (const [x,y] of [[4,7],[8,7],[13,6]]) sp.plot(x, Y(y), '#ffffff');
 });
 eff('spin-sweep',      sp => { sp.ring(8,8,7,5.6,'#ffe3b8'); for (let x=8;x<16;x++) sp.clearPx(x, 8);
                                sp.rect(11,4,3,2,'#cfd8de'); sp.rect(12,6,1,2,'#8a6033'); });
@@ -578,8 +624,11 @@ projAnim('barbarian-barrel', 3, (sp, i) => { sp.rrect(1,3,14,10,4,'#3c220c'); sp
                                              sp.vline(4 + i,4,11,'#6b4423'); sp.vline(9 + i,4,11,'#6b4423'); sp.hline(3,12,5,'#c08a52'); });
 projAnim('goblin-barrel', 3, (sp, i) => { sp.rrect(3,2,10,12,3,'#5c3a18'); sp.rrect(4,3,8,10,2,'#8a5a2c');
                                           sp.hline(3,12,5 + i,'#5c3a18'); sp.hline(3,12,9 + i,'#5c3a18'); sp.vline(6,4,9,'#a8703f'); });
-proj('arrows',       sp => { for (const x of [3,8,13]) { sp.vline(x,2,11,'#6b4423');
-                             sp.plot(x-1,12,'#e2e2e2'); sp.plot(x,12,'#e2e2e2'); sp.plot(x+1,12,'#e2e2e2'); sp.plot(x,13,'#e2e2e2'); } });
+proj('arrows',       sp => { for (const x of [3, 8, 13]) {
+                               sp.vline(x, 1, 11, '#7a4a1f');
+                               for (const [dx, y] of [[-1,1],[1,1],[-1,2],[1,2]]) sp.plot(x + dx, y, '#d84b3b');
+                               sp.plot(x - 1, 3, '#f4e3c2'); sp.plot(x + 1, 3, '#f4e3c2');
+                               sp.plot(x, 11, '#e6ecf0'); sp.hline(x - 1, x + 1, 12, '#b9c4cb'); sp.plot(x, 13, '#8f9aa2'); sp.plot(x, 14, '#5f6970'); } });
 
 // ============================== UI ===========================================
 for (const [n, col] of [['green','#32CD32'],['orange','#FFA500'],['blue','#3296ff'],['purple','#8a6bbf'],['red','#FF6347']]) {

@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.7.2** — here's the whole road there.
+We're currently on **26.7.3** — here's the whole road there.
 
 ---
 
@@ -192,6 +192,11 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
   guard: a run that crashed part-way had left its files unrecorded, and the next run filed sixty generator sprites
   as yours; a file that is byte-for-byte what the generator would draw is now always its own, and the record is
   written even when a run dies.
+- **26.7.3** — **Richer textures.** Every generated sprite now carries between four and eight colours: a bevel of
+  light along its top-left edge and shadow along its bottom-right, each derived from the pixel's own colour, plus a
+  lighter upper band and darker lower band inside anything still flat. **The graveyard is clean**: a plain ring with
+  small pale motes rising off its edge instead of headstones. **Poison's particles are fine specks** drifting up
+  through the gas instead of big bubbles.
 
 ---
 
