@@ -168,17 +168,13 @@ class Main {
         this.eraserImg.onerror = () => { this.eraserImgLoaded = false; };
         this.eraserImg.src = "images/eraser.png";
 
-        // Animated sprite sheets — each a vertical column of 16x16 frames (frame count is
-        // auto-detected from the image height). Add more with addSprite("name","images/x.png").
-        this.sprites = {};
-        // The hand-drawn zap art lives in the pixel set now (images/zap.png was
-        // removed); these are the same pixels, byte for byte.
-        this.addSprite("zap", "images/pixel/spells/zap.png");
-        this.addSprite("evozap", "images/pixel/effects/zap-strike-evo.png");
-
         // The pixel-art set: sprites, 9-slice frames and the bitmap font.
         this.px = new Pixel();
-        this.px.load().catch(() => { });     // never let missing art block startup
+        // No art, no game: a set that fails to load - or a sprite the renderer
+        // asks for that is not in it - stops everything on the crash screen.
+        this.px.load().catch(e => this.crash("The pixel art could not be loaded", e && e.message ? e.message : String(e)));
+        this.px.onMissing = name => this.crash("Missing pixel art", name + ".png is not in the set");
+        window.acr = this;                   // the running game, for the console
 
         this.init();
     }
@@ -829,6 +825,8 @@ class Main {
 
     loop(time) {
         requestAnimationFrame((t) => this.loop(t));
+        if (this.crashed) { this.drawCrash(); return; }
+        if (!this.px.ready) { this.drawLoading(); this.lastTime = time; return; }
 
         // Calculate delta time
         let dt = time - this.lastTime;
@@ -1008,16 +1006,7 @@ class Main {
 
             // Title — white fill with a green outline and soft shadow for contrast.
             const titleY = H / 2 - 200;
-            if (!this.px.textShadow(ctx, "Clash Clone", W / 2, titleY, 48, "#ffffff", "center", "#1c6440")) {
-            ctx.font = "800 48px 'Baloo 2', 'Segoe UI', sans-serif";
-            ctx.fillStyle = "rgba(0,0,0,0.25)";
-            ctx.fillText("Clash Clone", W / 2 + 2, titleY + 3);
-            ctx.lineWidth = 5; ctx.strokeStyle = "#1c6440";
-            ctx.strokeText("Clash Clone", W / 2, titleY);
-            ctx.fillStyle = "#ffffff";
-            ctx.fillText("Clash Clone", W / 2, titleY);
-            ctx.lineWidth = 1;
-            }
+            this.px.textShadow(ctx, "Clash Clone", W / 2, titleY, 48, "#ffffff", "center", "#1c6440");
 
             let validDeck = this.eng.myDeck.length === 8;
             this.drawBtn(this.playBtn, "PLAY", validDeck ? "#39c44e" : "#7f8b84");
@@ -1459,10 +1448,7 @@ class Main {
                     ctx.fillStyle = "rgba(0,0,0,0.28)";
                     ctx.beginPath(); ctx.ellipse(p.x, p.y + 7, sh, sh * 0.45, 0, 0, Math.PI * 2); ctx.fill();
                     let by = p.y - drop;
-                    if (!this.px.draw(ctx, "effects/death-bomb", p.x, by, 32)) {
-                        ctx.fillStyle = "#000000";
-                        ctx.beginPath(); ctx.arc(p.x, by, 11, 0, Math.PI * 2); ctx.fill();
-                    }
+                    this.px.draw(ctx, "effects/death-bomb", p.x, by, 32);
                     return;
                 }
                 if (p.isBomb) {
@@ -1470,10 +1456,7 @@ class Main {
                     let f = p.bombFuse / (p.bombMax || 30);
                     ctx.fillStyle = "rgba(0,0,0,0.22)";
                     ctx.beginPath(); ctx.ellipse(p.x, p.y + 6, 7, 3, 0, 0, Math.PI * 2); ctx.fill();
-                    if (!this.px.draw(ctx, "effects/death-bomb", p.x, p.y, 16)) {
-                        ctx.fillStyle = "#262629";
-                        ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2); ctx.fill();
-                    }
+                    this.px.draw(ctx, "effects/death-bomb", p.x, p.y, 16);
                     // fuse + spark (burns down as the fuse runs out)
                     ctx.strokeStyle = "#8a6a3a"; ctx.lineWidth = 1.5;
                     ctx.beginPath(); ctx.moveTo(p.x + 3, p.y - 5); ctx.lineTo(p.x + 5 + f * 3, p.y - 9 - f * 3); ctx.stroke();
@@ -1493,17 +1476,12 @@ class Main {
                         ctx.fillStyle = "rgba(0,0,0,0.25)";
                         ctx.beginPath(); ctx.ellipse(p.x, p.y, 8, 3, 0, 0, Math.PI * 2); ctx.fill();
                         // The bottle, hopping before it splashes.
-                        if (!this.px.draw(ctx, "spells/rage-bottle", p.x, by - 6, 32)) {
-                            ctx.fillStyle = "#ff5fb0"; ctx.beginPath(); ctx.arc(p.x, by - 5, 8, 0, Math.PI * 2); ctx.fill();
-                        }
+                        this.px.draw(ctx, "spells/rage-bottle", p.x, by - 6, 32);
                     } else {
                         // Active rage pool — translucent PINK disc that gently pulses.
                         let pulse = 0.55 + 0.15 * Math.sin(Date.now() / 160);
                         ctx.globalAlpha = pulse;
-                        if (!this.px.draw(ctx, "spells/rage", p.x, p.y, p.rad * 2)) {
-                            ctx.fillStyle = "rgba(255,95,176,0.4)";
-                            ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.fill();
-                        }
+                        this.px.draw(ctx, "spells/rage", p.x, p.y, p.rad * 2);
                         ctx.globalAlpha = 1; ctx.lineWidth = 1;
                     }
                     return;
@@ -1578,14 +1556,7 @@ class Main {
                     // the axe head itself, riding the leading edge
                     const bx = p.x + Math.cos(ang) * R * 0.92, by = p.y + Math.sin(ang) * R * 0.92;
                     ctx.globalAlpha = 0.95;
-                    if (!this.px.draw(ctx, "projectiles/axe", bx, by, 24, ang)) {
-                        ctx.save();
-                        ctx.translate(bx, by);
-                        ctx.rotate(ang + Math.PI / 2);
-                        ctx.fillStyle = "#6b4a2a"; ctx.fillRect(-2, -7, 4, 14);   // haft
-                        ctx.fillStyle = "#d8e2e8"; ctx.fillRect(-6, -9, 12, 7);   // blade
-                        ctx.restore();
-                    }
+                    this.px.draw(ctx, "projectiles/axe", bx, by, 24, ang);
                     ctx.globalAlpha = 1; ctx.lineCap = "butt"; ctx.lineWidth = 1;
                     return;
                 }
@@ -1594,17 +1565,12 @@ class Main {
                     ctx.strokeStyle = "rgba(255,158,203,0.55)"; ctx.lineWidth = 3; ctx.lineCap = "round";
                     ctx.beginPath(); ctx.moveTo(p.lx, p.ly); ctx.lineTo(p.x, p.y); ctx.stroke();
                     ctx.lineCap = "butt"; ctx.lineWidth = 1;
-                    if (!this.px.draw(ctx, "projectiles/firework-rocket", p.x, p.y, 32)) {
-                        ctx.fillStyle = "#ff6fae";
-                        ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.fill();
-                    }
+                    this.px.draw(ctx, "projectiles/firework-rocket", p.x, p.y, 32);
                     return;
                 }
                 if (p.pellet) {
                     // A Hunter pellet: a plain small slug.
-                    if (!this.px.draw(ctx, "projectiles/bullet", p.x, p.y, 16)) {
-                        ctx.fillStyle = "#e8d9a8"; ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI * 2); ctx.fill();
-                    }
+                    this.px.draw(ctx, "projectiles/bullet", p.x, p.y, 16);
                     return;
                 }
                 if (p.spark) {
@@ -1614,10 +1580,7 @@ class Main {
                     ctx.moveTo(p.x - Math.cos(p.sparkAng) * 14, p.y - Math.sin(p.sparkAng) * 14);
                     ctx.lineTo(p.x, p.y); ctx.stroke();
                     ctx.lineCap = "butt"; ctx.lineWidth = 1;
-                    if (!this.px.draw(ctx, "projectiles/firework-spark", p.x, p.y, 16)) {
-                        ctx.fillStyle = "#ffd9ec";
-                        ctx.beginPath(); ctx.arc(p.x, p.y, 4.2, 0, Math.PI * 2); ctx.fill();
-                    }
+                    this.px.draw(ctx, "projectiles/firework-spark", p.x, p.y, 16);
                     return;
                 }
                 if (p.fireArea) {
@@ -1664,10 +1627,7 @@ class Main {
                     }
                 } else if (p.isCannonball) {
                     // Royal Giant: a heavy dark cannonball with a highlight.
-                    if (!this.px.draw(ctx, "projectiles/cannonball", p.x, p.y, 16)) {
-                        ctx.fillStyle = "#2b2b2b";
-                        ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.fill();
-                    }
+                    this.px.draw(ctx, "projectiles/cannonball", p.x, p.y, 16);
                     return;
                 } else if (p.isDelivery) {
                     // Falling wooden crate: a shadow that grows over ~1.5s while the
@@ -1677,9 +1637,7 @@ class Main {
                     ctx.fillStyle = "rgba(0,0,0,0.3)";
                     ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(4, p.rad * 0.75 * frac), 0, Math.PI * 2); ctx.fill();
                     let ccy = p.y - (1 - frac) * 150;
-                    if (!this.px.draw(ctx, "buildings/crate", p.x, ccy, 48)) {
-                        ctx.fillStyle = "#c79a5e"; ctx.fillRect(p.x - 21, ccy - 21, 42, 42);
-                    }
+                    this.px.draw(ctx, "buildings/crate", p.x, ccy, 48);
                     return;
                 } else if (p.isHeal) {
                     ctx.fillStyle = "rgba(0, 255, 0, 0.6)";
@@ -1693,10 +1651,7 @@ class Main {
                     ctx.globalAlpha = p.isFrost ? 0.7 * Math.min(1, p.life / 60) : 0.7;
                     // Poison's art keeps a margin above its disc for the specks that rise
                     // over the rim, so it is drawn a little larger to fill the same radius.
-                    if (!this.px.draw(ctx, zone, p.x, p.y, p.rad * (p.poison ? 2.3 : 2), 0, null, p.isIceNova ? Math.floor((1 - p.life / 5) * 3.99) : undefined)) {
-                        ctx.fillStyle = p.poison ? "rgba(0,128,0,0.6)" : p.graveyard ? "rgba(0,0,139,0.6)" : p.isClone ? "rgba(0,255,255,0.6)" : "rgba(135,206,250,0.9)";
-                        ctx.beginPath(); ctx.arc(p.x, p.y, p.rad, 0, Math.PI * 2); ctx.fill();
-                    }
+                    this.px.draw(ctx, zone, p.x, p.y, p.rad * (p.poison ? 2.3 : 2), 0, null, p.isIceNova ? Math.floor((1 - p.life / 5) * 3.99) : undefined);
                     ctx.globalAlpha = 1;
                 } else if (p.isLightBlue) {
                     ctx.fillStyle = "#64c8ff";
@@ -1710,13 +1665,11 @@ class Main {
                 // draws its own green ring in drawProj — none of them should ALSO drop the
                 // default circle here (that was the stray "ghost dot").
                 if (!p.fireArea && !p.poison && !p.graveyard && !p.isClone && !p.isIceNova && !p.isFrost && !p.chainTargets && !p.shockBeams && !p.isHeal) {
-                    let size = p.rad * 2;
-                    if (!p.spl && !p.brownArea && !p.isRolling && !p.isLightBlue) size = 8;
-                    // Plain shots are the bullet sprite; one with a colour of its own washes it.
+                    // Every shot is the bullet sprite, washed in the shot's own colour; a
+                    // splash shot is drawn at its own size (a whole multiple of 16).
                     const col = ctx.fillStyle;
-                    if (!(size === 8 && this.px.draw(ctx, "projectiles/bullet", p.x, p.y, 16, 0, col !== "lightgray" ? [col, 0.7] : null))) {
-                        ctx.beginPath(); ctx.arc(p.x, p.y, size / 2, 0, Math.PI * 2); ctx.fill();
-                    }
+                    const bs = (!p.spl && !p.brownArea && !p.isRolling && !p.isLightBlue) ? 16 : Math.max(16, Math.round(p.rad * 2 / 16) * 16);
+                    this.px.draw(ctx, "projectiles/bullet", p.x, p.y, bs, 0, col !== "lightgray" ? [col, 0.7] : null);
                 }
 
                 if (p.chainTargets) {
@@ -1736,11 +1689,7 @@ class Main {
                         const ang = Math.atan2(dy, dx), tiles = Math.max(1, Math.round(len / 26));
                         for (let s = 0; s < tiles; s++) {
                             const f = (s + 0.5) / tiles;
-                            if (!this.px.draw(ctx, "effects/chain-lightning", ax + dx * f, ay + dy * f, 32, ang, null, tick + s + i)) {
-                                ctx.strokeStyle = "#4f9bff"; ctx.lineWidth = 3;
-                                ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
-                                break;
-                            }
+                            this.px.draw(ctx, "effects/chain-lightning", ax + dx * f, ay + dy * f, 32, ang, null, tick + s + i);
                         }
                         if (!b.isChainOrigin) {
                             ctx.globalAlpha = ((tick + i) % 2) ? 0.9 : 0.55;
@@ -1952,8 +1901,7 @@ class Main {
                         ctx.beginPath(); ctx.moveTo(px, ebY + 3); ctx.lineTo(px, ebY + ebH - 3); ctx.stroke();
                     }
                 }
-                if (!this.px.textShadow(ctx, `${Math.floor(this.eng.p1.elx)}`, W / 2, ebY + ebH - 2, 15, "#ffffff", "center"))
-                    this.drawCenteredString(`${Math.floor(this.eng.p1.elx)}`, W / 2, ebY + ebH - 6, "bold 15px 'Baloo 2', 'Segoe UI', sans-serif", "white");
+                this.px.textShadow(ctx, `${Math.floor(this.eng.p1.elx)}`, W / 2, ebY + ebH - 2, 15, "#ffffff", "center");
 
                 // Debug Opponent Elixir
                 if (this.eng.debugEnemyElixir) {
@@ -2019,18 +1967,14 @@ class Main {
                 if (this.eng.p1.pile.length > 0) {
                     let nextC = this.eng.p1.pile[0];
                     let nr = this.nextCardRect;
-                    if (!this.px.nine(ctx, "cards/slot", nr.x, nr.y, nr.w, nr.h, 8)) {
-                        ctx.fillStyle = "rgba(255,255,255,0.18)";
-                        this.drawRoundRect(nr.x, nr.y, nr.w, nr.h, 5, true, false);
-                    }
+                    this.px.nine(ctx, "cards/slot", nr.x, nr.y, nr.w, nr.h, 8);
                     this.drawCenteredString("Next", nr.x + nr.w / 2, nr.y + 14, "600 9px 'Baloo 2', 'Segoe UI', sans-serif", "rgba(255,255,255,0.85)");
                     // Stack the name word by word, one row each, in the one text size.
                     let words = nextC.n.split(' ');
                     let fy = nr.y + nr.h / 2 - (words.length - 1) * 8 + 10;
                     for (let wd of words) {
                         const tight = this.px.ready && this.px.measure(wd, 12) > nr.w - 6;
-                        if (!this.px.text(ctx, wd, nr.x + nr.w / 2, fy, 12, "#ffffff", "center", tight))
-                            this.drawCenteredString(wd, nr.x + nr.w / 2, fy, "700 8px 'Baloo 2', 'Segoe UI', sans-serif", "white");
+                        this.px.text(ctx, wd, nr.x + nr.w / 2, fy, 12, "#ffffff", "center", tight);
                         fy += 16;
                     }
                 }
@@ -2374,7 +2318,6 @@ class Main {
 
             const S = 32; // every building at 2x
             const sprite = BUILDING_SPRITE[bn];
-            let drawn = false;
             if (bn === "Tesla") {
                 // The Tesla RETRACTS into the ground (a wooden lid closes over it) when it
                 // has no target, and rises back out to zap. `cover` (0 = raised, 1 = covered)
@@ -2387,46 +2330,36 @@ class Main {
                 if (Math.abs(goal - e._teslaCover) < 0.02) e._teslaCover = goal;
                 const cover = card ? 0 : e._teslaCover;
                 const a0 = ctx.globalAlpha;
-                if (cover < 0.985) { ctx.globalAlpha = a0 * (1 - cover); drawn = this.px.draw(ctx, "buildings/tesla-up", x, y, S, 0, wash) || drawn; }
-                if (cover > 0.02) { ctx.globalAlpha = a0 * cover; drawn = this.px.draw(ctx, "buildings/tesla-covered", x, y, S) || drawn; }
+                if (cover < 0.985) { ctx.globalAlpha = a0 * (1 - cover); this.px.draw(ctx, "buildings/tesla-up", x, y, S, 0, wash); }
+                if (cover > 0.02) { ctx.globalAlpha = a0 * cover; this.px.draw(ctx, "buildings/tesla-covered", x, y, S); }
                 ctx.globalAlpha = a0;
             } else if (bn === "Cannon") {
                 // Two layers at 3x (bigger than the other buildings): the four-legged
                 // rack stays put, and the turret on it turns to aim (its barrel points
                 // up in the art, and its body sits on the centre it turns about).
                 const CS = 48;
-                drawn = this.px.draw(ctx, "buildings/cannon-mount", x, y, CS, 0, wash);
-                drawn = this.px.draw(ctx, "buildings/cannon-turret", x, y, CS, e.dispAngle + Math.PI / 2, wash) || drawn;
-                if (!drawn) drawn = this.px.draw(ctx, "buildings/cannon", x, y, CS, e.dispAngle + Math.PI / 2, wash);
-            } else if (sprite) {
-                drawn = this.px.draw(ctx, "buildings/" + sprite, x, y, S, 0, wash);
-                if (drawn && bn === "Inferno Tower" && e.atk) {
+                this.px.draw(ctx, "buildings/cannon-mount", x, y, CS, 0, wash);
+                this.px.draw(ctx, "buildings/cannon-turret", x, y, CS, e.dispAngle + Math.PI / 2, wash);
+            } else {
+                this.px.draw(ctx, "buildings/" + sprite, x, y, S, 0, wash);
+                if (bn === "Inferno Tower" && e.atk) {
                     // The lock-on tell: the core flares while it burns a target.
                     ctx.fillStyle = "#ffb63c";
                     ctx.beginPath(); ctx.arc(x, y - 1, 3, 0, Math.PI * 2); ctx.fill();
                 }
             }
-            if (!drawn) {
-                ctx.fillStyle = color;
-                ctx.beginPath(); ctx.rect(x - s, y - s, s * 2, s * 2); ctx.fill(); ctx.stroke();
-            }
         } else if (e.c && e.c.n === "Balloon") {
             // Drawn larger than its hitbox, with its visual centre ABOVE e.y — the curse
             // ring, the deploy clock and the health bar all use this same offset.
             let R = radius * 1.3, ey = y - R * 0.35;
-            if (!this.px.draw(ctx, isFriend ? "troops/balloon" : "troops/balloon-red", x, ey, 48, 0, wash, this.bobFrame(e, card))) {
-                ctx.fillStyle = isFriend ? "#4f8fe0" : "#e05555";
-                ctx.beginPath(); ctx.arc(x, ey, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-            }
+            this.px.draw(ctx, isFriend ? "troops/balloon" : "troops/balloon-red", x, ey, 48, 0, wash, this.bobFrame(e, card));
             if (e.fr > 0) this.drawIceBlock(x, ey, 48, e.fr);
             if (e.rt > 0) this.drawVines(x, ey, 48, e.rt);
             ctx.beginPath(); // keep the generic stroke below happy (no-op path)
         } else {
             // Every other troop: its own sprite at 2x. The art already carries each
             // unit's relative size, so every troop shares one pixel scale.
-            if (!this.px.draw(ctx, this.px.troop(e.c ? e.c.n : name), x, y, 32, 0, wash, this.bobFrame(e, card))) {
-                ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-            }
+            this.px.draw(ctx, this.px.troop(e.c ? e.c.n : name), x, y, 32, 0, wash, this.bobFrame(e, card));
             if (e instanceof Troop && e.fr > 0) this.drawIceBlock(x, y, 32, e.fr);
             if (e.rt > 0) this.drawVines(x, y, 32, e.rt);
         }
@@ -2907,8 +2840,7 @@ class Main {
         let y = cy + 40;
         for (const line of lines) {
             const tight = this.px.ready && this.px.measure(line, 12) > w - 8;
-            if (!this.px.text(ctx, line, cx + w / 2, y, 12, "#252525", "center", tight))
-                this.drawCenteredString(line, cx + w / 2, y, "700 11px 'Baloo 2', 'Segoe UI', sans-serif", "#252525");
+            this.px.text(ctx, line, cx + w / 2, y, 12, "#252525", "center", tight);
             y += 16;
         }
         return lines.length;
@@ -2939,12 +2871,9 @@ class Main {
             gem(); return;
         }
         if (n === "Zap") {
-            // The FIRST frame of the zap sprite (static on the card); evo uses the evo sheet.
+            // The hand-drawn zap (the evo card shows the evo strike).
             let size = Math.min(w, h) * 0.82;
-            if (!this.drawSprite(isEvo ? "evozap" : "zap", ccx, ccy, size, 0)) {
-                ctx.globalAlpha = 0.5; ctx.fillStyle = "#9fe6ff";
-                ctx.beginPath(); ctx.arc(ccx, ccy, size * 0.32, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
-            }
+            this.px.draw(ctx, isEvo ? "effects/zap-strike-evo" : "spells/zap", ccx, ccy, size, 0, null, 0);
             return; // the evo sprite already shows the evo look — no crystal overlay
         }
         if (n === "The Log" || n === "Barbarian Barrel") {
@@ -3101,10 +3030,7 @@ class Main {
                     ? "buildings/" + (card.n === "Tesla" ? "tesla-up" : BUILDING_SPRITE[card.n])
                     : (card.n === "Balloon" ? "troops/balloon" : this.px.troop(card.n));
                 // Frame 0 always: a card shows the unit standing still, never bobbing.
-                if (!this.px.draw(ctx, sprite, x, y, S, 0, gp.general ? ["#a35cd6", 0.6] : null, 0)) {
-                    ctx.fillStyle = this.getUnitColor(card.n);
-                    ctx.beginPath(); ctx.arc(x, y, gp.r * scale, 0, Math.PI * 2); ctx.fill();
-                }
+                this.px.draw(ctx, sprite, x, y, S, 0, gp.general ? ["#a35cd6", 0.6] : null, 0);
                 // Evo units carry the gem; the Skeleton Army general wears it instead of a crown.
                 if ((card.isEvo && !skeleGen) || gp.general) this.drawEvoGem(x + S * 0.22, y - S * 0.22, 5, true);
             }
@@ -3138,10 +3064,7 @@ class Main {
         return c.c <= 2 ? "cards/frame-1" : c.c <= 4 ? "cards/frame-2" : c.c <= 6 ? "cards/frame-3" : "cards/frame-4";
     }
     drawCardFace(cx, cy, w, h, c, bg = "#ffffff", isEvo = false) {
-        if (!this.px.nine(ctx, this.cardFrame(c, bg, isEvo), cx, cy, w, h, 8)) {
-            ctx.fillStyle = bg;
-            this.drawRoundRect(cx, cy, w, h, Math.min(10, w * 0.09), true, false);
-        }
+        this.px.nine(ctx, this.cardFrame(c, bg, isEvo), cx, cy, w, h, 8);
         const nameRows = this.drawCardName(c.n, cx, cy, w);
         let top = cy + 28 + nameRows * 16, bot = cy + h - 9;
         // Cards are STATIC: freeze Date.now() so the reused in-game renderers (zap flicker,
@@ -3318,6 +3241,39 @@ class Main {
         ctx.globalAlpha = a;
     }
 
+    // The game does not run without its pixel art. If the set fails to load, or a
+    // sprite the renderer needs is missing, everything stops on this screen -
+    // there is no other way to draw anything.
+    crash(title, detail) {
+        if (this.crashed) return;
+        this.crashed = { title, detail: String(detail || "") };
+        console.error("CRASH:", title, detail);
+    }
+    drawCrash() {
+        ctx.setTransform(this.R, 0, 0, this.R, 0, 0);
+        ctx.fillStyle = "#14090b"; ctx.fillRect(0, 0, W, H);
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillStyle = "#ff4d4d"; ctx.font = "bold 46px Consolas, monospace"; ctx.fillText("CRASH", W / 2, H / 2 - 110);
+        ctx.fillStyle = "#ffffff"; ctx.font = "bold 20px Consolas, monospace"; ctx.fillText(this.crashed.title, W / 2, H / 2 - 50);
+        ctx.fillStyle = "#e0c8c8"; ctx.font = "15px Consolas, monospace";
+        const words = this.crashed.detail.split(" "), lines = [];
+        let line = "";
+        for (const wd of words) { if ((line + " " + wd).trim().length > 52) { lines.push(line.trim()); line = wd; } else line += " " + wd; }
+        if (line.trim()) lines.push(line.trim());
+        lines.slice(0, 6).forEach((l, i) => ctx.fillText(l, W / 2, H / 2 - 10 + i * 22));
+        ctx.fillStyle = "#9a8a8a"; ctx.font = "13px Consolas, monospace";
+        ctx.fillText("Regenerate the art:  node tools/pixelart/gen.js", W / 2, H - 80);
+        ctx.fillText("then reload the game.", W / 2, H - 58);
+        ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    }
+    drawLoading() {
+        ctx.setTransform(this.R, 0, 0, this.R, 0, 0);
+        ctx.fillStyle = "#1f2a33"; ctx.fillRect(0, 0, W, H);
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillStyle = "#cfd8de"; ctx.font = "16px Consolas, monospace"; ctx.fillText("loading the pixel art...", W / 2, H / 2);
+        ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    }
+
     // A frozen unit is encased in a block of ice, over its icy wash; the block
     // melts away over the last two thirds of a second of the freeze.
     drawIceBlock(x, y, size, fr) {
@@ -3392,10 +3348,7 @@ class Main {
             let flick = (Math.floor(Date.now() / 45) % 4 === 0) ? 0.55 : 1;
             ctx.save();
             ctx.globalAlpha = 0.85 * fade * flick;
-            if (!this.px.draw(ctx, "effects/electric-ring", p.x, p.y, Math.round(r / 2) * 4, 0, col !== "#d98cff" ? [col, 0.6] : null, Math.floor(prog * 3.99))) {
-                ctx.strokeStyle = col; ctx.lineWidth = 2.5 * fade + 1;
-                ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
-            }
+            this.px.draw(ctx, "effects/electric-ring", p.x, p.y, Math.round(r / 2) * 4, 0, col !== "#d98cff" ? [col, 0.6] : null, Math.floor(prog * 3.99));
             ctx.restore();
             ctx.globalAlpha = 1; ctx.lineWidth = 1;
             return;
@@ -3432,10 +3385,7 @@ class Main {
             let fade = 1 - prog;
             ctx.save();
             ctx.globalAlpha = 0.8 * fade;
-            if (!this.px.draw(ctx, "effects/phantom-burst", p.x, p.y, Math.round(r / 2) * 4, 0, null, Math.floor(prog * 3.99))) {
-                ctx.strokeStyle = "#9ff5b6"; ctx.lineWidth = 3.5 * fade + 1;
-                ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
-            }
+            this.px.draw(ctx, "effects/phantom-burst", p.x, p.y, Math.round(r / 2) * 4, 0, null, Math.floor(prog * 3.99));
             ctx.restore();
             ctx.globalAlpha = 1; ctx.lineWidth = 1;
             return;
@@ -3448,10 +3398,7 @@ class Main {
             let fade = 1 - prog;
             ctx.save();
             ctx.globalAlpha = 0.85 * fade;
-            if (!this.px.draw(ctx, "effects/shockwave", p.x, p.y, Math.round(r / 2) * 4, 0, null, Math.floor(prog * 3.99))) {
-                ctx.strokeStyle = "#b9a98e"; ctx.lineWidth = 7 * fade + 2;
-                ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
-            }
+            this.px.draw(ctx, "effects/shockwave", p.x, p.y, Math.round(r / 2) * 4, 0, null, Math.floor(prog * 3.99));
             ctx.restore();
             ctx.globalAlpha = 1; ctx.lineWidth = 1;
             return;
@@ -3470,23 +3417,11 @@ class Main {
         ctx.translate(x, y);
 
         if (p.isLog) {
-            // Simple rolling log: a brown cylinder with bands that scroll along
-            // the roll direction so it reads as rolling.
-            let w = p.barbBarrelLog ? 46 : 70;
-            let h = 20;
+            // The rolling log (or barrel): its own sprite, whose bands walk as it turns.
             const logSprite = p.barbBarrelLog
                 ? (p.tm === 1 ? "projectiles/barbarian-barrel-enemy" : "projectiles/barbarian-barrel")
                 : (p.tm === 1 ? "projectiles/the-log-enemy" : "projectiles/the-log");
-            if (this.px.draw(ctx, logSprite, 0, 0, p.barbBarrelLog ? 48 : 64)) { ctx.restore(); return; }
-            ctx.fillStyle = "#6b4423";
-            this.drawRoundRect(-w / 2, -h / 2, w, h, 9, true, false);
-            let dir = (p.tm === 0) ? -1 : 1;
-            let phase = ((Date.now() / 24 * dir) % h + h) % h;
-            ctx.fillStyle = "rgba(176,124,68,0.95)";
-            for (let k = -1; k <= 1; k++) {
-                let yy = (((phase + k * (h / 2)) % h) + h) % h - h / 2;
-                ctx.fillRect(-w / 2 + 3, yy - 1.5, w - 6, 3);
-            }
+            this.px.draw(ctx, logSprite, 0, 0, p.barbBarrelLog ? 48 : 64);
         }
 
         ctx.restore();
@@ -3511,9 +3446,7 @@ class Main {
                             snowball: ["projectiles/giant-snowball", 48], rocket: ["projectiles/rocket", 32] }[k] || ["projectiles/fireball", 32];
         // The goblin barrel tumbles end over end; everything else flies level.
         const spin = k === "barrel" ? Date.now() / 60 * (p.tm === 0 ? -1 : 1) : 0;
-        if (!this.px.draw(ctx, arcSprite[0], 0, 0, arcSprite[1], spin)) {
-            ctx.fillStyle = "#e8521a"; ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill();
-        }
+        this.px.draw(ctx, arcSprite[0], 0, 0, arcSprite[1], spin);
         ctx.restore();
     }
 
@@ -3633,10 +3566,7 @@ class Main {
                     this.px.draw(ctx, "effects/explosion-gray", lx, ly + 4, 16);
                     ctx.globalAlpha = fade;
                 }
-                if (!this.px.draw(ctx, "projectiles/arrow", lx, ly - up, 32, Math.sin(i * 3.7 + w) * 0.12)) {
-                    ctx.strokeStyle = "#7a4a1f"; ctx.lineWidth = 2;
-                    ctx.beginPath(); ctx.moveTo(lx, ly - up - 8); ctx.lineTo(lx, ly - up + 8); ctx.stroke();
-                }
+                this.px.draw(ctx, "projectiles/arrow", lx, ly - up, 32, Math.sin(i * 3.7 + w) * 0.12);
             }
         }
         ctx.globalAlpha = 1;
@@ -3669,30 +3599,6 @@ class Main {
     }
 
     // Zap: a jagged light-blue lightning bolt strikes down from the sky.
-    // Register an animated sprite sheet: a vertical column of `frameSize`×`frameSize` frames
-    // (default 16). Frame count is read from the image height once it loads.
-    addSprite(name, src, frameSize = 16) {
-        const s = { img: new Image(), loaded: false, frames: 1, fs: frameSize };
-        s.img.onload = () => { s.loaded = true; s.frames = Math.max(1, Math.round(s.img.height / s.fs)); };
-        s.img.src = src;
-        this.sprites[name] = s;
-        return s;
-    }
-
-    // Draw a sprite frame CRISP (no smoothing), centred at (x, y), scaled to `size`×`size`.
-    // `frame` wraps around the sheet's frame count (so a rising counter loops forever).
-    // Returns false if the sheet hasn't loaded yet (so callers can draw a fallback).
-    drawSprite(name, x, y, size, frame) {
-        const s = this.sprites[name];
-        if (!s || !s.loaded) return false;
-        let f = ((Math.floor(frame) % s.frames) + s.frames) % s.frames;
-        const sm = ctx.imageSmoothingEnabled;
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(s.img, 0, f * s.fs, s.fs, s.fs, x - size / 2, y - size / 2, size, size);
-        ctx.imageSmoothingEnabled = sm;
-        return true;
-    }
-
     drawZapStrike(p) {
         // In-game zap renders NORMALLY (procedural bolt + flash) — the pixel-art sprite is
         // only used on the deck card. On High graphics the strike FORKS (two thinner side
@@ -3738,10 +3644,7 @@ class Main {
                 }
                 ctx.restore();
                 ctx.globalAlpha = 1;
-            } else {
-                ctx.strokeStyle = col; ctx.lineWidth = 4;
-                ctx.beginPath(); ctx.moveTo(p.x, p.y - 140); ctx.lineTo(p.x, p.y); ctx.stroke();
-            }
+            } else if (this.px.ready) this.px.onMissing(evo ? "effects/zap-strike-evo" : "effects/zap-strike");
         } else {
             let a = Math.max(0, p.life / 5);
             ctx.globalAlpha = 0.5 * a + 0.12;
@@ -3771,57 +3674,10 @@ class Main {
     }
 
     // Placed spell that drops a symbol from the sky, then flashes on impact.
+    // Placed spells that drop from the sky: the zap is the only one with a
+    // picture (its hand-drawn strike); the others resolve without one.
     drawSpellDrop(p) {
-        if (p.dropKind === "zap") { this.drawZapStrike(p); return; }
-        const impact = 6;
-        const maxL = p.dropMax || 30;
-        if (p.life > impact) {
-            // descending symbol + a growing target shadow (perfect circle)
-            let t = (maxL - p.life) / (maxL - impact); // 0..1
-            ctx.fillStyle = "rgba(0,0,0,0.18)";
-            ctx.beginPath(); ctx.arc(p.x, p.y, 5 + 9 * t, 0, Math.PI * 2); ctx.fill();
-            ctx.save();
-            ctx.translate(p.x, p.y - (1 - t) * 95);
-            this.drawSpellSymbol(p.dropKind, 1);
-            ctx.restore();
-        } else {
-            // impact flash in the spell's colour, with the symbol fading out
-            let a = Math.max(0, p.life / impact);
-            ctx.globalAlpha = 0.55 * a + 0.15;
-            ctx.fillStyle = p.flashCol || "#ffffff";
-            ctx.beginPath(); ctx.arc(p.x, p.y, p.rad * (1 - 0.25 * a), 0, Math.PI * 2); ctx.fill();
-            ctx.globalAlpha = 1;
-            ctx.save(); ctx.translate(p.x, p.y);
-            this.drawSpellSymbol(p.dropKind, a);
-            ctx.restore();
-        }
-    }
-
-    drawSpellSymbol(kind, alpha) {
-        ctx.globalAlpha = alpha;
-        if (kind === "freeze") {
-            ctx.strokeStyle = "#dff3ff"; ctx.lineWidth = 2.5; ctx.lineCap = "round";
-            for (let i = 0; i < 6; i++) {
-                ctx.save(); ctx.rotate(i * Math.PI / 3);
-                ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -11);
-                ctx.moveTo(0, -7); ctx.lineTo(-3, -10); ctx.moveTo(0, -7); ctx.lineTo(3, -10);
-                ctx.stroke(); ctx.restore();
-            }
-            ctx.lineCap = "butt";
-        } else if (kind === "zap") {
-            ctx.fillStyle = "#9fe6ff";
-            ctx.beginPath();
-            ctx.moveTo(3, -12); ctx.lineTo(-5, 1); ctx.lineTo(-1, 1); ctx.lineTo(-3, 12);
-            ctx.lineTo(6, -3); ctx.lineTo(1, -3); ctx.closePath(); ctx.fill();
-            ctx.strokeStyle = "#3aa0d6"; ctx.lineWidth = 1; ctx.stroke();
-        } else if (kind === "vines") {
-            ctx.fillStyle = "#7ad06a";
-            ctx.beginPath(); ctx.ellipse(0, 0, 5, 10, 0.5, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = "#3f7a32"; ctx.lineWidth = 1.2;
-            ctx.beginPath(); ctx.moveTo(-4, 7); ctx.lineTo(4, -7); ctx.stroke();
-        }
-        ctx.globalAlpha = 1;
-        ctx.lineWidth = 1;
+        if (p.dropKind === "zap") this.drawZapStrike(p);
     }
 }
 

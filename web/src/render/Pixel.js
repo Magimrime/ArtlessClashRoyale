@@ -14,6 +14,7 @@ export class Pixel {
         this._slug = new Map();   // card name -> sprite name
         this.unit = 1;            // position snap, in logical px: 1/R of the backing store
         this.clock = Date.now();  // the animation clock; the renderer sets it once per frame
+        this.onMissing = null;    // called with a sprite name the renderer asked for that is not in the set
     }
 
     // How many frames a sprite has: its sheet is frames stacked downward, one
@@ -25,20 +26,24 @@ export class Pixel {
     // fine as that grid allows.
     q(v) { return Math.round(v / this.unit) * this.unit; }
 
-    // Loads the manifest, then every sprite in it. Resolves even if some images
-    // fail, so a missing file degrades to "no sprite" instead of a black screen.
+    // Loads the manifest, then every sprite in it. Rejects if the manifest, the
+    // font metrics or ANY sprite fails to load - the game shows its crash screen
+    // rather than run without its art.
     async load() {
-        const manifest = await fetch(this.base + "sprites.json").then(r => r.json());
-        this.metrics = await fetch(this.base + "font/metrics.json").then(r => r.json());
+        const json = async (rel) => { const r = await fetch(this.base + rel); if (!r.ok) throw new Error(rel + " (HTTP " + r.status + ")"); return r.json(); };
+        const manifest = await json("sprites.json");
+        this.metrics = await json("font/metrics.json");
+        const missing = [];
         const one = (folder, name) => new Promise(res => {
             const im = new Image();
             im.onload = () => { this.img[`${folder}/${name}`] = im; res(); };
-            im.onerror = () => res();                       // missing art must not block the game
+            im.onerror = () => { missing.push(`${folder}/${name}.png`); res(); };
             im.src = `${this.base}${folder}/${name}.png`;
         });
         const jobs = [];
         for (const [folder, names] of Object.entries(manifest)) for (const n of names) jobs.push(one(folder, n));
         await Promise.all(jobs);
+        if (missing.length) throw new Error(`${missing.length} sprite${missing.length > 1 ? "s" : ""} failed to load: ${missing.slice(0, 4).join(", ")}${missing.length > 4 ? ", ..." : ""}`);
         this.ready = true;
         return this;
     }
@@ -103,7 +108,7 @@ export class Pixel {
     // its frames on the shared clock (ten a second). Still art ignores it.
     draw(ctx, name, x, y, size, angle = 0, wash = null, frame = undefined) {
         const base = this.img[name];
-        if (!base) return false;
+        if (!base) { if (this.ready && this.onMissing) this.onMissing(name); return false; }   // no such art: crash
         const im = wash ? this.washed(name, wash[0], wash[1]) : base;
         // A sheet is taller than it is wide by a whole number of square cells; any
         // other shape is one still picture drawn whole.

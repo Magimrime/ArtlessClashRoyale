@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.7.9** — here's the whole road there.
+We're currently on **26.8.0** — here's the whole road there.
 
 ---
 
@@ -213,6 +213,11 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
   two-colour zigzag once more.
 - **26.7.9** — Cannon: the turret's body sits on the exact centre it turns about, the four legs are identical
   (one leg mirrored about the middle) and plain unshaded wood, and the whole cannon is drawn at 3× on the field.
+- **26.8.0** — **Pixel art only.** Every fallback that drew a unit, shot, zone or effect with plain canvas shapes
+  when its sprite was missing is gone — the log rolls as its sprite, tower shots and splash shots are the bullet
+  sprite, the zap card is the hand-drawn strike, and the old symbol-drop and sprite-sheet code is deleted. If the
+  art fails to load, or the renderer asks for a sprite that is not in the set, the game stops on a **crash screen**
+  that names what is missing instead of running without it.
 
 ---
 
