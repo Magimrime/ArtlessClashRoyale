@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.6.7** — here's the whole road there.
+We're currently on **26.6.8** — here's the whole road there.
 
 ---
 
@@ -158,6 +158,14 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
 - **26.6.7** — **The Electro Wizard's spawn zap is animated.** It already used the hand-drawn zap, but only for a
   few frames — a flash. It now runs the same length as the Zap spell, so the bolt drops in, flickers and twitches,
   forks on High graphics, and then pops its impact ring like the real thing.
+- **26.6.8** — **Spells draw under the troops.** The arrows volley, zap strikes, poison, rage, the graveyard, clone,
+  rings and the Electro Wizard's bolt all render on the ground now, so a spell never covers a unit; instead a
+  **unit standing inside a spell is washed with its colour** — pale for arrows, blue for a zap, green for poison,
+  pink for rage — so it reads as being hit. Only what is still in the air (an arcing Fireball, the crate, dynamite)
+  stays on top. **The Electro Wizard's bolt is pixel art**: the chain-lightning sprite tiled along the line and
+  flipped every other frame so it crackles, with a flickering electric ring on whatever it zaps (the Electro Spirit
+  and Tesla too). **Tower tops are sized to their shot**: a slimmer, shorter cannon on a smaller platform, and the
+  king's shooter at a whole 4× instead of an in-between size.
 
 ---
 

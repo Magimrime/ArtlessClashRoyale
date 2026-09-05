@@ -189,13 +189,16 @@ function towerBase(col, s) {
 // a wide platform with the cannon running out to the frame edge (pointing
 // right, pivot dead-centre). `r` is the platform radius in the 16px frame.
 // The palette is shared with the base so the assembled tower stays at 6.
+// Sized to the shot it fires: the barrel is 2px thick for a bullet that is a 7px
+// ball, and stops short of the frame edge so the whole top reads as a cannon
+// on the roof rather than a second tower.
 function towerTop(col, r) {
   const sp = new Sprite();
-  sp.rect(8, 6, 8, 4, '#2b2f36');                      // barrel, out to the edge
-  sp.rect(13, 5, 3, 6, '#1c1e22');                     // muzzle
+  sp.rect(8, 7, 5, 2, '#2b2f36');                      // barrel
+  sp.rect(12, 6, 2, 4, '#1c1e22');                     // muzzle
   sp.disc(8, 8, r, shade(col, -0.30));                 // platform rim
   sp.disc(8, 8, r - 1, shade(col, 0.15));              // platform, lit
-  sp.disc(8, 8, Math.max(1.2, r * 0.4), '#2b2f36');    // hatch
+  sp.disc(8, 8, Math.max(1, r * 0.4), '#2b2f36');      // hatch
   return sp;
 }
 // The king's spell vent: sits in the middle of the roof and never turns.
@@ -215,7 +218,7 @@ const paint = (dst, src) => {
 for (const [side, col] of [['blue', '#4aa3ff'], ['red', '#ff5a5a']]) {
   // Princess: block s=6 under a big turning top. King: block s=7, the static
   // vent in the middle, and a smaller shooter top that rises at the front.
-  for (const [kind, s, r] of [['princess', 6, 4.6], ['king', 7, 3.4]]) {
+  for (const [kind, s, r] of [['princess', 6, 3.2], ['king', 7, 2.6]]) {
     save(towerBase(col, s), 'towers', `${kind}-${side}-base`);
     save(towerTop(col, r), 'towers', `${kind}-${side}-turret`);
     if (kind === 'king') save(towerVent(col), 'towers', `${kind}-${side}-vent`);

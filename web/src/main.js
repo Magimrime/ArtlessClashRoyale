@@ -1716,10 +1716,10 @@ class Main {
                 }
 
                 if (p.chainTargets) {
-                    // A proper ELECTRIC ZAP: jagged lightning that re-jitters every few
-                    // frames, blue outer bolt with a bright white core, tiny fork ticks
-                    // off the bends, and a spark at each zapped body.
-                    ctx.lineCap = "round";
+                    // The bolt in PIXELS: the chain-lightning sprite tiled along the line
+                    // from each body to the next, every tile flipped on alternate frames
+                    // so the zigzag crackles, and the electric ring flickering on each
+                    // zapped body. (The Electro Wizard, the Electro Spirit, the Tesla.)
                     const tick = Math.floor(Date.now() / 55);
                     for (let i = 0; i < p.chainTargets.length - 1; i++) {
                         let a = p.chainTargets[i], b = p.chainTargets[i + 1];
@@ -1729,43 +1729,33 @@ class Main {
                         let ax = a.x, ay = a.y - (a.fly ? 22 : 0);
                         let bx = b.x, by = b.y - (b.fly ? 22 : 0);
                         let dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
-                        let nx = -dy / len, ny = dx / len;
-                        const segs = Math.max(4, Math.min(8, Math.round(len / 18)));
-                        const pts = [];
-                        for (let s = 0; s <= segs; s++) {
-                            let f = s / segs;
-                            let jit = (s === 0 || s === segs) ? 0 : Math.sin(s * 7.13 + i * 3.7 + tick * 2.3) * 6.5;
-                            pts.push([ax + dx * f + nx * jit, ay + dy * f + ny * jit]);
+                        const ang = Math.atan2(dy, dx), tiles = Math.max(1, Math.round(len / 26));
+                        for (let s = 0; s < tiles; s++) {
+                            const f = (s + 0.5) / tiles, flip = ((s + tick + i) % 2) ? Math.PI : 0;
+                            if (!this.px.draw(ctx, "effects/chain-lightning", ax + dx * f, ay + dy * f, 32, ang + flip)) {
+                                ctx.strokeStyle = "#4f9bff"; ctx.lineWidth = 3;
+                                ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+                                break;
+                            }
                         }
-                        ctx.strokeStyle = "#4f9bff"; ctx.lineWidth = 3.5;
-                        ctx.beginPath(); pts.forEach((q, k) => k ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
-                        ctx.strokeStyle = "#eaffff"; ctx.lineWidth = 1.4;
-                        ctx.beginPath(); pts.forEach((q, k) => k ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
-                        if (this.gfxHigh) {
-                            // small forks flicking off alternating bends
-                            ctx.strokeStyle = "#9fd4ff"; ctx.lineWidth = 1.3;
-                            for (let s = 1; s < segs; s++) {
-                                if ((s + tick) % 3 !== 0) continue;
-                                const fx = pts[s][0], fy = pts[s][1];
-                                const fl = 7 + (s % 3) * 3, sgn = (s % 2 ? 1 : -1);
-                                ctx.beginPath();
-                                ctx.moveTo(fx, fy);
-                                ctx.lineTo(fx + nx * sgn * fl + dx / len * 4, fy + ny * sgn * fl + dy / len * 4);
-                                ctx.stroke();
-                            }
-                            // spark burst on each zapped body (not the origin node)
-                            if (!b.isChainOrigin) {
-                                ctx.fillStyle = "#ffffff";
-                                ctx.beginPath(); ctx.arc(bx, by, 3 + ((tick + i) % 2), 0, Math.PI * 2); ctx.fill();
-                            }
+                        if (!b.isChainOrigin) {
+                            ctx.globalAlpha = ((tick + i) % 2) ? 0.9 : 0.55;
+                            this.px.draw(ctx, "effects/electric-ring", bx, by, 32, ((tick + i) % 4) * Math.PI / 2);
+                            ctx.globalAlpha = 1;
                         }
                     }
-                    ctx.lineCap = "butt"; ctx.lineWidth = 1;
+                    ctx.lineWidth = 1;
                 }
             };
             // Non-spell ground projectiles (bullets, cannonball, boulders, area
             // effects) render BELOW the ground troops.
             for (let p of this.eng.projs) if (!this.isSpellProj(p)) drawGroundProj(p);
+            // So do the SPELLS - the arrows volley, zap strikes, poison, rage, the
+            // graveyard, clone, rings, the Electro Wizard's bolt: a spell never covers
+            // a unit. A unit standing inside one is washed with the spell's colour
+            // instead (spellWash). Only what is still in the air - an arcing
+            // fireball, the falling crate, dynamite - stays on top.
+            for (let p of this.eng.projs) if (this.isSpellProj(p) && !p.isLog && !this.isAirSpell(p)) { drawGroundProj(p); this.drawProj(p); }
 
             // Entities (Shadows/Effects first)
             for (let e of this.eng.ents) {
@@ -1889,9 +1879,9 @@ class Main {
             // Health bars sit above every unit/tower/flyer (only spells go over them).
             this.drawHealthBars();
 
-            // Every OTHER spell (arcs, Goblin Barrel, arrows, Zap / Freeze drops, the
-            // delivery crate, area spells) renders ABOVE EVERYTHING.
-            for (let p of this.eng.projs) if (this.isSpellProj(p) && !p.isLog) { drawGroundProj(p); this.drawProj(p); }
+            // Only the spells still IN THE AIR (an arcing Fireball / Rocket / barrel,
+            // the delivery crate, dynamite) render above everything.
+            for (let p of this.eng.projs) if (this.isAirSpell(p)) { drawGroundProj(p); this.drawProj(p); }
 
             // Status Effects
             for (let e of this.eng.ents) {
@@ -2322,6 +2312,8 @@ class Main {
             else if (e.isClone || e.isGhosted) wash = ["#bce8ff", 0.55];
             else if (e.c && e.c.isFake) wash = ["#c4e3a6", 0.55];
             else if (e.isSkeleGeneral) wash = ["#a35cd6", 0.6];
+            else if (e.rt > 0) wash = ["#7ad06a", 0.45];                 // rooted by Vines
+            if (!wash) wash = this.spellWash(e);                          // standing in a spell
         }
         ctx.fillStyle = color;
         ctx.strokeStyle = "rgba(0,0,0,0.3)"; // soft outline, not harsh black
@@ -2356,7 +2348,7 @@ class Main {
                     this.px.draw(ctx, `towers/king-${team}-vent`, x, y, S);
                     let p = !e.actv ? 0 : (e.activateAnim > 0 ? 1 - e.activateAnim / 45 : 1);
                     let sp = Math.max(0, (p - 0.2) / 0.8);
-                    if (sp > 0) this.px.draw(ctx, `towers/king-${team}-turret`, x, y, Math.round(S * 0.7 * sp), tq);
+                    if (sp > 0) this.px.draw(ctx, `towers/king-${team}-turret`, x, y, Math.round(64 * sp), tq);
                 }
             } else {
                 // Until the art loads: a plain team-coloured block.
@@ -3295,6 +3287,33 @@ class Main {
     isSpellProj(p) {
         return !!(p.isSpellArc || p.isArrows || p.isSpellDrop || p.isLog || p.isDelivery ||
             p.poison || p.graveyard || p.brownArea || p.isClone || p.isVines || p.chainTargets || p.shockBeams || p.isShockwave || p.isPhantom || p.isElectricRing || p.isIceCrystal || p.isDynamite || p.isRage || p.isBomb);
+    }
+
+    // The spell projectiles that are physically in the air until they land.
+    isAirSpell(p) { return !!(p.isSpellArc || p.isDelivery || p.isDynamite); }
+
+    // A unit standing inside a spell is washed with that spell's colour - the spell
+    // itself draws under the troops, so this is how "being hit by it" reads.
+    // Hostile spells (arrows, zap, poison, the graveyard) wash the enemy inside them;
+    // friendly ones (rage, clone, heal) wash your own troops.
+    spellWash(e) {
+        if (e instanceof Tower) return null;
+        for (const p of this.eng.projs) {
+            let col, a, friendly = false;
+            if (p.isArrows) { if (p.life <= 30) continue; col = "#fff1d8"; a = 0.45; }
+            else if (p.isSpellDrop && p.dropKind === "zap") { col = p.flashCol || "#7fdcff"; a = 0.55; }
+            else if (p.poison) { col = "#8fd47a"; a = 0.35; }
+            else if (p.graveyard) { col = "#b48ce0"; a = 0.3; }
+            else if (p.isElectricRing) { col = "#d98cff"; a = 0.4; }
+            else if (p.isRage) { col = "#f08cff"; a = 0.35; friendly = true; }
+            else if (p.isClone) { col = "#bce8ff"; a = 0.35; friendly = true; }
+            else if (p.isHeal) { col = "#9be89b"; a = 0.35; friendly = true; }
+            else if (p.chainTargets) { if (p.chainTargets.includes(e)) return ["#bfefff", 0.55]; continue; }
+            else continue;
+            if (friendly ? p.tm !== e.tm : p.tm === e.tm) continue;
+            if (Math.hypot(p.x - e.x, p.y - e.y) < p.rad + (p.tightArea ? 0 : e.rad)) return [col, a];
+        }
+        return null;
     }
 
     drawProj(p) {
