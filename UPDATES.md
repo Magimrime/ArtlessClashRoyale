@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.7.0** — here's the whole road there.
+We're currently on **26.7.1** — here's the whole road there.
 
 ---
 
@@ -185,6 +185,8 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
   until the root lets go. **Big troops no longer stall at the bridge**: the path refresh kept sending a troop that
   was already on the bridge back to its "line up" point, so a slow Giant, Golem or P.E.K.K.A walked up and down
   that gap; the funnel now only adds the points still ahead of it.
+- **26.7.1** — Cards hold still: a troop on a deck card (and the placement ghost) shows its standing frame instead of
+  bobbing — the walk bob is for the field.
 
 ---
 

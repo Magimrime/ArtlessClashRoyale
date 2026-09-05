@@ -1416,7 +1416,7 @@ class Main {
                     for (const gp of this.ghostLayout(c)) {
                         let px = gx + gp.dx, py = gy + gp.dy;
                         ctx.globalAlpha = 0.75;
-                        if (this.px.draw(ctx, ghostSprite, px, py, 32, 0, [col, valid ? 0.35 : 0.55])) {
+                        if (this.px.draw(ctx, ghostSprite, px, py, 32, 0, [col, valid ? 0.35 : 0.55], 0)) {   // still, like the card
                             ctx.globalAlpha = 1.0;
                             continue;
                         }
@@ -3094,7 +3094,8 @@ class Main {
                 const sprite = card.t === 3
                     ? "buildings/" + (card.n === "Tesla" ? "tesla-up" : BUILDING_SPRITE[card.n])
                     : (card.n === "Balloon" ? "troops/balloon" : this.px.troop(card.n));
-                if (!this.px.draw(ctx, sprite, x, y, S, 0, gp.general ? ["#a35cd6", 0.6] : null)) {
+                // Frame 0 always: a card shows the unit standing still, never bobbing.
+                if (!this.px.draw(ctx, sprite, x, y, S, 0, gp.general ? ["#a35cd6", 0.6] : null, 0)) {
                     ctx.fillStyle = this.getUnitColor(card.n);
                     ctx.beginPath(); ctx.arc(x, y, gp.r * scale, 0, Math.PI * 2); ctx.fill();
                 }
