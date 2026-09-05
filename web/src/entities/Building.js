@@ -134,6 +134,10 @@ export default class Building extends Entity {
     }
 
     die(g) {
+        // Every building comes down in a puff of rubble dust.
+        const dust = new Proj(this.x, this.y, this.x, this.y, null, 0, false, 24, 0, this.tm, false);
+        dust.fireArea = true; dust.isGray = true; dust.life = 6;
+        g.projs.push(dust);
         if (this.c.n === "Elixir Collector") {
             g.giveElixir(this.tm, 1.0);
         } else if (this.c.n === "Crate") {

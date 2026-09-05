@@ -941,9 +941,27 @@ export default class Troop extends Entity {
             this.healWitch.hp = Math.min(this.healWitch.mhp * 1.5, this.healWitch.hp + 70);
         }
 
-        // Spirits do NOT burst on death — their splash only happens when they
-        // actually jump onto a target (the hop landing). A spirit shot down on
-        // the way just dies. (Wall Breakers likewise only explode on contact.)
+        // A spirit shot down before it lands its hop still SHOWS its burst - the
+        // fire flash, the ice nova, an electric ring, a heal ring - with no damage
+        // or effect on anyone; only the hop landing is the real, damaging burst.
+        // Everything else leaves something behind too: the Lava Hound bursts into
+        // lava, the elixir golem family splashes elixir, and any troop without a
+        // burst of its own goes down in a puff of dust.
+        const cn = this.c.n;
+        const flash = (mk) => g.projs.push(mk(new Proj(this.x, this.y, this.x, this.y, null, 0, false, 50, 0, this.tm, false)));
+        if (cn.includes("Spirit")) {
+            if (!this.exploded) {
+                if (cn === "Fire Spirit") flash(p => p.asFireArea());
+                else if (cn === "Ice Spirit") flash(p => p.asIceNova());
+                else if (cn === "Electro Spirit") flash(p => p.asElectricRing("#7fdcff"));
+                else flash(p => p.asElectricRing("#9be89b"));
+            }
+        } else if (cn === "Lava Hound") flash(p => { p.rad = 60; return p.asFireArea(); });
+        else if (["Elixir Golem", "Elixir Golemite", "Elixir Blob"].includes(cn)) flash(p => { p.rad = 40; return p.asElectricRing("#e05fe8"); });
+        else if (!this.exploded && !this.isRageGhost && !["Golem", "Golemite", "Goblin Demolisher", "Balloon", "Ice Golem", "Skeleton Barrel", "Wall Breakers"].includes(cn)) {
+            flash(p => { p.rad = 16; p.fireArea = true; p.isGray = true; p.life = 6; return p; });
+        }
+
         if (this.c.n === "Balloon") {
             // Shot down: drops a bomb that falls onto the balloon's shadow and
             // detonates after a 1.5s fuse for area DEATH damage to ground enemies

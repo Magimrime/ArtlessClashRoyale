@@ -7,7 +7,7 @@ The changelog as a timeline. Versions read **`year.major.minor.patch`**:
 - **minor** — the update within that era
 - **patch** — small bug-fix releases
 
-We're currently on **26.7.5** — here's the whole road there.
+We're currently on **26.7.6** — here's the whole road there.
 
 ---
 
@@ -201,6 +201,11 @@ The game is pixel art now — every troop, tower, building, projectile, effect, 
   the gas before they wrap, so the cloud visibly breathes out over its rim.
 - **26.7.5** — **The Cannon in two parts**: a four-legged iron mount that stays put, and a big turret with a thick
   barrel that turns on it to aim. The card shows the two assembled.
+- **26.7.6** — **The Cannon's mount is wood**, like the card: four thick beams splayed to the corners with a foot
+  on each, and a round wooden hub. **Spirits burst when they die**: a spirit shot down before it lands its hop
+  still shows its burst — the fire flash, the ice nova, an electric ring, a heal ring — with no damage or effect
+  on anyone. **More death effects**: the Lava Hound bursts into lava, the Elixir Golem family splashes elixir,
+  every other troop goes down in a puff of dust, and every building comes down in rubble.
 
 ---
 

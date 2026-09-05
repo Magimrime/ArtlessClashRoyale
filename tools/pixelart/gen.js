@@ -307,12 +307,16 @@ function block(sp, col, s = 7, r = 3) {
   // legs with feet at the corners) and a big TURRET that turns on it (a round
   // iron body with a thick barrel out the top). The field draws the mount, then
   // the turret rotated to aim; the card shows the two assembled.
+  // The mount is WOOD, like the card: four thick beams splayed to the corners
+  // with a dark foot on each, and a round wooden hub with an iron pin.
   const mount = new Sprite();
+  const wood = '#8a5c33', woodD = '#5c3a18', grain = '#6b4423';
   for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-    for (let k = 2; k <= 6; k++) { mount.plot(8 + sx * k, 8 + sy * k, '#3a3e45'); mount.plot(8 + sx * k - (sx > 0 ? 0 : 1) + (sx > 0 ? 1 : 0), 8 + sy * k, '#3a3e45'); }
-    mount.rect(8 + sx * 6 - 1 + (sx > 0 ? 1 : -1), 8 + sy * 6 - 1 + (sy > 0 ? 1 : -1), 2, 2, '#26282c');   // foot
+    for (let t = 2; t <= 6; t++) mount.rect(8 + sx * t - (sx < 0 ? 1 : 0), 8 + sy * t - (sy < 0 ? 1 : 0), 2, 2, wood);   // a thick beam
+    for (let t = 3; t <= 5; t += 2) mount.plot(8 + sx * t, 8 + sy * t, grain);                                       // its grain
+    mount.rect(8 + sx * 6 + (sx > 0 ? 0 : -2), 8 + sy * 6 + (sy > 0 ? 1 : -2), 3, 2, woodD);                       // foot
   }
-  mount.disc(8, 8, 4.2, '#26282c'); mount.disc(8, 8, 3.2, '#4a4e55'); mount.disc(8, 8, 1.4, '#6b7079');
+  mount.disc(8, 8, 4.8, woodD); mount.disc(8, 8, 3.8, wood); mount.plot(6, 6, '#b07a3c'); mount.disc(8, 8, 1.6, '#26282c');
 
   const turret = new Sprite();
   turret.rect(6, 0, 4, 9, '#26282c');                         // barrel, up
